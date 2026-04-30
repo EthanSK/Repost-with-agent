@@ -1,19 +1,23 @@
 {
-  "name": "linkedin-to-x",
-  "version": "2.1.0",
-  "description": "Cross-post LinkedIn posts to X/Twitter using Playwright scraping",
+  "name": "repost-with-agent",
+  "version": "2.2.0",
+  "description": "Agent-operated social/source-to-destination reposting with saved pairs and queue workspaces",
   "main": "dist/index.js",
   "bin": {
+    "repost-with-agent": "./dist/index.js",
     "linkedin-to-x": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node tests/dedupe-regression.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "sync": "tsx src/index.ts sync",
-    "list": "tsx src/index.ts list"
+    "list": "tsx src/index.ts list",
+    "pair:list": "tsx src/index.ts pair list",
+    "workspace:init": "python3 scripts/init_repost_with_agent_workspace.py"
   },
-  "keywords": ["linkedin", "twitter", "x", "cross-post", "social-media", "playwright"],
+  "keywords": ["repost", "social", "linkedin", "x", "cross-post", "playwright"],
   "author": "",
   "license": "MIT",
   "dependencies": {

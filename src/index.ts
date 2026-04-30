@@ -1,322 +1,418 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { loadConfig } from "./config.js";
-import { scrapeLinkedInPosts, LinkedInPost } from "./linkedin-scraper.js";
-import { formatForX, postTweet, startOAuth2Flow } from "./x-client.js";
+import { linkedInSourceAdapter } from "./adapters/sources/linkedin.js";
+import { xDestinationAdapter } from "./adapters/destinations/x.js";
+import { startOAuth2Flow } from "./x-client.js";
+import { loadTracker } from "./tracker.js";
 import {
-  postToFacebook,
-  postToFacebookWithLink,
-} from "./facebook-client.js";
+  getLegacyTrackerPath,
+  loadPostedHistory,
+} from "./core/runtime.js";
+import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.js";
+import { previewPair } from "./core/orchestrator.js";
+import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
 import {
-  loadTracker,
-  addTrackerEntry,
-  isAlreadyPosted,
-  snippetForTracker,
-  loadFbTracker,
-  addFbTrackerEntry,
-  isAlreadyPostedToFb,
-} from "./tracker.js";
+  appendAuditEvent,
+  appendPostedHistory,
+  defaultPairName,
+  getEnvironmentSummary,
+  getPairById,
+  getPairPaths,
+  loadAuditHistory,
+  loadPairsStore,
+  nowIso,
+  resolveScheduleTimezone,
+  slugifyPairId,
+  upsertPair,
+  writeDefaultLearnings,
+} from "./core/runtime.js";
+import { PairMode, PairRecord, PairScheduleKind } from "./core/types.js";
+import { contentHash, summarizeText } from "./core/dedupe.js";
+import { APP_NAME, getLegacyDataDir, getLegacyTokensPath } from "./config.js";
+
+const VERSION = "2.2.0";
+
+const SOURCE_ADAPTERS = new Map([[linkedInSourceAdapter.type, linkedInSourceAdapter]]);
+const DESTINATION_ADAPTERS = new Map([[xDestinationAdapter.type, xDestinationAdapter]]);
+
+function requirePair(pairId: string): PairRecord {
+  const pair = getPairById(pairId);
+  if (!pair) {
+    console.error(`Pair not found: ${pairId}`);
+    process.exit(1);
+  }
+  return pair;
+}
+
+function printPair(pair: PairRecord): void {
+  console.log(JSON.stringify(pair, null, 2));
+}
+
+function parsePairMode(value?: string): PairMode {
+  const mode = value || "preview-only";
+  if (["preview-only", "approval-required", "live-approved"].includes(mode)) {
+    return mode as PairMode;
+  }
+  console.error(`Invalid mode: ${mode}. Expected preview-only, approval-required, or live-approved.`);
+  process.exit(1);
+}
+
+function parseScheduleKind(value?: string): PairScheduleKind {
+  const kind = value || "manual";
+  if (["manual", "cron", "every"].includes(kind)) {
+    return kind as PairScheduleKind;
+  }
+  console.error(`Invalid schedule kind: ${kind}. Expected manual, cron, or every.`);
+  process.exit(1);
+}
+
+function parsePositiveInteger(value: string | undefined, label: string): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    console.error(`Invalid ${label}: ${value}. Expected a positive integer.`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
+async function createPair(opts: {
+  id?: string;
+  name?: string;
+  sourceType: string;
+  sourceUrl?: string;
+  destinationType: string;
+  destinationAccount?: string;
+  mode?: string;
+  enabled?: boolean;
+  scheduleKind?: string;
+  scheduleExpression?: string;
+  everyMinutes?: string;
+  timezone?: string;
+  authRefSource?: string;
+  authRefDestination?: string;
+}): Promise<void> {
+  const idBase =
+    opts.id ||
+    opts.name ||
+    `${opts.sourceType}-${opts.destinationType}`;
+  const pairId = slugifyPairId(idBase);
+  const existing = getPairById(pairId);
+  if (existing) {
+    console.error(`Pair already exists: ${pairId}`);
+    process.exit(1);
+  }
+
+  const now = nowIso();
+  const mode = parsePairMode(opts.mode);
+  const scheduleKind = parseScheduleKind(opts.scheduleKind);
+  const everyMinutes = parsePositiveInteger(opts.everyMinutes, "every-minutes");
+  const pair: PairRecord = {
+    id: pairId,
+    name: opts.name || defaultPairName(opts.sourceType, opts.destinationType),
+    enabled: Boolean(opts.enabled),
+    mode,
+    source: {
+      type: opts.sourceType,
+      url: opts.sourceUrl,
+      profileUrl: opts.sourceUrl,
+      authRef: opts.authRefSource,
+    },
+    destination: {
+      type: opts.destinationType,
+      accountHint: opts.destinationAccount,
+      authRef: opts.authRefDestination,
+    },
+    schedule: {
+      kind: scheduleKind,
+      expression: opts.scheduleExpression,
+      everyMinutes,
+      tz: resolveScheduleTimezone(opts.timezone),
+    },
+    policy: normalizePolicy(),
+    dedupe: {
+      strategy: "source-id-url-content-hash",
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  upsertPair(pair);
+  writeDefaultLearnings(pair.id);
+  appendAuditEvent({
+    at: now,
+    event: "pair.created",
+    pairId: pair.id,
+    details: {
+      sourceType: pair.source.type,
+      destinationType: pair.destination.type,
+      mode: pair.mode,
+      enabled: pair.enabled,
+      schedule: pair.schedule.kind,
+    },
+  });
+
+  console.log(`Created pair ${pair.id}`);
+  console.log(getEnvironmentSummary());
+  printPair(pair);
+}
+
+async function previewPairCommand(pairId: string): Promise<void> {
+  const pair = requirePair(pairId);
+  const sourceAdapter = SOURCE_ADAPTERS.get(pair.source.type);
+  const destinationAdapter = DESTINATION_ADAPTERS.get(pair.destination.type);
+
+  if (!sourceAdapter) {
+    console.error(`No source adapter registered for ${pair.source.type}`);
+    process.exit(1);
+  }
+  if (!destinationAdapter) {
+    console.error(`No destination adapter registered for ${pair.destination.type}`);
+    process.exit(1);
+  }
+
+  const result = await previewPair(pair, sourceAdapter, destinationAdapter);
+  console.log(`Pair: ${pair.id} (${pair.name})`);
+  console.log(`Mode: ${pair.mode}`);
+  console.log(`Source auth: ${result.auth.source}`);
+  console.log(`Destination auth: ${result.auth.destination}`);
+  console.log(`Learnings loaded: ${result.learnings.trim() ? "yes" : "no"}`);
+  console.log();
+
+  if (result.items.length === 0) {
+    console.log("No candidate items found for preview.");
+    return;
+  }
+
+  result.items.forEach((entry, index) => {
+    console.log(`${index + 1}. ${entry.decision.status.toUpperCase()} - ${entry.decision.reason}`);
+    if (entry.item.canonicalUrl) {
+      console.log(`   Source: ${entry.item.canonicalUrl}`);
+    }
+    console.log(`   Text: ${summarizeText(entry.item.text, 180)}`);
+    console.log(`   Draft: ${summarizeText(entry.draft.text, 220)}`);
+    if (entry.draft.warnings.length > 0) {
+      console.log(`   Warnings: ${entry.draft.warnings.join(" | ")}`);
+    }
+    console.log();
+  });
+}
+
+function printHistory(pairId: string): void {
+  const pair = requirePair(pairId);
+  const paths = getPairPaths(pair.id);
+  const posted = loadPostedHistory(pair.id);
+  const audit = loadAuditHistory(pair.id);
+  console.log(`Pair: ${pair.id} (${pair.name})`);
+  console.log(`Posted history: ${paths.postedFile}`);
+  console.log(`Audit log: ${paths.auditFile}`);
+  console.log();
+
+  console.log(`Posted entries: ${posted.length}`);
+  for (const entry of posted.slice(-10)) {
+    console.log(`- [${entry.postedAt}] ${entry.summary}`);
+    if (entry.destinationId) {
+      console.log(`  destinationId=${entry.destinationId}`);
+    }
+    if (entry.importedFrom) {
+      console.log(`  importedFrom=${entry.importedFrom}`);
+    }
+  }
+
+  console.log();
+  console.log(`Recent audit events: ${audit.length}`);
+  for (const entry of audit.slice(-10)) {
+    console.log(`- [${entry.at}] ${entry.event}`);
+  }
+}
+
+function importLegacyTracker(pairId: string): number {
+  const trackerPath = getLegacyTrackerPath();
+  const entries = loadTracker(trackerPath);
+  for (const entry of entries) {
+    appendPostedHistory(pairId, {
+      contentHash: contentHash(entry.linkedinSnippet),
+      destinationType: "x-account",
+      destinationId: entry.xPostId,
+      postedAt: entry.datePostedToX,
+      summary: entry.linkedinSnippet,
+      importedFrom: trackerPath,
+    });
+  }
+  return entries.length;
+}
+
+async function migrateLegacyPair(opts: {
+  id?: string;
+  name?: string;
+  sourceUrl?: string;
+  destinationAccount?: string;
+}): Promise<void> {
+  const pairId = slugifyPairId(opts.id || "linkedin-to-x");
+  const existing = getPairById(pairId);
+  if (existing) {
+    console.error(`Pair already exists: ${pairId}`);
+    process.exit(1);
+  }
+
+  const now = nowIso();
+  const pair: PairRecord = {
+    id: pairId,
+    name: opts.name || "Legacy LinkedIn to X",
+    enabled: false,
+    mode: "preview-only",
+    source: {
+      type: "linkedin-profile-activity",
+      url: opts.sourceUrl || process.env.LINKEDIN_PROFILE_URL,
+      profileUrl: opts.sourceUrl || process.env.LINKEDIN_PROFILE_URL,
+      authRef: "browser:playwright:linkedin",
+    },
+    destination: {
+      type: "x-account",
+      accountHint: opts.destinationAccount,
+      authRef: "oauth:x",
+    },
+    schedule: {
+      kind: "manual",
+      tz: resolveScheduleTimezone(undefined),
+    },
+    policy: { ...DEFAULT_POLICY },
+    dedupe: {
+      strategy: "source-id-url-content-hash",
+    },
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  upsertPair(pair);
+  writeDefaultLearnings(pair.id);
+  const importedCount = importLegacyTracker(pair.id);
+  appendAuditEvent({
+    at: now,
+    event: "pair.migrated.linkedin-to-x",
+    pairId: pair.id,
+    details: {
+      importedCount,
+      legacyDataDir: getLegacyDataDir(),
+      legacyTokensPath: getLegacyTokensPath(),
+      duplicateReference: "https://x.com/i/status/2036422890271215716",
+      fixCommit: "9d37108",
+    },
+  });
+
+  console.log(`Migrated legacy pair to ${pair.id}`);
+  console.log(`Imported ${importedCount} legacy tracker entries from ${getLegacyTrackerPath()}`);
+  console.log("Legacy files were left untouched.");
+}
 
 const program = new Command();
 
 program
-  .name("linkedin-to-x")
-  .description("Cross-post LinkedIn posts to X/Twitter and Facebook via Playwright scraping")
-  .version("2.1.0");
+  .name(APP_NAME)
+  .description("Generic source-to-destination reposting with pair-based, preview-first workflows")
+  .version(VERSION);
 
 program
   .command("auth")
-  .description("Authorize a different X account via OAuth 2.0 PKCE flow")
+  .description("Authorize an X account via OAuth 2.0 PKCE")
   .action(async () => {
     const clientId = process.env.X_CLIENT_ID;
     const clientSecret = process.env.X_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
       console.error("Missing X_CLIENT_ID or X_CLIENT_SECRET in environment.");
-      console.error("Set these in your .env file.");
       process.exit(1);
     }
 
     await startOAuth2Flow(clientId, clientSecret);
   });
 
+const pair = program.command("pair").description("Manage saved repost source-to-destination pairs");
+
+pair
+  .command("create")
+  .description("Create a saved pair using flags")
+  .requiredOption("--source-type <type>", "Source adapter type, e.g. linkedin-profile-activity")
+  .requiredOption("--destination-type <type>", "Destination adapter type, e.g. x-account")
+  .option("--id <id>", "Pair id")
+  .option("--name <name>", "Human-friendly pair name")
+  .option("--source-url <url>", "Source profile/feed URL")
+  .option("--destination-account <account>", "Destination account hint, e.g. @example")
+  .option("--mode <mode>", "preview-only | approval-required | live-approved")
+  .option("--enabled", "Enable the pair immediately")
+  .option("--schedule-kind <kind>", "manual | cron | every", "manual")
+  .option("--schedule-expression <expr>", "Cron expression")
+  .option("--every-minutes <minutes>", "Every N minutes")
+  .option("--timezone <tz>", "Schedule timezone")
+  .option("--auth-ref-source <ref>", "Source auth reference")
+  .option("--auth-ref-destination <ref>", "Destination auth reference")
+  .action(createPair);
+
+pair
+  .command("list")
+  .description("List saved pairs")
+  .action(() => {
+    const store = loadPairsStore();
+    if (store.pairs.length === 0) {
+      console.log("No saved pairs.");
+      console.log(getEnvironmentSummary());
+      return;
+    }
+
+    for (const entry of store.pairs) {
+      console.log(
+        `${entry.id} | ${entry.enabled ? "enabled" : "disabled"} | ${entry.mode} | ${entry.source.type} -> ${entry.destination.type}`
+      );
+    }
+  });
+
+pair
+  .command("show")
+  .description("Show a pair JSON definition")
+  .argument("<id>", "Pair id")
+  .action((id) => printPair(requirePair(id)));
+
+pair
+  .command("preview")
+  .description("Preview a pair safely without publishing")
+  .argument("<id>", "Pair id")
+  .action(previewPairCommand);
+
+pair
+  .command("history")
+  .description("Show per-pair audit and posted history")
+  .argument("<id>", "Pair id")
+  .action(printHistory);
+
+const migrate = program.command("migrate").description("Migration helpers");
+
+migrate
+  .command("linkedin-to-x")
+  .description("Create a pair and import legacy tracker history")
+  .option("--id <id>", "Pair id", "linkedin-to-x")
+  .option("--name <name>", "Pair name", "Legacy LinkedIn to X")
+  .option("--source-url <url>", "LinkedIn source URL")
+  .option("--destination-account <account>", "Destination X account hint")
+  .action(migrateLegacyPair);
+
 program
   .command("sync")
-  .description("Scrape LinkedIn, find new posts, cross-post to X and optionally Facebook")
+  .description("Legacy direct LinkedIn -> X/Facebook sync (deprecated)")
   .option("--dry-run", "Show what would be posted without actually posting")
   .option("--facebook-only", "Only post to Facebook (skip X)")
   .option("--x-only", "Only post to X (skip Facebook even if enabled)")
-  .action(async (opts: { dryRun?: boolean; facebookOnly?: boolean; xOnly?: boolean }) => {
-    const config = loadConfig();
-    console.log("=== LinkedIn to X Sync ===\n");
-
-    const postToX = !opts.facebookOnly;
-    const postToFb = config.facebookEnabled && !opts.xOnly;
-
-    if (postToFb) {
-      console.log("Facebook posting: ENABLED");
-    }
-
-    // 1. Scrape LinkedIn (last 10 posts max)
-    const posts = await scrapeLinkedInPosts(config);
-    if (posts.length === 0) {
-      console.log("No posts found on LinkedIn (or not logged in).");
-      return;
-    }
-
-    // 2. Load trackers
-    const trackerEntries = loadTracker(config.trackerFilePath);
-    const fbTrackerEntries = postToFb ? loadFbTracker(config.trackerFilePath) : [];
-    console.log(`X tracker has ${trackerEntries.length} existing entries.`);
-    if (postToFb) {
-      console.log(`Facebook tracker has ${fbTrackerEntries.length} existing entries.`);
-    }
-
-    // 3. Filter out already-posted items (consider a post "new" if it hasn't been posted to at least one target platform)
-    let newPostsForX: LinkedInPost[] = [];
-    let newPostsForFb: LinkedInPost[] = [];
-
-    if (postToX) {
-      newPostsForX = posts.filter((p) => !isAlreadyPosted(trackerEntries, p.text));
-      console.log(`Found ${newPostsForX.length} new post(s) for X.`);
-    }
-    if (postToFb) {
-      newPostsForFb = posts.filter((p) => !isAlreadyPostedToFb(fbTrackerEntries, p.text));
-      console.log(`Found ${newPostsForFb.length} new post(s) for Facebook.`);
-    }
-
-    const hasWork = newPostsForX.length > 0 || newPostsForFb.length > 0;
-    if (!hasWork) {
-      console.log("\nNothing new to post. All caught up!");
-      return;
-    }
-
-    console.log();
-
-    // 4. Build a combined set of posts to process (union of X and FB new posts)
-    const allNewPostTexts = new Set<string>();
-    for (const p of [...newPostsForX, ...newPostsForFb]) {
-      allNewPostTexts.add(p.text);
-    }
-    const allNewPosts = posts.filter((p) => allNewPostTexts.has(p.text));
-
-    // Post oldest first (reverse since LinkedIn shows newest first)
-    const postsToSend = [...allNewPosts].reverse();
-
-    let xSuccessCount = 0;
-    let fbSuccessCount = 0;
-
-    for (let i = 0; i < postsToSend.length; i++) {
-      const post = postsToSend[i];
-      const preview = post.text.slice(0, 100).replace(/\n/g, " ");
-
-      const shouldPostToX = postToX && newPostsForX.some((p) => p.text === post.text);
-      const shouldPostToFb = postToFb && newPostsForFb.some((p) => p.text === post.text);
-
-      // --- Post to X ---
-      if (shouldPostToX) {
-        const tweetText = formatForX(post.text);
-
-        if (opts.dryRun) {
-          console.log(`[DRY RUN] Would post to X: "${preview}..."`);
-        } else {
-          console.log(`Posting to X: "${preview}..."`);
-
-          const result = await postTweet(config.x, tweetText);
-
-          if (result.success && result.tweetId) {
-            console.log(`  -> X: Success! https://x.com/i/status/${result.tweetId}`);
-
-            addTrackerEntry(config.trackerFilePath, {
-              linkedinSnippet: snippetForTracker(post.text),
-              datePostedToX: new Date().toISOString(),
-              xPostId: result.tweetId,
-            });
-
-            xSuccessCount++;
-          } else {
-            console.error(`  -> X: Failed: ${result.error}`);
-          }
-        }
-      }
-
-      // --- Post to Facebook ---
-      if (shouldPostToFb && config.facebook) {
-        if (opts.dryRun) {
-          console.log(`[DRY RUN] Would post to Facebook: "${preview}..."`);
-        } else {
-          console.log(`Posting to Facebook: "${preview}..."`);
-
-          const fbResult = post.url
-            ? await postToFacebookWithLink(config.facebook, post.text, post.url)
-            : await postToFacebook(config.facebook, post.text);
-
-          if (fbResult.success && fbResult.postId) {
-            console.log(`  -> Facebook: Success! Post ID: ${fbResult.postId}`);
-
-            addFbTrackerEntry(config.trackerFilePath, {
-              linkedinSnippet: snippetForTracker(post.text),
-              datePostedToFb: new Date().toISOString(),
-              fbPostId: fbResult.postId,
-            });
-
-            fbSuccessCount++;
-          } else {
-            console.error(`  -> Facebook: Failed: ${fbResult.error}`);
-          }
-        }
-      }
-
-      // 5 second delay between posts
-      if (i < postsToSend.length - 1) {
-        console.log("  Waiting 60 seconds...");
-        await new Promise((r) => setTimeout(r, 60000));
-      }
-    }
-
-    if (!opts.dryRun) {
-      const parts: string[] = [];
-      if (postToX) parts.push(`X: ${xSuccessCount}/${newPostsForX.length}`);
-      if (postToFb) parts.push(`Facebook: ${fbSuccessCount}/${newPostsForFb.length}`);
-      console.log(`\nDone. Cross-posted ${parts.join(", ")}.`);
-      console.log(`Tracker: ${config.trackerFilePath}`);
-    }
-  });
+  .action(runLegacySync);
 
 program
   .command("list")
-  .description("Show what has been posted and what is pending")
-  .action(async () => {
-    const config = loadConfig();
-    console.log("=== LinkedIn to X Status ===\n");
-
-    // Load trackers
-    const trackerEntries = loadTracker(config.trackerFilePath);
-    const fbTrackerEntries = config.facebookEnabled
-      ? loadFbTracker(config.trackerFilePath)
-      : [];
-
-    console.log(`--- Already Posted to X (${trackerEntries.length} entries) ---`);
-    if (trackerEntries.length === 0) {
-      console.log("  (none)\n");
-    } else {
-      for (const entry of trackerEntries) {
-        console.log(`  [${entry.datePostedToX}] ${entry.linkedinSnippet}`);
-        console.log(`    -> https://x.com/i/status/${entry.xPostId}`);
-      }
-      console.log();
-    }
-
-    if (config.facebookEnabled) {
-      console.log(`--- Already Posted to Facebook (${fbTrackerEntries.length} entries) ---`);
-      if (fbTrackerEntries.length === 0) {
-        console.log("  (none)\n");
-      } else {
-        for (const entry of fbTrackerEntries) {
-          console.log(`  [${entry.datePostedToFb}] ${entry.linkedinSnippet}`);
-          console.log(`    -> FB Post ID: ${entry.fbPostId}`);
-        }
-        console.log();
-      }
-    }
-
-    // Scrape LinkedIn for current posts
-    console.log("Scraping LinkedIn for recent posts...\n");
-    const posts = await scrapeLinkedInPosts(config);
-
-    if (posts.length === 0) {
-      console.log("No posts found on LinkedIn (or not logged in).");
-      return;
-    }
-
-    const pendingX = posts.filter((p) => !isAlreadyPosted(trackerEntries, p.text));
-    const pendingFb = config.facebookEnabled
-      ? posts.filter((p) => !isAlreadyPostedToFb(fbTrackerEntries, p.text))
-      : [];
-
-    console.log(`--- Pending for X (${pendingX.length} posts) ---`);
-    if (pendingX.length === 0) {
-      console.log("  All caught up! Nothing to post to X.");
-    } else {
-      for (const post of pendingX) {
-        const snippet = post.text.replace(/\n/g, " ").slice(0, 100);
-        console.log(`  ${snippet}...`);
-      }
-    }
-
-    if (config.facebookEnabled) {
-      console.log(`\n--- Pending for Facebook (${pendingFb.length} posts) ---`);
-      if (pendingFb.length === 0) {
-        console.log("  All caught up! Nothing to post to Facebook.");
-      } else {
-        for (const post of pendingFb) {
-          const snippet = post.text.replace(/\n/g, " ").slice(0, 100);
-          console.log(`  ${snippet}...`);
-        }
-      }
-    }
-  });
+  .description("Legacy direct LinkedIn -> X/Facebook status (deprecated)")
+  .action(runLegacyList);
 
 program
   .command("start")
-  .description("Run continuous sync loop — checks LinkedIn every hour and cross-posts new content")
-  .option("--interval <minutes>", "Minutes between checks (default: 60)", "60")
-  .action(async (opts: { interval: string }) => {
-    const intervalMs = parseInt(opts.interval, 10) * 60 * 1000;
-    const intervalMin = parseInt(opts.interval, 10);
-
-    console.log(`=== LinkedIn to X — Continuous Sync ===`);
-    console.log(`Checking every ${intervalMin} minutes. Press Ctrl+C to stop.\n`);
-
-    const runSync = async () => {
-      try {
-        const config = loadConfig();
-        const posts = await scrapeLinkedInPosts(config);
-        if (posts.length === 0) {
-          console.log(`[${new Date().toLocaleTimeString()}] No posts found.`);
-          return;
-        }
-
-        const trackerEntries = loadTracker(config.trackerFilePath);
-        const newPosts = posts.filter((p) => !isAlreadyPosted(trackerEntries, p.text));
-
-        if (newPosts.length === 0) {
-          console.log(`[${new Date().toLocaleTimeString()}] All caught up — nothing new to post.`);
-          return;
-        }
-
-        console.log(`[${new Date().toLocaleTimeString()}] Found ${newPosts.length} new post(s). Cross-posting...`);
-
-        const postsToSend = [...newPosts].reverse();
-        for (let i = 0; i < postsToSend.length; i++) {
-          const post = postsToSend[i];
-          const tweetText = formatForX(post.text);
-          const result = await postTweet(config.x, tweetText);
-
-          if (result.success && result.tweetId) {
-            console.log(`  -> Success! https://x.com/i/status/${result.tweetId}`);
-            addTrackerEntry(config.trackerFilePath, {
-              linkedinSnippet: snippetForTracker(post.text),
-              datePostedToX: new Date().toISOString(),
-              xPostId: result.tweetId,
-            });
-          } else {
-            console.error(`  -> Failed: ${result.error}`);
-          }
-
-          if (i < postsToSend.length - 1) {
-            await new Promise((r) => setTimeout(r, 60000));
-          }
-        }
-      } catch (err) {
-        console.error(`[${new Date().toLocaleTimeString()}] Error:`, (err as Error).message);
-      }
-    };
-
-    // Run immediately, then on interval
-    await runSync();
-    setInterval(runSync, intervalMs);
-  });
+  .description("Legacy continuous LinkedIn -> X sync loop (deprecated)")
+  .option("--interval <minutes>", "Minutes between checks", "60")
+  .action(runLegacyStart);
 
 program.parse();

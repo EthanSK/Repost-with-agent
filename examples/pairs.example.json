@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "pairs": [
+    {
+      "id": "linkedin-source-to-x-example",
+      "name": "LinkedIn source to X example",
+      "enabled": false,
+      "mode": "preview-only",
+      "source": {
+        "type": "linkedin-profile-activity",
+        "url": "https://www.linkedin.com/in/example/recent-activity/all/",
+        "authRef": "browser:openclaw:linkedin"
+      },
+      "destination": {
+        "type": "x-account",
+        "accountHint": "@example",
+        "authRef": "oauth:x:example"
+      },
+      "schedule": {
+        "kind": "manual",
+        "tz": "Europe/London"
+      },
+      "policy": {
+        "requirePreviewBeforeFirstLiveRun": true,
+        "maxItemsPerRun": 1,
+        "minDelayBetweenPostsMinutes": 60,
+        "preferOfficialApi": true,
+        "blockOnUncertainDuplicate": true
+      },
+      "dedupe": {
+        "strategy": "source-id-url-content-hash"
+      }
+    }
+  ]
+}

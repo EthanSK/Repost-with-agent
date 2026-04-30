@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "repost-with-agent",
+  "name": "Repost-with-agent",
+  "description": "Preview-first agent reposting with saved pairs, queue workspaces, and persistent history.",
+  "runtime": {
+    "type": "node",
+    "entry": "dist/index.js"
+  },
+  "config_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "dataDir": {
+        "type": "string",
+        "description": "Optional override for ~/.repost-with-agent."
+      },
+      "playwrightProfileDir": {
+        "type": "string",
+        "description": "Persistent browser profile for transparent user-controlled logins."
+      },
+      "defaultTimezone": {
+        "type": "string",
+        "description": "Default timezone for saved schedules."
+      }
+    }
+  },
+  "skills_roots": [
+    "skills"
+  ]
+}

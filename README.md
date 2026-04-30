@@ -1,175 +1,214 @@
-# linkedin-to-x
+# Repost-with-agent
 
-Automatically cross-post your LinkedIn posts to X (Twitter) and optionally Facebook Pages. Scrapes your LinkedIn activity feed using Playwright with a persistent browser session, then posts to X via the official API and Facebook via the Graph API.
+Repost-with-agent (`repost_with_agent` in user-facing/workspace names) is a portable, preview-first agent workflow/skill/plugin for saved source → destination reposting.
 
-## Features
+The repo supplies setup files, queue/state/log templates, adapter-backed CLI commands, and run instructions for an agent operating a logged-in browser. It is not a standalone autonomous social-posting framework.
 
-- **Playwright-based scraping** --- uses a persistent browser profile so you stay logged into LinkedIn
-- **Count-based deduplication** --- looks at the last 10 LinkedIn posts and compares against a tracker file (first 100 chars) to find what hasn't been posted yet
-- **Immediate posting** --- new posts are sent to X right away (5-second delay between multiple posts)
-- **Facebook Page posting** --- opt-in cross-posting to a Facebook Page via the Graph API
-- **OAuth 2.0 PKCE auth** --- authorize a different X account to post on behalf of via `linkedin-to-x auth`
-- **Dry run** --- preview what would be posted without actually tweeting
-- **280-char formatting** --- automatically truncates long posts and appends the LinkedIn source link
+The first concrete adapter pair is LinkedIn source → X destination. The repo keeps the old working scraper/client code where practical, but the public direction is now generic pair setup, preview, history, workspace queues, and scheduled agent runs.
 
-## Setup
+## Principles
 
-### 1. Clone and install
+- Preview first. New pairs default to `preview-only`.
+- User controlled. No hidden posting, no stealth, no CAPTCHA/2FA bypass.
+- Official APIs where possible.
+- Agent-operated browser flows where APIs are unavailable, using a persistent profile the user controls.
+- Multiple saved pairs with persistent history, audit logs, and learnings loaded every run.
+- Usable through OpenClaw or Claude Code as the operator, without making the project about agent infrastructure.
+
+## Current scope
+
+Implemented in this foundation pass:
+
+- package/CLI rename to `repost-with-agent`;
+- legacy `linkedin-to-x` bin alias preserved;
+- runtime store under `~/.repost-with-agent`;
+- pair schema, per-pair paths, posted history, audit log, and learnings files;
+- agent workspace initializer with `user-setup.json`, `queue.jsonl`, `state.json`, and `logs/`;
+- adapter interfaces plus LinkedIn source and X destination wrappers;
+- safe CLI pair commands:
+  - `pair create`
+  - `pair list`
+  - `pair show <id>`
+  - `pair preview <id>`
+  - `pair history <id>`
+  - `migrate linkedin-to-x`
+- agent-facing setup files for OpenClaw and Claude Code that operate the reposting CLI/core.
+
+Not implemented yet:
+
+- conversational prompting inside the CLI itself;
+- live pair publishing command;
+- scheduling command that writes cron/launchd/OpenClaw schedules automatically.
+
+## Install
 
 ```bash
-git clone https://github.com/EthanSK/linkedin-to-x.git
-cd linkedin-to-x
 npm install
 npm run build
 ```
 
-### 2. Configure environment
+The public CLI is:
 
 ```bash
-cp .env.example .env
+npx repost-with-agent --help
 ```
 
-Edit `.env` with:
-- **X API credentials** --- create an app at [developer.x.com](https://developer.x.com) with OAuth 1.0a Read+Write
-- **X OAuth 2.0 credentials** --- `X_CLIENT_ID` and `X_CLIENT_SECRET` from your X developer app (needed for `auth` command)
-- **LinkedIn profile URL** --- e.g. `https://www.linkedin.com/in/ethansk`
-- **Playwright profile dir** --- path to a Chromium profile that's logged into LinkedIn (defaults to `~/.claude/playwright-profile/`)
-- **Facebook** (optional) --- see [Facebook Page Setup](#facebook-page-setup) below
-
-### 3. Log into LinkedIn in Playwright
-
-The scraper needs an authenticated browser session. Open the persistent profile once:
+Legacy alias still works:
 
 ```bash
-npx playwright open --user-data-dir=~/.claude/playwright-profile https://www.linkedin.com/login
+npx linkedin-to-x --help
 ```
 
-Log in manually, then close the browser. The session cookies persist in the profile directory.
+## Runtime state
 
-### 4. Authorize a different X account (optional)
+Public repo files stay in the repo. Runtime state stays outside it:
 
-If you want to post to an X account different from the app owner, run the OAuth 2.0 flow:
+```text
+~/.repost-with-agent/
+  pairs.json
+  x-tokens.json
+  pairs/<pair-id>/
+    audit.jsonl
+    drafts.jsonl
+    findings.jsonl
+    posted.jsonl
+    state.json
+    learnings.md
+```
+
+Legacy runtime state stays at `~/.linkedin-to-x/`; migration imports from it without deleting or archiving it.
+
+## Agent workspace template
+
+For queue-based agent runs, create a user-owned workspace outside the repo:
 
 ```bash
-npx tsx src/index.ts auth
+python3 scripts/init_repost_with_agent_workspace.py ~/repost_with_agent_workspace
 ```
 
-This will:
-1. Open your browser to X's authorization page
-2. Start a local server on port 3333 for the callback
-3. Exchange the authorization code for access + refresh tokens
-4. Save tokens to `~/.linkedin-to-x/x-tokens.json`
+That creates:
 
-When OAuth 2.0 tokens are present, the tool uses them (Bearer token) instead of OAuth 1.0a.
+```text
+repost_with_agent_workspace/
+  user-setup.json   # accounts, browser profile, target platforms, publish/run policy
+  queue.jsonl       # one queued repost item per line
+  state.json        # completed/drafted/blocked/failed/skipped tracking
+  logs/             # concise proof and run notes
+```
 
-**Important:** You must add `http://localhost:3333/callback` as a callback URL in your X developer app settings.
+Default workspace policy is manual/approval-first: the agent may prepare previews/drafts, but must stop before public posting unless the current request and setup explicitly authorize live posting.
 
-### 5. Facebook Page Setup (optional)
+## Pair setup
 
-Facebook posting is opt-in and disabled by default. It posts to a **Facebook Page** (not a personal profile --- Facebook deprecated personal profile posting via API).
-
-#### How to get a Page Access Token
-
-1. Go to [Meta for Developers](https://developers.facebook.com/) and create an app (type: Business).
-2. Add the **Facebook Login for Business** product to your app.
-3. Your app needs the `pages_manage_posts` and `pages_read_engagement` permissions.
-4. Go to [Graph API Explorer](https://developers.facebook.com/tools/explorer/):
-   - Select your app
-   - Click "Get User Access Token"
-   - Check `pages_manage_posts` and `pages_read_engagement`
-   - Click "Generate Access Token" and authorize
-5. Exchange for a long-lived user token:
-   ```
-   GET https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&client_id=APP_ID&client_secret=APP_SECRET&fb_exchange_token=SHORT_LIVED_TOKEN
-   ```
-6. Get the Page Access Token (which is permanent when derived from a long-lived user token):
-   ```
-   GET https://graph.facebook.com/v21.0/me/accounts?access_token=LONG_LIVED_USER_TOKEN
-   ```
-   Find your page in the response --- the `access_token` field is your permanent Page Access Token, and the `id` field is your Page ID.
-
-7. Add to your `.env`:
-   ```bash
-   FACEBOOK_ENABLED=true
-   FB_PAGE_ID=123456789012345
-   FB_ACCESS_TOKEN=your_permanent_page_access_token
-   ```
-
-#### App Review requirements
-
-- If you are an **admin, developer, or tester** of the Facebook app, you can post to pages you manage without app review.
-- For production use with other users, your app must pass [App Review](https://developers.facebook.com/docs/app-review/) for the `pages_manage_posts` permission.
-- The Page Access Token must belong to someone who has a role on the Page (admin or editor).
-
-#### Sync flags for Facebook
+Create a saved LinkedIn → X pair:
 
 ```bash
-# Post to both X and Facebook
-npx tsx src/index.ts sync
-
-# Post only to Facebook (skip X)
-npx tsx src/index.ts sync --facebook-only
-
-# Post only to X (skip Facebook even if enabled)
-npx tsx src/index.ts sync --x-only
+npx repost-with-agent pair create \
+  --name "LinkedIn to X" \
+  --source-type linkedin-profile-activity \
+  --source-url "https://www.linkedin.com/in/example/recent-activity/all/" \
+  --destination-type x-account \
+  --destination-account "@example"
 ```
 
-### 6. Set up cron (optional)
+List pairs:
 
 ```bash
-# Every 30 minutes, check for new posts
-*/30 * * * * cd /path/to/linkedin-to-x && npx tsx src/index.ts sync >> ~/.linkedin-to-x/cron.log 2>&1
+npx repost-with-agent pair list
 ```
 
-## Usage
-
-### Authorize a different X account
+Show one pair:
 
 ```bash
-npx tsx src/index.ts auth
+npx repost-with-agent pair show linkedin-to-x
 ```
 
-### List pending and posted
+Preview safely without posting:
 
 ```bash
-npx tsx src/index.ts list
+npx repost-with-agent pair preview linkedin-to-x
 ```
 
-Shows already-posted entries from the tracker, scrapes LinkedIn for recent posts, and displays what's pending.
-
-### Sync (cross-post)
+Show audit/history:
 
 ```bash
-npx tsx src/index.ts sync
+npx repost-with-agent pair history linkedin-to-x
 ```
 
-Scrapes LinkedIn (last 10 posts), finds any not yet posted to X, and posts them immediately with a 5-second delay between each.
+## X auth
 
-### Dry run
+If you want to prepare X OAuth2 tokens for future live posting support:
 
 ```bash
-npx tsx src/index.ts sync --dry-run
+npx repost-with-agent auth
 ```
 
-Shows what would be posted without actually sending anything.
+This stores tokens in `~/.repost-with-agent/x-tokens.json`. If new tokens are absent, the tool also checks the old legacy location `~/.linkedin-to-x/x-tokens.json`.
 
-## How it works
+## Migration from `linkedin-to-x`
 
-1. **Scrape** --- Playwright opens your LinkedIn `/recent-activity/all/` page in headless mode using a persistent browser profile with saved cookies.
-2. **Extract** --- DOM selectors pull post text and activity URLs from the last 10 posts in the feed.
-3. **Deduplicate** --- each post's text (first 100 chars, normalized) is compared against `~/.linkedin-to-x/posted.md` (X tracker) and `~/.linkedin-to-x/posted-facebook.json` (Facebook tracker).
-4. **Post** --- new posts are sent to X immediately via the API (OAuth 2.0 Bearer if authorized, otherwise OAuth 1.0a), and optionally to a Facebook Page via the Graph API, with a 5-second delay between each post.
+Create a saved legacy pair and import old tracker history:
 
-## Data files
+```bash
+npx repost-with-agent migrate linkedin-to-x \
+  --source-url "https://www.linkedin.com/in/example/recent-activity/all/" \
+  --destination-account "@example"
+```
 
-All state is stored in `~/.linkedin-to-x/`:
+Migration behavior in this pass:
 
-| File | Purpose |
-|---|---|
-| `posted.md` | Markdown table tracking X cross-posted items (snippet + X post ID) |
-| `posted-facebook.json` | JSON array tracking Facebook cross-posted items (snippet + FB post ID) |
-| `x-tokens.json` | OAuth 2.0 access + refresh tokens (created by `auth` command) |
+- creates a disabled `preview-only` pair;
+- imports old `~/.linkedin-to-x/posted.md` entries into per-pair `posted.jsonl`;
+- records an audit event with the known duplicate incident:
+  - 2026-03-24 duplicate post: `https://x.com/i/status/2036422890271215716`
+  - fix commit: `9d37108`
+- leaves legacy files untouched.
 
-## License
+## Scheduling
 
-MIT
+Scheduling is host-driven. Use `user-setup.json.run_policy` for queue workspaces, or pair `schedule` fields for pair workflows, then have OpenClaw cron/launchd/cron invoke the skill or CLI on that cadence.
+
+Recommended flow:
+
+1. create the pair;
+2. preview it;
+3. inspect history/learnings;
+4. schedule preview/approval runs with `max_items_per_run: 1` unless the user deliberately chooses a different policy.
+
+Do not schedule blind public posting by default.
+
+## Agent-operated setup
+
+This repo now ships lightweight OpenClaw and Claude Code integration files so an agent can operate the reposting workflow without inventing its own scraping/posting logic:
+
+- `openclaw.plugin.json`
+- `.claude-plugin/plugin.json`
+- `skills/repost-pair-setup/SKILL.md`
+- `skills/repost-run/SKILL.md`
+- `commands/pair.md`
+- `commands/preview.md`
+- `commands/run.md`
+
+These integrations are only for controlling the cross-posting workflow: create pairs, preview, inspect history, and later run/schedule safely. They are not a separate agent app/framework.
+
+## Legacy commands
+
+The old direct commands are still present for compatibility and are marked deprecated:
+
+- `repost-with-agent sync`
+- `repost-with-agent list`
+- `repost-with-agent start`
+
+Those preserve the old hardcoded LinkedIn → X/Facebook behavior and use the legacy tracker location (`~/.linkedin-to-x/posted.md`, overrideable with `LINKEDIN_TO_X_DATA_DIR`). New setup should use `pair` commands.
+
+Facebook support is treated as legacy/experimental until a cautious destination adapter exists. Do not enable blind Facebook posting by default; keep it approval-gated and explicitly configured.
+
+## Safety
+
+- No stealth, ban evasion, or anti-detection logic.
+- No CAPTCHA or 2FA bypass.
+- No password collection in chat.
+- Browser automation is only for transparent, user-controlled login sessions.
+- Conservative cadence is for spam/duplicate reduction, not detection evasion.
+
+See [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), and [docs/migration.md](docs/migration.md).

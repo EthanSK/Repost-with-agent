@@ -350,9 +350,9 @@ export async function startOAuth2Flow(clientId: string, clientSecret: string): P
   const { saveOAuth2Tokens } = await import("./config.js");
   saveOAuth2Tokens(tokens);
 
-  console.log("Tokens saved to ~/.linkedin-to-x/x-tokens.json");
+  console.log("Tokens saved to ~/.repost-with-agent/x-tokens.json");
   console.log("The x-client will now use OAuth 2.0 Bearer tokens for posting.");
-  console.log("\nDone! You can now run `linkedin-to-x sync` to cross-post.\n");
+  console.log("\nDone! You can now use `repost-with-agent` pair workflows or legacy sync commands.\n");
 }
 
 function waitForCallback(expectedState: string): Promise<string> {

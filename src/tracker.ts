@@ -10,9 +10,9 @@ export interface TrackerEntry {
   fbPostId?: string;
 }
 
-const HEADER = `# LinkedIn to X - Posted Tracker
+const HEADER = `# Repost-with-agent Legacy X Tracker
 
-This file tracks posts that have been cross-posted from LinkedIn to X.
+This file tracks legacy posts that have been cross-posted to X.
 Do not delete this file — it is used for deduplication.
 
 | LinkedIn Post Snippet | Date Posted to X | X Post ID |

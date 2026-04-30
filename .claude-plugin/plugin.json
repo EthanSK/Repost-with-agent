@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "repost-with-agent",
+  "description": "Pair and queue-based, preview-first reposting workflows for Claude Code.",
+  "skills": [
+    "skills/repost-pair-setup",
+    "skills/repost-run"
+  ],
+  "commands": [
+    "commands/pair.md",
+    "commands/preview.md",
+    "commands/run.md"
+  ]
+}

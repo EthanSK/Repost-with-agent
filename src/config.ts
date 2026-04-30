@@ -5,6 +5,16 @@ import * as os from "os";
 
 dotenv.config();
 
+export const APP_NAME = "repost-with-agent";
+export const LEGACY_APP_NAME = "linkedin-to-x";
+export const DEFAULT_DATA_DIR = path.join(os.homedir(), `.${APP_NAME}`);
+export const LEGACY_DATA_DIR = path.join(os.homedir(), `.${LEGACY_APP_NAME}`);
+export const DEFAULT_PLAYWRIGHT_PROFILE_DIR = path.join(
+  os.homedir(),
+  ".claude",
+  "playwright-profile"
+);
+
 export interface XCredentials {
   apiKey: string;
   apiSecret: string;
@@ -38,6 +48,13 @@ export interface Config {
   trackerFilePath: string;
 }
 
+export interface LinkedInScrapeConfig {
+  linkedin: {
+    profileUrl: string;
+  };
+  playwrightProfileDir: string;
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -48,38 +65,69 @@ function requireEnv(name: string): string {
   return value;
 }
 
+function ensureDir(dirPath: string): void {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+export function getRuntimeDataDir(): string {
+  return process.env.REPOST_WITH_AGENT_DATA_DIR || DEFAULT_DATA_DIR;
+}
+
+export function getLegacyDataDir(): string {
+  return LEGACY_DATA_DIR;
+}
+
 function getTokensPath(): string {
-  return path.join(os.homedir(), ".linkedin-to-x", "x-tokens.json");
+  return path.join(getRuntimeDataDir(), "x-tokens.json");
+}
+
+export function getLegacyTokensPath(): string {
+  return path.join(getLegacyDataDir(), "x-tokens.json");
 }
 
 export function loadOAuth2Tokens(): XOAuth2Tokens | null {
-  const tokensPath = getTokensPath();
-  if (!fs.existsSync(tokensPath)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(tokensPath, "utf-8"));
-  } catch {
-    return null;
+  for (const tokensPath of [getTokensPath(), getLegacyTokensPath()]) {
+    if (!fs.existsSync(tokensPath)) continue;
+    try {
+      return JSON.parse(fs.readFileSync(tokensPath, "utf-8"));
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 export function saveOAuth2Tokens(tokens: XOAuth2Tokens): void {
   const tokensPath = getTokensPath();
   const dir = path.dirname(tokensPath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  ensureDir(dir);
   fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2), "utf-8");
 }
 
-export function loadConfig(): Config {
-  const dataDir = path.join(os.homedir(), ".linkedin-to-x");
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true });
-  }
+export function loadLinkedInScrapeConfig(profileUrl?: string): LinkedInScrapeConfig {
+  return {
+    linkedin: {
+      profileUrl: profileUrl || requireEnv("LINKEDIN_PROFILE_URL"),
+    },
+    playwrightProfileDir:
+      process.env.PLAYWRIGHT_PROFILE_DIR || DEFAULT_PLAYWRIGHT_PROFILE_DIR,
+  };
+}
 
-  const defaultPlaywrightDir = path.join(os.homedir(), ".claude", "playwright-profile");
+export function loadXCredentials(): XCredentials {
+  return {
+    apiKey: requireEnv("X_API_KEY"),
+    apiSecret: requireEnv("X_API_SECRET"),
+    accessToken: requireEnv("X_ACCESS_TOKEN"),
+    accessTokenSecret: requireEnv("X_ACCESS_TOKEN_SECRET"),
+  };
+}
 
-  const oauth2Tokens = loadOAuth2Tokens();
+export function loadLegacySyncConfig(): Config {
+  const dataDir = process.env.LINKEDIN_TO_X_DATA_DIR || getLegacyDataDir();
+  ensureDir(dataDir);
 
   const facebookEnabled = process.env.FACEBOOK_ENABLED === "true";
   let facebook: FacebookCredentials | undefined;
@@ -98,21 +146,15 @@ export function loadConfig(): Config {
   }
 
   return {
-    x: {
-      apiKey: requireEnv("X_API_KEY"),
-      apiSecret: requireEnv("X_API_SECRET"),
-      accessToken: requireEnv("X_ACCESS_TOKEN"),
-      accessTokenSecret: requireEnv("X_ACCESS_TOKEN_SECRET"),
-    },
-    xOAuth2: oauth2Tokens ?? undefined,
+    x: loadXCredentials(),
+    xOAuth2: loadOAuth2Tokens() ?? undefined,
     xClientId: process.env.X_CLIENT_ID,
     xClientSecret: process.env.X_CLIENT_SECRET,
-    linkedin: {
-      profileUrl: requireEnv("LINKEDIN_PROFILE_URL"),
-    },
+    ...loadLinkedInScrapeConfig(),
     facebook,
     facebookEnabled,
-    playwrightProfileDir: process.env.PLAYWRIGHT_PROFILE_DIR || defaultPlaywrightDir,
+    playwrightProfileDir:
+      process.env.PLAYWRIGHT_PROFILE_DIR || DEFAULT_PLAYWRIGHT_PROFILE_DIR,
     dataDir,
     trackerFilePath: path.join(dataDir, "posted.md"),
   };

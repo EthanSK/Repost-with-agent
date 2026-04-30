@@ -1,7 +1,7 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
 import * as https from "https";
 import * as http from "http";
-import { Config } from "./config.js";
+import { LinkedInScrapeConfig } from "./config.js";
 
 export interface LinkedInPost {
   text: string;
@@ -66,7 +66,7 @@ async function resolveLinkedInShortUrl(url: string): Promise<string> {
   });
 }
 
-export async function scrapeLinkedInPosts(config: Config): Promise<LinkedInPost[]> {
+export async function scrapeLinkedInPosts(config: LinkedInScrapeConfig): Promise<LinkedInPost[]> {
   const profileUrl = config.linkedin.profileUrl.replace(/\/$/, "");
   const activityUrl = `${profileUrl}/recent-activity/all/`;
 
