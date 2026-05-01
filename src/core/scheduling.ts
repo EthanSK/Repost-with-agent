@@ -229,7 +229,7 @@ export async function runScheduled(
         pair,
         sourceAdapter,
         destinationAdapter,
-        { approve: true, allowUncertain: false }
+        { approve: true, allowUncertain: false, trigger: "scheduled-run" }
       );
 
       const top = outcome.preview;

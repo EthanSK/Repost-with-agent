@@ -8,7 +8,19 @@ export interface LinkedInPost {
   url: string | null;
 }
 
-const MAX_POSTS = 10;
+export interface LinkedInScrapeOptions {
+  /** Maximum number of posts to extract this fetch. Default: 10. */
+  maxPosts?: number;
+  /**
+   * Number of times to scroll the activity feed before extracting. Each scroll
+   * triggers LinkedIn's infinite-scroll loader. Default: 1 (matches the
+   * pre-pagination behavior). Backfill callers typically pass 4-6 to load 20+
+   * posts.
+   */
+  scrollIterations?: number;
+}
+
+const DEFAULT_MAX_POSTS = 10;
 
 /** Follow redirects to resolve shortened URLs (lnkd.in, bit.ly, etc.) */
 async function resolveRedirect(url: string): Promise<string> {
@@ -66,12 +78,19 @@ async function resolveLinkedInShortUrl(url: string): Promise<string> {
   });
 }
 
-export async function scrapeLinkedInPosts(config: LinkedInScrapeConfig): Promise<LinkedInPost[]> {
+export async function scrapeLinkedInPosts(
+  config: LinkedInScrapeConfig,
+  options: LinkedInScrapeOptions = {}
+): Promise<LinkedInPost[]> {
   const profileUrl = config.linkedin.profileUrl.replace(/\/$/, "");
   const activityUrl = `${profileUrl}/recent-activity/all/`;
+  const maxPosts = Math.max(1, options.maxPosts ?? DEFAULT_MAX_POSTS);
+  const scrollIterations = Math.max(0, options.scrollIterations ?? 1);
 
   console.log(`Launching browser with profile: ${config.playwrightProfileDir}`);
-  console.log(`Navigating to: ${activityUrl}`);
+  console.log(
+    `Navigating to: ${activityUrl} (maxPosts=${maxPosts}, scrolls=${scrollIterations})`
+  );
 
   let context: BrowserContext | null = null;
 
@@ -98,12 +117,15 @@ export async function scrapeLinkedInPosts(config: LinkedInScrapeConfig): Promise
       return [];
     }
 
-    // Scroll down a bit to load more posts
-    await page.evaluate(() => window.scrollBy(0, 2000));
-    await page.waitForTimeout(2000);
+    // Scroll the feed to lazy-load more posts. LinkedIn's infinite-scroll
+    // generally yields ~5-10 additional posts per substantial scroll.
+    for (let i = 0; i < scrollIterations; i += 1) {
+      await page.evaluate(() => window.scrollBy(0, 2000));
+      await page.waitForTimeout(2000);
+    }
 
-    const posts = await extractPosts(page);
-    console.log(`Extracted ${posts.length} post(s) (max ${MAX_POSTS}).`);
+    const posts = await extractPosts(page, maxPosts);
+    console.log(`Extracted ${posts.length} post(s) (max ${maxPosts}).`);
 
     return posts;
   } catch (err) {
@@ -116,7 +138,7 @@ export async function scrapeLinkedInPosts(config: LinkedInScrapeConfig): Promise
   }
 }
 
-async function extractPosts(page: Page): Promise<LinkedInPost[]> {
+async function extractPosts(page: Page, maxPosts: number): Promise<LinkedInPost[]> {
   const posts = await page.evaluate((maxPosts: number) => {
     const results: Array<{ text: string; url: string | null }> = [];
 
@@ -213,7 +235,7 @@ async function extractPosts(page: Page): Promise<LinkedInPost[]> {
     }
 
     return results;
-  }, MAX_POSTS) as Array<{ text: string; url: string | null; linksToResolve: Array<{ linkText: string; href: string }> }>;
+  }, maxPosts) as Array<{ text: string; url: string | null; linksToResolve: Array<{ linkText: string; href: string }> }>;
 
   // Post-process: resolve shortened LinkedIn URLs (lnkd.in) to actual destinations
   console.log("Resolving shortened URLs...");

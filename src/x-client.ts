@@ -256,6 +256,67 @@ async function postTweetOAuth1(
   return { success: false, error: errorMsg };
 }
 
+/**
+ * Fetch the authenticated user's most recent tweets via X API v2. Used by the
+ * destination adapter's `findExistingPost` for cross-state dedupe before
+ * backfilling. Returns an empty array on any failure (caller is expected to
+ * treat lookup failure as "unknown" rather than "not duplicate" — but we
+ * surface the error via the empty result + caller logging).
+ *
+ * Requires an OAuth 2.0 user-access token with `tweet.read` and `users.read`.
+ */
+export async function fetchRecentTweets(
+  accessToken: string,
+  maxResults = 100
+): Promise<Array<{ id: string; text: string; created_at?: string }>> {
+  // Step 1: resolve the authenticated user's id via /2/users/me.
+  const meResp = await httpsRequest(
+    "https://api.x.com/2/users/me",
+    {
+      method: "GET",
+      hostname: "api.x.com",
+      path: "/2/users/me",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  if (meResp.statusCode !== 200) {
+    throw new Error(
+      `X /2/users/me failed: HTTP ${meResp.statusCode}: ${meResp.body}`
+    );
+  }
+  const meBody = JSON.parse(meResp.body) as { data?: { id: string } };
+  if (!meBody.data?.id) {
+    throw new Error(`X /2/users/me missing data.id: ${meResp.body}`);
+  }
+  const userId = meBody.data.id;
+
+  // Step 2: fetch tweets for that user. X API caps `max_results` at 100.
+  const limit = Math.min(Math.max(5, maxResults), 100);
+  const tweetsPath = `/2/users/${encodeURIComponent(userId)}/tweets?max_results=${limit}&tweet.fields=created_at`;
+  const tweetsResp = await httpsRequest(
+    `https://api.x.com${tweetsPath}`,
+    {
+      method: "GET",
+      hostname: "api.x.com",
+      path: tweetsPath,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  if (tweetsResp.statusCode !== 200) {
+    throw new Error(
+      `X /2/users/:id/tweets failed: HTTP ${tweetsResp.statusCode}: ${tweetsResp.body}`
+    );
+  }
+  const tweetsBody = JSON.parse(tweetsResp.body) as {
+    data?: Array<{ id: string; text: string; created_at?: string }>;
+  };
+  return tweetsBody.data || [];
+}
+
 async function postTweetOAuth2(
   tokens: XOAuth2Tokens,
   text: string,

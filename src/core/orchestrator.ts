@@ -1,6 +1,7 @@
 import { DestinationAdapter, PublishResult } from "../adapters/destination.js";
 import { SourceAdapter } from "../adapters/source.js";
 import { contentHash, decidePreviewStatus, summarizeText } from "./dedupe.js";
+import { notifyPublishSuccess } from "./notify.js";
 import {
   appendAuditEvent,
   appendPostedHistory,
@@ -66,6 +67,11 @@ export async function previewPair(
 export interface PublishPairOptions {
   approve: boolean;
   allowUncertain?: boolean;
+  /**
+   * Origin of the publish call, recorded in audit events + Telegram notify.
+   * "pair-post" (default), "scheduled-run", or "backfill".
+   */
+  trigger?: string;
 }
 
 export interface PublishPairOutcome {
@@ -228,8 +234,70 @@ export async function publishNextForPair(
       destinationUrl: publishResult.destinationUrl,
       sourceUrl: top.item.canonicalUrl,
       chars: top.draft.text.length,
+      trigger: options.trigger || "pair-post",
     },
   });
+
+  // Telegram-on-publish guarantee (Ethan voice 5977 + 5978, 2026-05-01).
+  // Fire AFTER the destination publish is confirmed and after we've written
+  // the success audit + posted-history entries. We deliberately await — a
+  // confirmed-and-not-yet-notified state is acceptable, but a half-finished
+  // send corrupting the next decision is not. Notify failures never roll
+  // back the publish; they just emit a separate audit event.
+  const notifyOutcome = await notifyPublishSuccess({
+    pairId: pair.id,
+    pairName: pair.name,
+    sourceUrl: top.item.canonicalUrl ?? undefined,
+    destinationUrl: publishResult.destinationUrl,
+    destinationType: destinationAdapter.type,
+    destinationId: publishResult.destinationId,
+    content: top.draft.text,
+    trigger: options.trigger || "pair-post",
+  });
+
+  if (notifyOutcome.delivered) {
+    appendAuditEvent({
+      at: nowIso(),
+      event: "notify.publish.success",
+      pairId: pair.id,
+      details: {
+        channel: "telegram",
+        configSource: notifyOutcome.source,
+        bytes: notifyOutcome.body.length,
+      },
+    });
+  } else if (notifyOutcome.attempted) {
+    appendAuditEvent({
+      at: nowIso(),
+      event: "notify.publish.failure",
+      pairId: pair.id,
+      details: {
+        channel: "telegram",
+        configSource: notifyOutcome.source,
+        error: notifyOutcome.error,
+      },
+    });
+    appendAuditEvent({
+      at: nowIso(),
+      event: "pair.publish.notify_failed",
+      pairId: pair.id,
+      details: {
+        channel: "telegram",
+        error: notifyOutcome.error,
+      },
+    });
+  } else {
+    appendAuditEvent({
+      at: nowIso(),
+      event: "pair.publish.notify_skipped_unconfigured",
+      pairId: pair.id,
+      details: {
+        hint:
+          "Run `repost-with-agent notify configure --bot-token <T> --chat-id <C>` " +
+          "or set REPOST_TELEGRAM_BOT_TOKEN + REPOST_TELEGRAM_CHAT_ID.",
+      },
+    });
+  }
 
   return { status: "published", preview: top, publishResult };
 }

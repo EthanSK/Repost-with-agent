@@ -12,6 +12,7 @@ import {
 import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.js";
 import { previewPair, publishNextForPair } from "./core/orchestrator.js";
 import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
+import { runBackfill } from "./core/backfill.js";
 import {
   installLaunchdPlist,
   renderCrontabLine,
@@ -39,8 +40,15 @@ import {
 import { PairMode, PairRecord, PairScheduleKind } from "./core/types.js";
 import { contentHash, summarizeText } from "./core/dedupe.js";
 import { APP_NAME, getLegacyDataDir, getLegacyTokensPath } from "./config.js";
+import {
+  buildPublishMessage,
+  getNotifyConfigPath,
+  loadNotifyConfig,
+  sendTelegramMessage,
+  writeNotifyConfig,
+} from "./core/notify.js";
 
-const VERSION = "2.3.0";
+const VERSION = "2.5.0";
 
 const SOURCE_ADAPTERS = new Map([[linkedInSourceAdapter.type, linkedInSourceAdapter]]);
 const DESTINATION_ADAPTERS = new Map([[xDestinationAdapter.type, xDestinationAdapter]]);
@@ -466,6 +474,101 @@ pair
   });
 
 pair
+  .command("backfill")
+  .description(
+    "Walk back through source history, dedupe against both posted.jsonl and the destination platform, and publish missing items on a staggered schedule. " +
+      "Default: 2 pages, max 20 publishes, 10 min between posts, dry-run unless --allow-publish is passed."
+  )
+  .argument("<id>", "Pair id")
+  .option("--max <n>", "Maximum number of items to publish", "20")
+  .option("--pages <n>", "Number of source pages to fetch", "2")
+  .option("--page-size <n>", "Hint for source page size", "10")
+  .option("--interval-minutes <n>", "Minutes between publishes", "10")
+  .option("--dry-run", "Produce the plan but do not publish")
+  .option("--allow-publish", "Permit live publishing. Requires pair.mode=live-approved.")
+  .option("--json", "Emit a single JSON object on stdout when finished.")
+  .action(
+    async (
+      id: string,
+      opts: {
+        max?: string;
+        pages?: string;
+        pageSize?: string;
+        intervalMinutes?: string;
+        dryRun?: boolean;
+        allowPublish?: boolean;
+        json?: boolean;
+      }
+    ) => {
+      const pairRecord = requirePair(id);
+      const sourceAdapter = SOURCE_ADAPTERS.get(pairRecord.source.type);
+      const destinationAdapter = DESTINATION_ADAPTERS.get(
+        pairRecord.destination.type
+      );
+      if (!sourceAdapter) {
+        console.error(`No source adapter registered for ${pairRecord.source.type}`);
+        process.exit(1);
+      }
+      if (!destinationAdapter) {
+        console.error(
+          `No destination adapter registered for ${pairRecord.destination.type}`
+        );
+        process.exit(1);
+      }
+
+      const allowPublish = Boolean(opts.allowPublish);
+      const dryRun = Boolean(opts.dryRun) || !allowPublish;
+
+      if (allowPublish && pairRecord.mode !== "live-approved") {
+        console.error(
+          `Refusing to backfill with --allow-publish: pair.mode is "${pairRecord.mode}", expected "live-approved".`
+        );
+        console.error(
+          `Run: ${APP_NAME} pair edit ${pairRecord.id} --mode live-approved`
+        );
+        process.exit(1);
+      }
+
+      const result = await runBackfill(
+        pairRecord,
+        sourceAdapter,
+        destinationAdapter,
+        {
+          max: parsePositiveInteger(opts.max, "max"),
+          pages: parsePositiveInteger(opts.pages, "pages"),
+          pageSize: parsePositiveInteger(opts.pageSize, "page-size"),
+          intervalMinutes:
+            parsePositiveInteger(opts.intervalMinutes, "interval-minutes") ?? 10,
+          dryRun,
+          allowPublish,
+        }
+      );
+
+      if (opts.json) {
+        process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      } else {
+        console.log("");
+        console.log(`Pair: ${result.pairId}`);
+        console.log(`Started:  ${result.startedAt}`);
+        console.log(`Finished: ${result.finishedAt}`);
+        console.log(`Duration: ${result.durationMs}ms`);
+        console.log(
+          `Totals: considered=${result.totals.considered} published=${result.totals.published} skippedLocal=${result.totals.skippedLocal} skippedDestination=${result.totals.skippedDestination} skippedAlreadyInRun=${result.totals.skippedAlreadyInRun} failed=${result.totals.failed} dryRunSkipped=${result.totals.dryRunSkipped}`
+        );
+        if (result.dryRun) {
+          console.log("Mode: DRY RUN — no items were published.");
+        } else if (!result.allowPublish) {
+          console.log("Mode: plan-only — pass --allow-publish to actually publish.");
+        }
+      }
+
+      if (result.totals.failed > 0) {
+        process.exit(2);
+      }
+    }
+  );
+
+pair
   .command("scheduled-run")
   .description(
     "Deterministic scheduled-tick runner. Host scheduler (OpenClaw cron / launchd / cron) should invoke this. " +
@@ -678,6 +781,109 @@ pair
     });
     console.log(`Updated pair ${next.id}`);
     printPair(next);
+  });
+
+const notify = program
+  .command("notify")
+  .description(
+    "Manage the Telegram-on-publish notifier. Every successful publish from this CLI " +
+      "fires a Telegram message via this configured channel — silent publishes are a project bug."
+  );
+
+notify
+  .command("configure")
+  .description(
+    "Save bot token + chat id to ~/.repost-with-agent/notify.json (perms 0600). " +
+      "Pass --test to send a verification message immediately."
+  )
+  .requiredOption("--bot-token <token>", "Telegram bot token")
+  .requiredOption("--chat-id <id>", "Telegram chat id (DM, group, or channel)")
+  .option("--test", "Send a verification 'wired up' message immediately")
+  .option("--disable", "Set telegram.enabled=false (keeps token saved but mutes notifies)")
+  .action(
+    async (opts: {
+      botToken: string;
+      chatId: string;
+      test?: boolean;
+      disable?: boolean;
+    }) => {
+      const enabled = !opts.disable;
+      const written = writeNotifyConfig({
+        enabled,
+        botToken: opts.botToken,
+        chatId: opts.chatId,
+      });
+      console.log(`Wrote ${written.path} (mode 0600).`);
+      console.log(`Telegram notify ${enabled ? "ENABLED" : "DISABLED"}.`);
+      if (opts.test) {
+        const config = loadNotifyConfig();
+        if (config.source === "none" || !config.telegram) {
+          console.error("Test send skipped: notify is disabled in saved config.");
+          process.exit(1);
+        }
+        const text =
+          "✅ <b>[Repost-with-agent]</b> Telegram notify wired up.\n" +
+          "Future successful publishes from this CLI will Telegram-confirm here.";
+        try {
+          await sendTelegramMessage(config.telegram, text);
+          console.log("Test message delivered.");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error(`Test message failed: ${message}`);
+          process.exit(2);
+        }
+      }
+    }
+  );
+
+notify
+  .command("status")
+  .description("Show current notify config source (file / env / none) + masked token.")
+  .action(() => {
+    const config = loadNotifyConfig();
+    const path = getNotifyConfigPath();
+    console.log(`Config file: ${path}`);
+    console.log(`Resolved source: ${config.source}`);
+    if (config.telegram) {
+      const t = config.telegram.botToken;
+      const masked = t.length > 8 ? `${t.slice(0, 4)}…${t.slice(-4)}` : "(short)";
+      console.log(`telegram.enabled: ${config.telegram.enabled}`);
+      console.log(`telegram.botToken: ${masked}`);
+      console.log(`telegram.chatId: ${config.telegram.chatId}`);
+    } else {
+      console.log("(unconfigured — every successful publish will warn)");
+    }
+  });
+
+notify
+  .command("test")
+  .description("Send a one-off test notify using the currently resolved config.")
+  .option("--pair-id <id>", "Pair id to embed in the test body", "test-pair")
+  .action(async (opts: { pairId?: string }) => {
+    const config = loadNotifyConfig();
+    if (config.source === "none" || !config.telegram) {
+      console.error(
+        "Notify is unconfigured. Run `repost-with-agent notify configure --bot-token <T> --chat-id <C>` first."
+      );
+      process.exit(1);
+    }
+    const text = buildPublishMessage({
+      pairId: opts.pairId || "test-pair",
+      pairName: "Test pair",
+      sourceUrl: "https://example.com/source",
+      destinationUrl: "https://example.com/destination",
+      destinationType: "test",
+      content: "This is a test notify from `repost-with-agent notify test`.",
+      trigger: "manual-test",
+    });
+    try {
+      await sendTelegramMessage(config.telegram, text);
+      console.log("Test notify delivered.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`Test notify failed: ${message}`);
+      process.exit(2);
+    }
   });
 
 const migrate = program.command("migrate").description("Migration helpers");

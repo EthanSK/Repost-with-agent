@@ -126,6 +126,159 @@ Each tick writes `pair.scheduled.start` and `pair.scheduled.end` audit events wi
 
 Scheduled ticks default to preview-only. `--allow-publish` is opt-in and requires `pair.mode === "live-approved"`. For `pair post --approve` runs, the recommendation is to keep them human-triggered until you have enough audit-log confidence in the dedupe decisions.
 
+## Backfill mode — walk back through history
+
+Per-pair runs (`pair post`, `pair scheduled-run`) only ever consider the latest candidate. To publish a *batch* of historical items the destination is missing, use `pair backfill`:
+
+```bash
+# Plan-only (default, safe to run any time):
+npx repost-with-agent pair backfill linkedin-to-x \
+  --max 20 --pages 2 --interval-minutes 10
+
+# Live publish a batch (requires pair.mode=live-approved):
+npx repost-with-agent pair backfill linkedin-to-x \
+  --max 20 --pages 2 --interval-minutes 10 --allow-publish
+```
+
+Flags:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--max <N>` | `20` | Maximum number of items to publish in this run. |
+| `--pages <P>` | `2` | Number of source pages to fetch. |
+| `--page-size <N>` | `10` | Hint for source page size (LinkedIn adapter scrolls extra times to surface deeper pages). |
+| `--interval-minutes <M>` | `10` | Minutes between successive publishes (eg `--max 20 --interval-minutes 10` ⇒ ~3.5 hours total). |
+| `--allow-publish` | off | Permit live publishing. Requires `pair.mode=live-approved`. Without this flag, the backfill always runs as a plan-only dry-run. |
+| `--dry-run` | implicit | Force plan-only (default when `--allow-publish` is not passed). |
+| `--json` | off | Emit a single JSON object on stdout summarizing the run. |
+
+What backfill does, in order:
+
+1. **Source pagination** — calls `sourceAdapter.fetchPage()` for each page (1..P), de-duplicating items that appear on consecutive pages.
+2. **Oldest-first ordering** — re-sorts the combined item set chronologically forward, so the earliest missing posts go up first.
+3. **Local dedupe** — drops any item whose `sourceItemId` / `canonicalUrl` / `contentHash` already appears in `posted.jsonl`.
+4. **Plan** — caps the remaining items to `--max` and stamps each with a scheduled-at time `--interval-minutes` apart, starting at "now".
+5. **Audit-log the plan** — emits `pair.backfill.plan` with the candidate count + plan totals.
+6. **For each scheduled item:**
+   - Re-check local dedupe (race-safe).
+   - **Destination dedupe** — call `destinationAdapter.findExistingPost(draft, pair)`; if the platform already has an equivalent post, skip + record a `posted.jsonl` entry tagged `importedFrom: "backfill-destination-dedupe"` so future runs short-circuit.
+   - Wait until the scheduled time.
+   - Confirm destination auth health.
+   - Publish, persist to `posted.jsonl`, fire the Telegram notify, and update the resume state.
+7. **Run summary** — emits `pair.backfill.complete` with `{ considered, published, skippedLocal, skippedDestination, skippedAlreadyInRun, failed, dryRunSkipped }`.
+
+### Idempotency / resume
+
+Backfill writes a small `~/.repost-with-agent/pairs/<id>/backfill-state.json` file recording every publish in the current run. If the process is killed mid-run and restarted with the same flags:
+
+- Items already in `posted.jsonl` are filtered out at plan time.
+- Any item ID/URL/contentHash recorded in `backfill-state.json` is skipped with `skip-already-published-in-run`.
+- The state file is removed when the run completes successfully with no failures.
+
+### Audit events
+
+Each backfill emits these structured events into `~/.repost-with-agent/pairs/<id>/audit.jsonl`:
+
+| Event | Emitted at |
+| --- | --- |
+| `pair.backfill.start` | Run start with options snapshot. |
+| `pair.backfill.plan` | After source fetch + local dedupe; carries candidate count. |
+| `pair.backfill.skip.local` | Item filtered by local dedupe (race-time re-check). |
+| `pair.backfill.skip.destination` | Item already on the destination platform. |
+| `pair.backfill.skip.already-in-run` | Item skipped because the resume-state already records it. |
+| `pair.backfill.wait` | Waiting until the next scheduled-at timestamp. |
+| `pair.backfill.publish.start` | Publish call about to begin. |
+| `pair.backfill.publish.end` | Publish call finished (success / failure / auth-failure). |
+| `pair.backfill.complete` | Run finished with totals + dry-run flag. |
+| `pair.backfill.error` | Fatal phase error (eg source fetch threw). |
+
+Tail live ticks with:
+
+```bash
+tail -f ~/.repost-with-agent/pairs/linkedin-to-x/audit.jsonl
+```
+
+Each line of the tail is one JSON event; pipe through `jq -c` for terminal-friendly viewing.
+
+### Live progress to stdout
+
+Backfill also writes a one-line-per-state-transition stream to stdout, designed for `tail -f`-style monitoring. Sample lines:
+
+```text
+[backfill] start pair=linkedin-to-x max=20 pages=2 interval=10m dryRun=false allowPublish=true
+[backfill] fetched 18 item(s) across 2 page(s) (page sizes: 10, 8)
+[backfill] plan: 17 candidate(s) to publish, 1 skipped by local dedupe, posted history has 4 entries
+[backfill]   #1 page=2 scheduledAt=2026-05-02T12:00:00.000Z chars=387 https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/
+[backfill] #1 wait 0s until 2026-05-02T12:00:00.000Z
+[backfill] #1 publish.start https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/ chars=387
+[backfill] #1 publish.end OK https://x.com/i/status/2050000000000000001
+[backfill] #2 wait 600s until 2026-05-02T12:10:00.000Z
+[backfill] #2 skip (destination) https://x.com/i/status/2050000000000000050
+[backfill] complete published=15 skippedLocal=1 skippedDestination=2 skippedAlready=0 failed=0 duration=8400123ms
+```
+
+### Cross-state dedupe (most important new piece)
+
+The destination adapter's `findExistingPost(draft, pair)` does a **fuzzy** match between the *transformed* destination text and the recent destination history. The X adapter:
+
+- Uses the `/2/users/:id/tweets` endpoint (max 100 most recent) via OAuth 2.0.
+- Strips the trailing source URL on both sides before comparing (X collapses URLs to t.co aliases that would never match the LinkedIn URL exactly).
+- Normalizes by collapsing whitespace, lowercasing, stripping trailing punctuation/`/` on URLs.
+- Matches on exact-normalized OR ≥80-character prefix overlap (catches edits that trimmed/extended the post by a few characters).
+- Returns `{ exists: false }` (not "skip") on lookup failure, so a transient X API error never blocks a legitimate publish — but the failure is recorded in the audit log.
+
+Adapters that don't implement `findExistingPost` (e.g. future Substack adapter without a `/posts` endpoint) gracefully fall back to local-only dedupe; the `pair.backfill.plan` event records `destinationLookupSupported: false` so you can audit what protection level a given run had.
+
+### Plan output (sample)
+
+```json
+{
+  "pairId": "linkedin-to-x",
+  "pairName": "Legacy LinkedIn to X",
+  "generatedAt": "2026-05-02T12:00:00.000Z",
+  "options": { "max": 20, "pages": 2, "pageSize": 10, "intervalMinutes": 10, "allowPublish": false },
+  "totalConsidered": 18,
+  "skippedLocal": 1,
+  "postedHistoryCount": 4,
+  "destinationLookupSupported": true,
+  "candidates": [
+    {
+      "index": 0,
+      "sourceItemId": "https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/",
+      "canonicalUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/",
+      "page": 2,
+      "draftChars": 387,
+      "draftPreview": "Long-form post about my latest experiment with agent-driven reposting...",
+      "scheduledAt": "2026-05-02T12:00:00.000Z",
+      "decisionAtPlan": "publish"
+    },
+    /* ... 16 more ... */
+  ]
+}
+```
+
+### Sample `pair.backfill.publish.end` audit event
+
+```jsonc
+{
+  "at": "2026-05-02T12:00:08.342Z",
+  "pairId": "linkedin-to-x",
+  "event": "pair.backfill.publish.end",
+  "details": {
+    "index": 0,
+    "sourceItemId": "https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/",
+    "canonicalUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7400000000000000001/",
+    "decision": "published",
+    "destinationUrl": "https://x.com/i/status/2050000000000000001",
+    "destinationId": "2050000000000000001",
+    "scheduledAt": "2026-05-02T12:00:00.000Z",
+    "startedAt": "2026-05-02T12:00:00.041Z",
+    "finishedAt": "2026-05-02T12:00:08.342Z",
+    "durationMs": 8301
+  }
+}
+```
+
 ## Cross-machine (agent-bridge)
 
 A Claude / OpenClaw session on machine A can drive Repost-with-agent on machine B over agent-bridge:

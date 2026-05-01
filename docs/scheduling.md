@@ -172,6 +172,10 @@ openclaw cron rm <job-id>
 
 The scheduled message tells the agent to call `repost-with-agent pair scheduled-run <id>` directly (no improvisation). The agent reads the JSON stdout, summarises the outcome to `--announce`, and reports any blockers.
 
+## Backfill mode (cross-link)
+
+Per-tick `scheduled-run` only ever considers the *latest* candidate for a pair (`maxItemsPerRun: 1` by default). To walk back through history and publish anything that's missing, use `pair backfill` instead — see [WORKFLOW.md → Backfill](WORKFLOW.md#backfill-mode-walk-back-through-history). Backfill performs cross-state dedupe (local `posted.jsonl` AND destination lookup), paginates the source, and stages publishes at a configurable interval. It is a one-shot foreground process, not a scheduled tick.
+
 ## Why a deterministic CLI command instead of natural-language scheduled prompts?
 
 Natural-language scheduled prompts ("preview the linkedin-to-x pair, then..." ) work but they're non-deterministic, hard to audit, and easy to drift. Wiring `scheduled-run` as the host scheduler's invocation:

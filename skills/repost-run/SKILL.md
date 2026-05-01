@@ -27,6 +27,24 @@ Use this skill when the user wants to inspect, preview, review, or live-publish 
 - The orchestrator re-runs preview, re-checks dedupe at post time (race-safe), and refuses if the top candidate is `uncertain` unless `--allow-uncertain` is also passed.
 - Never invoke `--approve` on the user's behalf without an explicit, current-conversation green light.
 
+## Telegram-confirm every successful publish — non-negotiable
+
+> Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path (direct API call, scripted action, etc.) you MUST also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+
+Pre-flight before any live run:
+
+```bash
+repost-with-agent notify status     # MUST report `source: file` or `env`, NEVER `none`
+```
+
+If `none`, run `repost-with-agent notify configure --bot-token <T> --chat-id <C> --test` and verify the test message lands before flipping any pair to live.
+
+Audit events to grep for after a publish:
+
+- `pair.publish.success` + `notify.publish.success` → ideal: post landed, ping delivered.
+- `pair.publish.success` + `notify.publish.failure` + `pair.publish.notify_failed` → post landed, but Ethan didn't get the ping. Tell him directly via Telegram and investigate the notify error.
+- `pair.publish.success` + `pair.publish.notify_skipped_unconfigured` → silent publish. Treat as an alert, fix immediately.
+
 ## Scheduled runs
 
 - The host scheduler (OpenClaw cron / launchd / system cron) should invoke `repost-with-agent pair scheduled-run <id>`, not improvise from a natural-language prompt.

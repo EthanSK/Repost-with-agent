@@ -8,6 +8,16 @@ The first concrete adapter pair is LinkedIn source → X destination.
 
 ---
 
+> **Important — Telegram-confirm every successful publish — non-negotiable.** Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path (direct API call, scripted action, etc.) you MUST also fire a Telegram confirmation. Silent publishes are a bug. Wire it up once, before the first live publish:
+>
+> ```bash
+> repost-with-agent notify configure --bot-token <TELEGRAM_BOT_TOKEN> --chat-id <CHAT_ID> --test
+> ```
+>
+> (Ethan voice 5977 + 5978, 2026-05-01.)
+
+---
+
 ## Agent setup guide
 
 > **For an AI agent (Claude Code / OpenClaw) provisioning this for a new user.** Read this section top-to-bottom and execute. Stop and ask the user only on the explicit checkpoints.
@@ -107,9 +117,38 @@ npx repost-with-agent pair post <pair-id> --approve
 
 Mode must be `approval-required` or `live-approved`. The command re-runs preview, re-checks dedupe at post-time (race-safe), and refuses if the top candidate is `uncertain` unless you also pass `--allow-uncertain`. On success it appends to `posted.jsonl` with `sourceItemId`, `canonicalUrl`, `contentHash`, `destinationId`, `postedAt`, `summary`.
 
-### 9. Telegram notifications (optional, host-driven)
+### 9. Telegram-on-publish notifier (mandatory before first live run)
 
-Repost-with-agent itself does not send Telegram. If you're running it under OpenClaw or Claude Code with the Telegram channel plugin, schedule the cron with `--announce` and the host will deliver each run's stdout to the user's Telegram chat. See "Scheduling".
+**Telegram-confirm every successful publish — non-negotiable.** Wire this up once per machine before flipping any pair to live. The CLI fires a Telegram message immediately after every confirmed publish (manual `pair post --approve`, `pair scheduled-run --allow-publish`, `pair backfill --allow-publish`). Silent publishes are a project bug.
+
+```bash
+repost-with-agent notify configure \
+  --bot-token <TELEGRAM_BOT_TOKEN> \
+  --chat-id <CHAT_ID> \
+  --test
+```
+
+`--test` sends a one-off "wired up" message so you can confirm delivery before relying on it.
+
+Config sources (priority order):
+
+1. `~/.repost-with-agent/notify.json` (written with mode `0600` because the bot token is sensitive).
+2. Env vars `REPOST_TELEGRAM_BOT_TOKEN` + `REPOST_TELEGRAM_CHAT_ID` (fallback for CI / cron environments).
+
+If neither is set, every successful publish prints a loud `WARN` to stderr **and** writes a `pair.publish.notify_skipped_unconfigured` audit event so the omission is impossible to miss.
+
+Audit events emitted alongside the existing `pair.publish.success`:
+
+- `notify.publish.success` — Telegram delivered.
+- `notify.publish.failure` + `pair.publish.notify_failed` — Telegram HTTP / network error. Publish itself stays successful; this is non-fatal but means Ethan didn't get the ping.
+- `pair.publish.notify_skipped_unconfigured` — no notify config found.
+
+Inspect / re-test:
+
+```bash
+repost-with-agent notify status        # masked token + resolved source
+repost-with-agent notify test          # send a one-off test notify
+```
 
 ### 10. Sanity checklist before handing back to the user
 
@@ -117,6 +156,7 @@ Repost-with-agent itself does not send Telegram. If you're running it under Open
 - [ ] `npx repost-with-agent pair preview <id>` succeeds without auth errors.
 - [ ] `~/.repost-with-agent/pairs/<id>/posted.jsonl` exists (or is empty if first run).
 - [ ] `audit.jsonl` has a `pair.created` and `pair.preview` entry.
+- [ ] **`repost-with-agent notify status` reports `source: file` (or `env`), not `none`. Required before any live publish — see §9.**
 - [ ] Cron / launchd / OpenClaw schedule (if requested) is registered with `max_items_per_run: 1` and `approval: manual` unless the user explicitly asked for live.
 
 ---
@@ -185,6 +225,7 @@ Public repo files stay in the repo. Runtime state stays outside it:
 ~/.repost-with-agent/
   pairs.json
   x-tokens.json
+  notify.json                 # Telegram-on-publish config (mode 0600)
   pairs/<pair-id>/
     audit.jsonl
     drafts.jsonl
@@ -225,6 +266,14 @@ npx repost-with-agent pair show <id>
 npx repost-with-agent pair preview <id>
 npx repost-with-agent pair history <id>
 npx repost-with-agent pair post <id> --approve [--allow-uncertain]
+npx repost-with-agent pair backfill <id> --max 20 --pages 2 --interval-minutes 10
+                                           # plan-only by default; pass
+                                           # --allow-publish to live-publish a
+                                           # backfill batch (requires
+                                           # mode=live-approved). Cross-state
+                                           # dedupe against both posted.jsonl
+                                           # AND destination history. See
+                                           # docs/WORKFLOW.md "Backfill mode".
 ```
 
 ## X auth
@@ -236,6 +285,16 @@ npx repost-with-agent auth
 ```
 
 Tokens stored in `~/.repost-with-agent/x-tokens.json`. If new tokens are absent, the tool also checks the legacy location `~/.linkedin-to-x/x-tokens.json`.
+
+## Notify commands
+
+```bash
+npx repost-with-agent notify configure --bot-token <T> --chat-id <C> [--test] [--disable]
+npx repost-with-agent notify status
+npx repost-with-agent notify test [--pair-id <id>]
+```
+
+**Telegram-confirm every successful publish — non-negotiable.** See §9 of the Agent setup guide for the full contract.
 
 ## Migration from `linkedin-to-x`
 

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "repost-with-agent",
   "name": "Repost-with-agent",
-  "description": "Preview-first agent reposting with saved pairs, queue workspaces, and persistent history.",
+  "description": "Preview-first agent reposting with saved pairs, queue workspaces, and persistent history. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm to Ethan with source + destination URL via `notify configure`. Silent publishes are a bug. See CLAUDE.md / AGENTS.md / README §9.",
   "runtime": {
     "type": "node",
     "entry": "dist/index.js"
