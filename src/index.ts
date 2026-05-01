@@ -10,7 +10,7 @@ import {
   loadPostedHistory,
 } from "./core/runtime.js";
 import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.js";
-import { previewPair } from "./core/orchestrator.js";
+import { previewPair, publishNextForPair } from "./core/orchestrator.js";
 import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
 import {
   appendAuditEvent,
@@ -199,6 +199,59 @@ async function previewPairCommand(pairId: string): Promise<void> {
   });
 }
 
+async function postPairCommand(
+  pairId: string,
+  opts: { approve: boolean; allowUncertain: boolean }
+): Promise<void> {
+  const pair = requirePair(pairId);
+  const sourceAdapter = SOURCE_ADAPTERS.get(pair.source.type);
+  const destinationAdapter = DESTINATION_ADAPTERS.get(pair.destination.type);
+
+  if (!sourceAdapter) {
+    console.error(`No source adapter registered for ${pair.source.type}`);
+    process.exit(1);
+  }
+  if (!destinationAdapter) {
+    console.error(`No destination adapter registered for ${pair.destination.type}`);
+    process.exit(1);
+  }
+
+  const outcome = await publishNextForPair(pair, sourceAdapter, destinationAdapter, {
+    approve: opts.approve,
+    allowUncertain: opts.allowUncertain,
+  });
+
+  console.log(`Pair: ${pair.id} (${pair.name})`);
+  console.log(`Mode: ${pair.mode}`);
+  console.log(`Outcome: ${outcome.status}`);
+  if (outcome.reason) {
+    console.log(`Reason: ${outcome.reason}`);
+  }
+  if (outcome.preview) {
+    if (outcome.preview.item.canonicalUrl) {
+      console.log(`Source: ${outcome.preview.item.canonicalUrl}`);
+    }
+    console.log(`Draft (${outcome.preview.draft.text.length} chars):`);
+    console.log(outcome.preview.draft.text);
+    if (outcome.preview.draft.warnings.length > 0) {
+      console.log(`Warnings: ${outcome.preview.draft.warnings.join(" | ")}`);
+    }
+  }
+  if (outcome.publishResult?.destinationUrl) {
+    console.log(`Posted: ${outcome.publishResult.destinationUrl}`);
+  }
+  if (outcome.publishResult?.destinationId) {
+    console.log(`Destination ID: ${outcome.publishResult.destinationId}`);
+  }
+
+  if (
+    outcome.status === "publish-failed" ||
+    outcome.status === "auth-failed"
+  ) {
+    process.exit(2);
+  }
+}
+
 function printHistory(pairId: string): void {
   const pair = requirePair(pairId);
   const paths = getPairPaths(pair.id);
@@ -384,6 +437,24 @@ pair
   .description("Show per-pair audit and posted history")
   .argument("<id>", "Pair id")
   .action(printHistory);
+
+pair
+  .command("post")
+  .description(
+    "Publish the next eligible candidate for a pair. Approval-gated; previews + dedupes first."
+  )
+  .argument("<id>", "Pair id")
+  .option("--approve", "Required: explicit approval to actually publish.")
+  .option(
+    "--allow-uncertain",
+    "Allow publishing even when dedupe returns 'uncertain' (summary-only match)."
+  )
+  .action(async (id, opts) => {
+    await postPairCommand(id, {
+      approve: Boolean(opts.approve),
+      allowUncertain: Boolean(opts.allowUncertain),
+    });
+  });
 
 const migrate = program.command("migrate").description("Migration helpers");
 

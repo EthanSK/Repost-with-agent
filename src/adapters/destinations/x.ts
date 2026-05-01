@@ -1,7 +1,10 @@
-import { loadOAuth2Tokens } from "../../config.js";
+import { loadOAuth2Tokens, loadXCredentials } from "../../config.js";
 import { DraftPost, PairRecord, SourceItem } from "../../core/types.js";
-import { DestinationAdapter } from "../destination.js";
-import { formatForX } from "../../x-client.js";
+import { DestinationAdapter, PublishResult } from "../destination.js";
+import { formatForX, postTweet } from "../../x-client.js";
+
+const X_PREMIUM_LIMIT = parseInt(process.env.X_CHAR_LIMIT || "25000", 10);
+const X_CLASSIC_LIMIT = 280;
 
 export const xDestinationAdapter: DestinationAdapter = {
   type: "x-account",
@@ -35,8 +38,14 @@ export const xDestinationAdapter: DestinationAdapter = {
     if (!item.canonicalUrl) {
       warnings.push("Source item has no canonical URL; dedupe relies on source ID/content hash.");
     }
-    if (text.length > 280) {
-      warnings.push("Draft exceeds classic X length; x-client thread mode would be needed for live posting.");
+    if (text.length > X_PREMIUM_LIMIT) {
+      warnings.push(
+        `Draft (${text.length} chars) exceeds X Premium limit (${X_PREMIUM_LIMIT}); x-client will post as a thread.`
+      );
+    } else if (text.length > X_CLASSIC_LIMIT) {
+      warnings.push(
+        `Draft (${text.length} chars) exceeds classic X limit (${X_CLASSIC_LIMIT}); needs X Premium on the destination account or it will be threaded.`
+      );
     }
     return {
       destinationType: "x-account",
@@ -44,7 +53,20 @@ export const xDestinationAdapter: DestinationAdapter = {
       warnings,
       metadata: {
         formatter: "formatForX",
+        chars: text.length,
       },
     };
+  },
+  async publish(_item: SourceItem, draft: DraftPost, _pair: PairRecord): Promise<PublishResult> {
+    const creds = loadXCredentials();
+    const result = await postTweet(creds, draft.text);
+    if (result.success && result.tweetId) {
+      return {
+        success: true,
+        destinationId: result.tweetId,
+        destinationUrl: `https://x.com/i/status/${result.tweetId}`,
+      };
+    }
+    return { success: false, error: result.error || "Unknown publish error" };
   },
 };
