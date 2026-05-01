@@ -177,6 +177,42 @@ Recommended flow:
 
 Do not schedule blind public posting by default.
 
+### OpenClaw cron example
+
+For OpenClaw, prefer an isolated scheduled job so the repost run gets a fresh task context and can announce the result back to you:
+
+```bash
+openclaw cron add \
+  --name "Repost-with-agent preview" \
+  --cron "0 10 * * 1-5" \
+  --tz "Europe/London" \
+  --session isolated \
+  --message "Use the repost-with-agent skill. In ~/Projects/Repost-with-agent, inspect the saved pair/workspace state, run preview/history only, respect manual approval, max 1 item, and report candidates/blockers. Do not publish publicly unless the saved policy and current instruction explicitly authorize live posting." \
+  --announce
+```
+
+For a queue workspace, make the workspace path explicit in the scheduled message:
+
+```bash
+openclaw cron add \
+  --name "Repost workspace preview" \
+  --cron "0 10 * * *" \
+  --tz "Europe/London" \
+  --session isolated \
+  --message "Use the repost-with-agent skill with ~/repost_with_agent_workspace. Read user-setup.json, queue.jsonl, state.json, and logs; process at most 1 eligible item; stop at draft/preview when publish_mode or approval is manual; update state/logs; announce the result." \
+  --announce
+```
+
+Check or adjust jobs with:
+
+```bash
+openclaw cron list
+openclaw cron show <job-id>
+openclaw cron runs --id <job-id>
+```
+
+Keep `run_policy.approval` as `manual` unless you deliberately want a live-approved schedule.
+
 ## Agent-operated setup
 
 This repo now ships lightweight OpenClaw and Claude Code integration files so an agent can operate the reposting workflow without inventing its own scraping/posting logic:

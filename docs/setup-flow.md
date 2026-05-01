@@ -46,6 +46,41 @@ Agent then:
 
 New pairs default to `preview-only`. Queue workspaces default to `publish_mode: manual` and `run_policy.approval: manual`.
 
+## OpenClaw cron setup
+
+When a user wants recurring OpenClaw runs, schedule an isolated cron job that invokes this skill and names the repo, pair, or queue workspace explicitly.
+
+For saved pairs, the scheduled prompt should say to:
+
+1. use the `repost-with-agent` skill;
+2. work from the repo or installed plugin location;
+3. load `~/.repost-with-agent/pairs.json` plus the pair history/learnings;
+4. run preview/history only unless live posting is explicitly authorized;
+5. enforce `max_items_per_run: 1` by default;
+6. announce candidates, blockers, or a clean no-op.
+
+For queue workspaces, the scheduled prompt should say to:
+
+1. read `user-setup.json`, `queue.jsonl`, `state.json`, and `logs/`;
+2. select the next eligible item not completed, skipped, blocked, or locked;
+3. stop at draft/preview if `publish_mode` or `run_policy.approval` is manual;
+4. update `state.json` and append a concise log entry after each meaningful outcome;
+5. capture proof URL/screenshot only when useful and privacy-safe.
+
+Example OpenClaw CLI command:
+
+```bash
+openclaw cron add \
+  --name "Repost workspace preview" \
+  --cron "0 10 * * *" \
+  --tz "Europe/London" \
+  --session isolated \
+  --message "Use the repost-with-agent skill with ~/repost_with_agent_workspace. Read user-setup.json, queue.jsonl, state.json, and logs; process at most 1 eligible item; stop at draft/preview when publish_mode or approval is manual; update state/logs; announce the result." \
+  --announce
+```
+
+Keep the schedule in `user-setup.json.run_policy.schedule` too, so humans and future agents can see the intended cadence even if the host cron job is edited separately.
+
 ## Example successful setup
 
 ```text

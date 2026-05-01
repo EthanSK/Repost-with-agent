@@ -1,6 +1,6 @@
 # PLAN.md — Repost-with-agent
 
-_Last updated: 2026-04-30 02:05 BST_
+_Last updated: 2026-05-01 18:48 BST_
 
 ## Correct interpretation
 
@@ -9,14 +9,14 @@ Repost-with-agent is a portable agent-driven social/source-site → social/desti
 - First concrete adapter: LinkedIn profile/activity → X account.
 - Future shape: any supported source site/account/feed → any supported destination site/account/channel.
 - The project was formerly the local `linkedin-to-x` repo; the local folder is now `~/Projects/Repost-with-agent`.
-- The GitHub remote still points at `https://github.com/EthanSK/linkedin-to-x.git` until the public repo rename step.
+- The GitHub remote now points at `https://github.com/EthanSK/Repost-with-agent.git` after the public repo rename.
 
 ## User requirements captured
 
 - [x] Do not call the app/repo LinkedIn-to-X anymore.
 - [x] Rename local repo folder to `Repost-with-agent` without making a duplicate copy.
 - [x] Rename package/app/CLI from `linkedin-to-x` to `repost-with-agent`.
-- [ ] Rename public GitHub repo from `linkedin-to-x` to `Repost-with-agent` after local rewrite is ready.
+- [x] Rename public GitHub repo from `linkedin-to-x` to `Repost-with-agent` after local rewrite is ready.
 - [x] Keep LinkedIn → X as the first concrete adapter/example.
 - [x] Make it generic: source social/site → destination social/site pairs.
 - [x] Make it usable through an agent conversation, not just hand-edited `.env`.
@@ -226,16 +226,16 @@ Pair fields:
 - [x] Add OpenClaw skill instructions for pair setup/run.
 - [x] Add OpenClaw-facing setup/run instructions for the reposting workflow.
 - [x] Add Claude Code-facing setup/run commands for the reposting workflow.
-- [ ] Document OpenClaw cron setup.
+- [x] Document OpenClaw cron setup.
 - [x] Document Claude Code usage.
 
 ### Phase 5 — verify + publish
-- [ ] Run typecheck/build.
-- [ ] Review local diff for secrets.
-- [ ] Commit changes.
-- [ ] Rename GitHub repo to `Repost-with-agent`.
-- [ ] Push.
-- [ ] Update remote URL if GitHub rename changes it.
+- [x] Run typecheck/build.
+- [x] Review local diff for secrets.
+- [x] Commit changes.
+- [x] Rename GitHub repo to `Repost-with-agent`.
+- [x] Push.
+- [x] Update remote URL if GitHub rename changes it.
 
 ## Open questions
 
