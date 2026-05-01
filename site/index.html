@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Repost-with-agent &mdash; Preview-first agent reposting</title>
+    <meta
+      name="description"
+      content="Preview-first reposting for AI agents. Saved source-to-destination pairs, content-hash dedupe, persistent audit logs. The agent drives a logged-in browser; the repo enforces the rules."
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://ethansk.github.io/Repost-with-agent/" />
+    <meta name="theme-color" content="#f4ecd8" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+
+    <meta property="og:site_name" content="Repost-with-agent" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ethansk.github.io/Repost-with-agent/" />
+    <meta property="og:title" content="Repost-with-agent &mdash; Preview-first agent reposting" />
+    <meta property="og:description" content="Saved pairs, content-hash dedupe, audit logs, approval-gated publish. The agent drives a logged-in browser; the repo enforces the rules." />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Repost-with-agent &mdash; Preview-first agent reposting" />
+    <meta name="twitter:description" content="Saved pairs, content-hash dedupe, audit logs, approval-gated publish." />
+
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="content">
+
+      <nav class="wrap" aria-label="Primary">
+        <a class="logo" href="./" aria-label="Repost-with-agent home">
+          <span class="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 32 32" fill="none">
+              <rect x="3" y="6" width="14" height="18" rx="1" fill="#2f5d3a" stroke="#1c3a24" stroke-width="1"/>
+              <rect x="15" y="10" width="14" height="18" rx="1" fill="#c46a2c" stroke="#7a3d12" stroke-width="1"/>
+              <path d="M11 14 H22" stroke="#f4ecd8" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M11 18 H22" stroke="#f4ecd8" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="logo-copy">
+            <span class="logo-title">
+              Repost-with-agent
+            </span>
+            <span class="logo-sub">preview &middot; dedupe &middot; approve</span>
+          </span>
+        </a>
+        <div class="nav-right">
+          <a class="nav-link" href="#how">how</a>
+          <a class="nav-link" href="#install">install</a>
+          <a class="nav-link" href="#agent-setup">agent setup</a>
+          <a class="nav-link" href="https://github.com/EthanSK/Repost-with-agent" target="_blank" rel="noopener">github</a>
+        </div>
+      </nav>
+
+      <header class="hero wrap">
+        <div class="hero-meta">
+          <span class="stamp">DRAFT &middot; UNPUBLISHED</span>
+          <span class="ver">v2.2.0</span>
+          <span>Claude Code &middot; OpenClaw</span>
+        </div>
+
+        <h1 class="hero-title">
+          <span class="line">Reposting,</span>
+          <span class="line">but the agent <span class="accent">previews</span></span>
+          <span class="line">before it <span class="accent-warm">publishes.</span></span>
+        </h1>
+
+        <p class="hero-lede">
+          <strong>Repost-with-agent</strong> is a preview-first reposting workflow for AI agents. Saved <em>source &rarr; destination</em> pairs, content-hash dedupe across runs, persistent audit logs per pair, approval-gated publish. The agent drives a logged-in browser profile you control; this repo supplies the schema, dedupe, and host integrations.
+        </p>
+
+        <div class="hero-actions">
+          <a class="btn btn--primary" href="#install">Install</a>
+          <a class="btn btn--ghost" href="https://github.com/EthanSK/Repost-with-agent" target="_blank" rel="noopener">View on GitHub</a>
+          <a class="btn btn--ghost" href="#agent-setup">Agent setup guide</a>
+        </div>
+
+        <dl class="hero-stats" aria-label="Project stats">
+          <div class="hero-stat">
+            <span class="k">Default mode</span>
+            <span class="v"><span class="mark">preview-only</span></span>
+          </div>
+          <div class="hero-stat">
+            <span class="k">Dedupe</span>
+            <span class="v"><span class="mark">id + url + hash</span></span>
+          </div>
+          <div class="hero-stat">
+            <span class="k">First adapter</span>
+            <span class="v"><span class="mark">LinkedIn &rarr; X</span></span>
+          </div>
+          <div class="hero-stat">
+            <span class="k">License</span>
+            <span class="v"><span class="mark">MIT</span></span>
+          </div>
+        </dl>
+      </header>
+
+      <section class="how wrap" id="how">
+        <div class="kicker"><span class="num">01 /</span> How it works</div>
+        <h2 class="section-title">Three files do the work.</h2>
+
+        <div class="card-grid">
+          <div class="card" data-tag="01">
+            <h3>pairs.json</h3>
+            <p>One JSON record per saved <em>source &rarr; destination</em> pair. Mode (preview-only / approval-required / live-approved), policy, schedule, dedupe strategy. Edit via <code>pair create</code> / <code>pair show</code>.</p>
+          </div>
+          <div class="card" data-tag="02">
+            <h3>posted.jsonl</h3>
+            <p>Append-only history of every published item. Each line records <code>sourceItemId</code>, <code>canonicalUrl</code>, <code>contentHash</code>, <code>destinationId</code>. The dedupe layer reads this on every preview and re-checks at publish time.</p>
+          </div>
+          <div class="card" data-tag="03">
+            <h3>audit.jsonl</h3>
+            <p>Append-only log of every <code>pair.preview</code>, <code>pair.publish.*</code>, and pair lifecycle event. Useful when something looks wrong &mdash; the run history is right there in plain JSONL.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="install wrap" id="install">
+        <div class="kicker"><span class="num">02 /</span> Install</div>
+        <h2 class="section-title">Clone, build, preview.</h2>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="terminal-title">~/Projects</span>
+          </div>
+          <div class="terminal-body">
+<pre><span class="t-comment"># 1. Get it</span>
+git clone https://github.com/EthanSK/Repost-with-agent.git
+cd Repost-with-agent
+./scripts/install-for-openclaw.sh
+
+<span class="t-comment"># 2. Save your first pair (preview-only by default)</span>
+npx repost-with-agent pair create \
+  --source-type linkedin-profile-activity \
+  --source-url "https://www.linkedin.com/in/&lt;you&gt;/recent-activity/all/" \
+  --destination-type x-account \
+  --destination-account "@&lt;you&gt;"
+
+<span class="t-comment"># 3. Preview before posting anything</span>
+npx repost-with-agent pair preview linkedin-to-x
+
+<span class="t-comment"># 4. Publish only with explicit approval</span>
+npx repost-with-agent pair post linkedin-to-x --approve</pre>
+          </div>
+        </div>
+
+        <p class="caption">
+          The persistent browser profile must already be logged into both source and destination. The agent will <strong>not</strong> handle 2FA / CAPTCHA &mdash; it stops and asks.
+        </p>
+      </section>
+
+      <section class="agent wrap" id="agent-setup">
+        <div class="kicker"><span class="num">03 /</span> Agent setup</div>
+        <h2 class="section-title">One block. <span class="accent">Pasted into Claude.</span></h2>
+        <p class="section-sub">
+          Hand this to a Claude Code or OpenClaw session and it will provision the project end-to-end &mdash; install, env vars, persistent profile, pair creation, dedupe baseline, dry-run, approval-gated publish.
+        </p>
+
+        <div class="terminal">
+          <div class="terminal-bar">
+            <span class="dot red"></span>
+            <span class="dot yellow"></span>
+            <span class="dot green"></span>
+            <span class="terminal-title">paste into Claude Code</span>
+          </div>
+          <div class="terminal-body">
+<pre><span class="t-comment">Read the README at https://github.com/EthanSK/Repost-with-agent</span>
+<span class="t-comment">and follow the "Agent setup guide" section top-to-bottom. Install</span>
+<span class="t-comment">the CLI, set up env vars, create the first pair, run a preview,</span>
+<span class="t-comment">and report back. Stop and ask me only on the explicit checkpoints</span>
+<span class="t-comment">(login, approval). Don't publish anything live without my OK.</span></pre>
+          </div>
+        </div>
+
+        <div class="callout">
+          <span class="callout-tag">cross-machine</span>
+          <p>
+            Already paired with <a href="https://github.com/EthanSK/agent-bridge" target="_blank" rel="noopener">agent-bridge</a>? A Claude / OpenClaw session on one machine can drive Repost-with-agent on another via <code>bridge_send_message</code> with a <code>/repost preview &lt;pair-id&gt;</code> message. The handler is read-only by default &mdash; no remote machine can publish on your behalf.
+          </p>
+        </div>
+      </section>
+
+      <section class="safety wrap" id="safety">
+        <div class="kicker"><span class="num">04 /</span> Safety</div>
+        <h2 class="section-title">What this <span class="accent-warm">refuses</span> to do.</h2>
+
+        <ul class="safety-list">
+          <li><span class="x">&#10005;</span> Bypass CAPTCHA, 2FA, or phone / identity checks.</li>
+          <li><span class="x">&#10005;</span> Run anti-detection / stealth browser automation.</li>
+          <li><span class="x">&#10005;</span> Collect passwords in chat or store credentials in the repo.</li>
+          <li><span class="x">&#10005;</span> Publish without an explicit <code>--approve</code> flag from the local operator.</li>
+          <li><span class="x">&#10005;</span> Re-publish an item whose <code>sourceItemId</code>, <code>canonicalUrl</code>, or normalized <code>contentHash</code> is already in <code>posted.jsonl</code>.</li>
+        </ul>
+
+        <p class="caption">
+          Conservative cadence and approval gates are for duplicate / spam protection &mdash; not detection evasion.
+        </p>
+      </section>
+
+      <footer class="footer wrap">
+        <div class="footer-row">
+          <span class="footer-mark">Repost-with-agent</span>
+          <span class="footer-meta">MIT &middot; v2.2.0 &middot; <a href="https://github.com/EthanSK/Repost-with-agent" target="_blank" rel="noopener">github.com/EthanSK/Repost-with-agent</a></span>
+        </div>
+      </footer>
+
+    </div>
+  </body>
+</html>
