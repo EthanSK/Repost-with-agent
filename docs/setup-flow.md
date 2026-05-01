@@ -2,6 +2,18 @@
 
 The setup flow should feel conversational, but the thing being configured is always a user-owned repost workflow: either a saved source→destination pair or a queue workspace with setup/state/log files.
 
+## Non-negotiable rule — Telegram-confirm every successful publish
+
+> Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path (direct API call, scripted action, etc.) you MUST also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+
+**First-time setup MUST include `notify configure`.** Before flipping any pair to a non-`preview-only` mode, run:
+
+```bash
+repost-with-agent notify configure --bot-token <TELEGRAM_BOT_TOKEN> --chat-id <CHAT_ID> --test
+```
+
+`--test` sends a verification message immediately. Verify with `repost-with-agent notify status` (should report `Resolved source: file` or `env`, never `none`).
+
 ## Pair creation script
 
 Agent:
@@ -36,7 +48,8 @@ Agent then:
 6. shows candidate items/drafts;
 7. asks for a pair/workspace name;
 8. captures schedule preference in `run_policy` or the pair schedule;
-9. saves the setup.
+9. **runs `repost-with-agent notify configure --bot-token <T> --chat-id <C> --test` if it's the first install on this machine** so future live publishes Telegram-confirm to Ethan;
+10. saves the setup.
 
 ## Modes
 

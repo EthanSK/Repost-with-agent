@@ -6,6 +6,18 @@ This is the definitive walkthrough of how Repost-with-agent actually runs, from 
 
 Repost-with-agent saves named **pairs** of `(source → destination, policy, schedule)`. The CLI / agent operates the pair through a logged-in browser profile and OAuth tokens you control. Every preview is read-only. Every publish requires `--approve` plus a non-`preview-only` mode plus a clean dedupe re-check.
 
+## Non-negotiable rule — Telegram-confirm every successful publish
+
+> Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path (direct API call, scripted action, etc.) you MUST also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+
+Wire it up once, before the first live run:
+
+```bash
+repost-with-agent notify configure --bot-token <TELEGRAM_BOT_TOKEN> --chat-id <CHAT_ID> --test
+```
+
+Audit events: `notify.publish.success` (good), `notify.publish.failure` + `pair.publish.notify_failed` (post landed, ping didn't), `pair.publish.notify_skipped_unconfigured` (silent publish — fix immediately).
+
 ## One-time setup (per machine, per user)
 
 1. **Clone and install.**
@@ -93,6 +105,7 @@ This imports `~/.linkedin-to-x/posted.md` into the new per-pair `posted.jsonl` s
    - Re-loads `posted.jsonl` right before posting and re-checks dedupe (race-safe).
    - Re-runs destination `test()` and refuses if auth health is not `ok`.
    - Calls destination `publish()`. On success, appends to `posted.jsonl` (`sourceItemId`, `canonicalUrl`, `contentHash`, `destinationId`, `postedAt`, `summary`) and writes `pair.publish.success`.
+   - **Immediately fires the Telegram-on-publish notifier** via `src/core/notify.ts:notifyPublishSuccess()`. Emits `notify.publish.success` on delivery, `notify.publish.failure` + `pair.publish.notify_failed` on failure, or `pair.publish.notify_skipped_unconfigured` if no notify config is wired up. Notify failures never roll back the publish.
    - On failure, writes `pair.publish.failed` and exits 2.
 
 ## Scheduling (host-driven, optional)
