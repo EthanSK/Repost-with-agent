@@ -254,18 +254,41 @@ Behavior:
 
 ## Scheduling
 
-Scheduling is host-driven. Use `user-setup.json.run_policy` for queue workspaces, or pair `schedule` fields for pair workflows, then have OpenClaw / cron / launchd invoke the skill or CLI on that cadence.
+Scheduling is host-driven. Repost-with-agent does not run a daemon — OpenClaw cron / launchd / system cron fires the tick and invokes a deterministic CLI entry point that runs preview-or-publish under the saved policy and emits structured `pair.scheduled.*` audit events.
+
+Per-tick CLI entry point (host scheduler should call this):
+
+```bash
+repost-with-agent pair scheduled-run <pair-id> [--allow-publish] [--json]
+```
+
+Helpers to wire up the host scheduler:
+
+```bash
+repost-with-agent pair schedule <pair-id>            # render launchd plist + crontab line + openclaw cron command
+repost-with-agent pair schedule <pair-id> --apply launchd
+                                                     # write ~/Library/LaunchAgents/com.repost-with-agent.<id>.plist
+repost-with-agent pair unschedule <pair-id>          # remove the launchd plist
+repost-with-agent pair edit <pair-id> --schedule-kind cron --schedule-expression "0 10 * * 1-5" --timezone Europe/London
+                                                     # update the saved schedule fields
+```
+
+See [docs/scheduling.md](docs/scheduling.md) for the outcome taxonomy, audit-log format, cron-to-launchd translation rules, and the full safety matrix.
 
 Recommended flow:
 
 1. create the pair
 2. preview it
 3. inspect history / learnings
-4. schedule preview / approval runs with `max_items_per_run: 1` unless the user deliberately chooses a different policy
+4. `pair edit <id>` to set the schedule fields (`--schedule-kind cron --schedule-expression "..."` etc.)
+5. `pair schedule <id>` and apply to your scheduler of choice
+6. tail `~/.repost-with-agent/pairs/<id>/audit.jsonl` to confirm ticks fire
 
-Do not schedule blind public posting by default.
+Scheduled ticks default to **preview-only**. `--allow-publish` is opt-in AND requires `pair.mode === "live-approved"`. Do not schedule blind public posting by default.
 
 ### OpenClaw cron example
+
+`pair schedule <id>` prints a ready-to-run `openclaw cron add` command. The example below is the equivalent hand-written form:
 
 ```bash
 openclaw cron add \
@@ -273,7 +296,7 @@ openclaw cron add \
   --cron "0 10 * * 1-5" \
   --tz "Europe/London" \
   --session isolated \
-  --message "Use the repost-with-agent skill. In ~/Projects/Repost-with-agent, inspect the saved pair/workspace state, run preview/history only, respect manual approval, max 1 item, and report candidates/blockers. Do not publish publicly unless the saved policy and current instruction explicitly authorize live posting." \
+  --message "Use the repost-with-agent skill. Run \`repost-with-agent pair scheduled-run linkedin-to-x\`. Read its JSON stdout, summarise outcome (preview-only / new-candidate / duplicate / blocked / published), and report any blockers. Do NOT pass --allow-publish unless the saved policy explicitly authorises live posting." \
   --announce
 ```
 
@@ -321,6 +344,8 @@ The receiving agent reads `scripts/agent-bridge-handler.sh` and runs the matchin
 | `show <id>` | `pair show <id>` |
 | `preview <id>` | `pair preview <id>` |
 | `history <id>` | `pair history <id>` |
+| `scheduled-run <id>` | `pair scheduled-run <id> --json` (always preview-only over the bridge — never propagates `--allow-publish` from a remote agent) |
+| `schedule <id>` | `pair schedule <id>` (read-only render of scheduling artifacts) |
 | `status` | env summary + pair count |
 | `safe-publish <id>` | refuses; emits a JSON `needs-approval` stub asking the local operator to run the publish themselves |
 
@@ -363,7 +388,7 @@ Facebook support is treated as legacy / experimental until a cautious destinatio
 - Conservative cadence is for spam / duplicate reduction, not detection evasion.
 - Live posting requires explicit `--approve`; the orchestrator re-checks dedupe at post-time.
 
-See [docs/WORKFLOW.md](docs/WORKFLOW.md) for the full end-to-end walkthrough, plus [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), [docs/migration.md](docs/migration.md).
+See [docs/WORKFLOW.md](docs/WORKFLOW.md) for the full end-to-end walkthrough, [docs/scheduling.md](docs/scheduling.md) for the host-scheduler contract, plus [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), [docs/migration.md](docs/migration.md).
 
 ## Screenshots
 

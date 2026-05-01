@@ -97,19 +97,34 @@ This imports `~/.linkedin-to-x/posted.md` into the new per-pair `posted.jsonl` s
 
 ## Scheduling (host-driven, optional)
 
-Repost-with-agent does not run a scheduler. Use OpenClaw cron, system cron, launchd, or any host that can invoke the CLI on a cadence:
+Repost-with-agent does not run a scheduler. Host schedulers (OpenClaw cron, system cron, launchd, …) fire the tick and call a deterministic CLI entry point:
 
 ```bash
-openclaw cron add \
-  --name "Repost-with-agent preview" \
-  --cron "0 10 * * 1-5" \
-  --tz "Europe/London" \
-  --session isolated \
-  --message "Use the repost-with-agent skill. In ~/Projects/Repost-with-agent, run preview/history only, max 1 item, do not publish without explicit approval." \
-  --announce
+repost-with-agent pair scheduled-run <pair-id> [--allow-publish] [--json]
 ```
 
-For `pair post --approve` runs, the recommendation is to keep them human-triggered until you have enough audit-log confidence in the dedupe decisions.
+Wire up the host scheduler with the helpers in [docs/scheduling.md](scheduling.md). Quick path:
+
+```bash
+# 1. record the desired cadence on the pair
+repost-with-agent pair edit linkedin-to-x \
+  --schedule-kind cron \
+  --schedule-expression "0 10 * * 1-5" \
+  --timezone Europe/London
+
+# 2. render artifacts (launchd plist + crontab line + openclaw cron command)
+repost-with-agent pair schedule linkedin-to-x
+
+# 3a. macOS: install + load the launchd plist
+repost-with-agent pair schedule linkedin-to-x --apply launchd
+launchctl load ~/Library/LaunchAgents/com.repost-with-agent.linkedin-to-x.plist
+
+# 3b. OpenClaw: paste the printed `openclaw cron add ...` command
+```
+
+Each tick writes `pair.scheduled.start` and `pair.scheduled.end` audit events with `outcome` / `reason` / `candidateCount` / `durationMs` / `sourceUrl` / `destinationTarget`. Tail them with `tail -f ~/.repost-with-agent/pairs/<pair-id>/audit.jsonl`.
+
+Scheduled ticks default to preview-only. `--allow-publish` is opt-in and requires `pair.mode === "live-approved"`. For `pair post --approve` runs, the recommendation is to keep them human-triggered until you have enough audit-log confidence in the dedupe decisions.
 
 ## Cross-machine (agent-bridge)
 

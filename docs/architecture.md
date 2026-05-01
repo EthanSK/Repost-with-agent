@@ -202,11 +202,13 @@ Never silently live-post an uncertain duplicate. If uncertain, preview and ask.
 
 - Manual mode by default.
 - Queue workspaces use `user-setup.json.run_policy` (`mode`, `schedule`, `timezone`, `max_items_per_run`, `min_interval_minutes`, `approval`).
-- OpenClaw cron is first-class for OpenClaw users: schedule a prompt that invokes this skill/workspace or the CLI.
-- OS cron/launchd examples can be documented for non-OpenClaw users.
-- Scheduled runs should load pair/workspace history and policy.
-- Default scheduled live behavior should be conservative: max 1 item/run, preview-first and approval-required until explicitly live-approved.
+- OpenClaw cron is first-class for OpenClaw users: schedule the deterministic `pair scheduled-run` CLI invocation, optionally wrapped by an isolated agent session that summarises the JSON output to `--announce` delivery.
+- OS cron/launchd: `pair schedule <id>` renders a ready-to-install crontab line and a launchd plist (with cron-to-`StartCalendarInterval` translation, `WorkingDirectory`, `EnvironmentVariables`, log paths, `RunAtLoad=false`). `pair schedule <id> --apply launchd` writes the plist; `pair unschedule <id>` removes it.
+- Scheduled runs go through `runScheduled()` in `src/core/scheduling.ts`. It always loads pair history/learnings (via `previewPair()`), enforces `policy.minDelayBetweenPostsMinutes`, gates `--allow-publish` on `pair.mode === "live-approved"`, and writes `pair.scheduled.start` / `pair.scheduled.end` / `pair.scheduled.error` audit events.
+- Default scheduled live behavior is conservative: preview-only unless the operator explicitly opts in with `--allow-publish` AND the pair is `live-approved`. The orchestrator's normal preview/dedupe/uncertain gates still apply on every tick.
 - Jitter can reduce spammy exact-timestamp behavior, but document it as load/spam-risk reduction — not detection evasion.
+
+See [scheduling.md](scheduling.md) for the full outcome taxonomy and audit-log shape.
 
 ## Safety defaults
 

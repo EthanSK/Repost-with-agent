@@ -20,6 +20,10 @@
 #   show <pair-id>                → JSON for one pair
 #   preview <pair-id>             → preview top candidate (no posting)
 #   history <pair-id>             → recent posted + audit entries
+#   scheduled-run <pair-id>       → deterministic per-tick run; emits JSON to
+#                                   stdout. Always preview-only — never passes
+#                                   --allow-publish from a remote agent.
+#   schedule <pair-id>            → render scheduling artifacts (read-only)
 #   status                        → environment summary + pair count
 #   safe-publish <pair-id>        → dry-run only; emits "approval needed"
 #                                   stub (real publish requires explicit
@@ -40,6 +44,8 @@ Usage:
   agent-bridge-handler.sh show <pair-id>
   agent-bridge-handler.sh preview <pair-id>
   agent-bridge-handler.sh history <pair-id>
+  agent-bridge-handler.sh scheduled-run <pair-id>
+  agent-bridge-handler.sh schedule <pair-id>
   agent-bridge-handler.sh status
   agent-bridge-handler.sh safe-publish <pair-id>
 
@@ -75,6 +81,17 @@ case "$verb" in
   history)
     require_pair_id "$@"
     "${CLI[@]}" pair history "$1"
+    ;;
+  scheduled-run)
+    require_pair_id "$@"
+    # Always preview-only across the bridge — never propagate --allow-publish
+    # from a remote agent. The local operator must opt in with
+    # `pair scheduled-run <id> --allow-publish` directly.
+    "${CLI[@]}" pair scheduled-run "$1" --json
+    ;;
+  schedule)
+    require_pair_id "$@"
+    "${CLI[@]}" pair schedule "$1"
     ;;
   status)
     "${CLI[@]}" pair list || true

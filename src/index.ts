@@ -13,6 +13,15 @@ import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.
 import { previewPair, publishNextForPair } from "./core/orchestrator.js";
 import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
 import {
+  installLaunchdPlist,
+  renderCrontabLine,
+  renderLaunchdPlist,
+  renderOpenClawCronCommand,
+  renderShellCommand,
+  runScheduled,
+  uninstallLaunchdPlist,
+} from "./core/scheduling.js";
+import {
   appendAuditEvent,
   appendPostedHistory,
   defaultPairName,
@@ -31,7 +40,7 @@ import { PairMode, PairRecord, PairScheduleKind } from "./core/types.js";
 import { contentHash, summarizeText } from "./core/dedupe.js";
 import { APP_NAME, getLegacyDataDir, getLegacyTokensPath } from "./config.js";
 
-const VERSION = "2.2.0";
+const VERSION = "2.3.0";
 
 const SOURCE_ADAPTERS = new Map([[linkedInSourceAdapter.type, linkedInSourceAdapter]]);
 const DESTINATION_ADAPTERS = new Map([[xDestinationAdapter.type, xDestinationAdapter]]);
@@ -454,6 +463,221 @@ pair
       approve: Boolean(opts.approve),
       allowUncertain: Boolean(opts.allowUncertain),
     });
+  });
+
+pair
+  .command("scheduled-run")
+  .description(
+    "Deterministic scheduled-tick runner. Host scheduler (OpenClaw cron / launchd / cron) should invoke this. " +
+      "Always runs preview; only publishes when --allow-publish is passed AND the pair mode is live-approved."
+  )
+  .argument("<id>", "Pair id")
+  .option(
+    "--allow-publish",
+    "Permit live publishing during this scheduled tick. Requires pair.mode=live-approved."
+  )
+  .option("--json", "Emit a single JSON object on stdout (for host announce delivery).")
+  .action(async (id: string, opts: { allowPublish?: boolean; json?: boolean }) => {
+    const pairRecord = requirePair(id);
+    const sourceAdapter = SOURCE_ADAPTERS.get(pairRecord.source.type);
+    const destinationAdapter = DESTINATION_ADAPTERS.get(pairRecord.destination.type);
+    if (!sourceAdapter) {
+      console.error(`No source adapter registered for ${pairRecord.source.type}`);
+      process.exit(1);
+    }
+    if (!destinationAdapter) {
+      console.error(`No destination adapter registered for ${pairRecord.destination.type}`);
+      process.exit(1);
+    }
+    const result = await runScheduled(pairRecord, sourceAdapter, destinationAdapter, {
+      allowPublish: Boolean(opts.allowPublish),
+    });
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+    } else {
+      console.log(`Pair: ${result.pairId} (${result.pairName})`);
+      console.log(`Outcome: ${result.outcome}`);
+      if (result.reason) console.log(`Reason: ${result.reason}`);
+      console.log(`Source: ${result.sourceUrl ?? "(not set)"}`);
+      console.log(`Destination: ${result.destinationTarget ?? "(not set)"}`);
+      console.log(`Candidates considered: ${result.candidateCount}`);
+      console.log(`Duration: ${result.durationMs}ms`);
+      if (result.draft) {
+        console.log(`Draft (${result.draft.chars} chars): ${result.draft.preview}`);
+        if (result.draft.warnings.length > 0) {
+          console.log(`Warnings: ${result.draft.warnings.join(" | ")}`);
+        }
+      }
+      if (result.publish?.destinationUrl) {
+        console.log(`Posted: ${result.publish.destinationUrl}`);
+      }
+    }
+    if (
+      result.outcome === "publish-failed" ||
+      result.outcome === "auth-failed"
+    ) {
+      process.exit(2);
+    }
+  });
+
+pair
+  .command("schedule")
+  .description(
+    "Render or install scheduling artifacts (launchd plist / crontab line / openclaw cron command) for a pair."
+  )
+  .argument("<id>", "Pair id")
+  .option(
+    "--apply <target>",
+    "Apply the schedule. Targets: launchd (writes plist + prints load cmd), print (default; render only)."
+  )
+  .option("--allow-publish", "Render the scheduled-run invocation with --allow-publish.")
+  .action(
+    (
+      id: string,
+      opts: { apply?: string; allowPublish?: boolean }
+    ) => {
+      const pairRecord = requirePair(id);
+      const inputs = {
+        pair: pairRecord,
+        allowPublish: Boolean(opts.allowPublish),
+      };
+      const target = opts.apply || "print";
+      if (target === "launchd") {
+        const result = installLaunchdPlist(inputs);
+        console.log(`Installed launchd plist: ${result.plistPath}`);
+        console.log("Load it with:");
+        console.log(`  launchctl unload ${result.plistPath} 2>/dev/null || true`);
+        console.log(`  launchctl load ${result.plistPath}`);
+        console.log(
+          "Inspect with: launchctl list | grep com.repost-with-agent"
+        );
+        return;
+      }
+      if (target === "print") {
+        const plist = renderLaunchdPlist(inputs);
+        console.log("# launchd plist");
+        console.log(`# Save as ~/Library/LaunchAgents/${plist.filename}`);
+        console.log(plist.contents);
+        console.log("# crontab line");
+        console.log(renderCrontabLine(inputs));
+        console.log();
+        console.log("# OpenClaw cron command");
+        console.log(renderOpenClawCronCommand(inputs));
+        console.log();
+        console.log("# Direct shell invocation");
+        console.log(renderShellCommand(inputs));
+        return;
+      }
+      console.error(
+        `Unknown --apply target: ${target}. Expected 'launchd' or 'print'.`
+      );
+      process.exit(1);
+    }
+  );
+
+pair
+  .command("unschedule")
+  .description("Remove an installed launchd plist for a pair (idempotent).")
+  .argument("<id>", "Pair id")
+  .action((id: string) => {
+    requirePair(id);
+    const result = uninstallLaunchdPlist(id);
+    if (result.removed) {
+      console.log(`Removed launchd plist: ${result.plistPath}`);
+      console.log(
+        `Run: launchctl unload ${result.plistPath} 2>/dev/null || true`
+      );
+    } else {
+      console.log(`No launchd plist installed at ${result.plistPath}`);
+    }
+    console.log(
+      "If you used OpenClaw cron, remove it with: openclaw cron list | grep " +
+        `'repost-with-agent ${id}' && openclaw cron rm <job-id>`
+    );
+  });
+
+pair
+  .command("edit")
+  .description("Patch fields on a saved pair (mode, enabled, schedule, policy, accounts).")
+  .argument("<id>", "Pair id")
+  .option("--mode <mode>", "preview-only | approval-required | live-approved")
+  .option("--enable", "Set enabled=true")
+  .option("--disable", "Set enabled=false")
+  .option("--schedule-kind <kind>", "manual | cron | every")
+  .option("--schedule-expression <expr>", "Cron expression (when kind=cron)")
+  .option("--every-minutes <minutes>", "Interval in minutes (when kind=every)")
+  .option("--timezone <tz>", "Schedule timezone (IANA)")
+  .option("--max-items-per-run <n>", "policy.maxItemsPerRun")
+  .option("--min-delay-minutes <n>", "policy.minDelayBetweenPostsMinutes")
+  .option("--source-url <url>", "Update source url/profile url")
+  .option("--destination-account <acct>", "Update destination accountHint")
+  .action((id: string, opts: Record<string, unknown>) => {
+    const existing = requirePair(id);
+    const next: PairRecord = {
+      ...existing,
+      source: { ...existing.source },
+      destination: { ...existing.destination },
+      schedule: { ...existing.schedule },
+      policy: { ...existing.policy },
+      dedupe: { ...existing.dedupe },
+    };
+
+    if (typeof opts.mode === "string") {
+      next.mode = parsePairMode(opts.mode as string);
+    }
+    if (opts.enable === true) next.enabled = true;
+    if (opts.disable === true) next.enabled = false;
+    if (typeof opts.scheduleKind === "string") {
+      next.schedule.kind = parseScheduleKind(opts.scheduleKind as string);
+    }
+    if (typeof opts.scheduleExpression === "string") {
+      next.schedule.expression = opts.scheduleExpression as string;
+    }
+    if (typeof opts.everyMinutes === "string") {
+      next.schedule.everyMinutes = parsePositiveInteger(
+        opts.everyMinutes as string,
+        "every-minutes"
+      );
+    }
+    if (typeof opts.timezone === "string") {
+      next.schedule.tz = resolveScheduleTimezone(opts.timezone as string);
+    }
+    if (typeof opts.maxItemsPerRun === "string") {
+      const n = parsePositiveInteger(
+        opts.maxItemsPerRun as string,
+        "max-items-per-run"
+      );
+      if (n) next.policy.maxItemsPerRun = n;
+    }
+    if (typeof opts.minDelayMinutes === "string") {
+      const n = parsePositiveInteger(
+        opts.minDelayMinutes as string,
+        "min-delay-minutes"
+      );
+      if (n !== undefined) next.policy.minDelayBetweenPostsMinutes = n;
+    }
+    if (typeof opts.sourceUrl === "string") {
+      next.source.url = opts.sourceUrl as string;
+      next.source.profileUrl = opts.sourceUrl as string;
+    }
+    if (typeof opts.destinationAccount === "string") {
+      next.destination.accountHint = opts.destinationAccount as string;
+    }
+
+    next.updatedAt = nowIso();
+    upsertPair(next);
+    appendAuditEvent({
+      at: next.updatedAt,
+      event: "pair.edited",
+      pairId: next.id,
+      details: {
+        mode: next.mode,
+        enabled: next.enabled,
+        schedule: next.schedule,
+      },
+    });
+    console.log(`Updated pair ${next.id}`);
+    printPair(next);
   });
 
 const migrate = program.command("migrate").description("Migration helpers");
