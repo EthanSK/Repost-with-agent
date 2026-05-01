@@ -72,7 +72,15 @@ function ensureDir(dirPath: string): void {
 }
 
 export function getRuntimeDataDir(): string {
-  return process.env.REPOST_WITH_AGENT_DATA_DIR || DEFAULT_DATA_DIR;
+  // Accept both the short and long env var names so users have one consistent
+  // override regardless of which surface they read first (scripts use
+  // REPOST_DATA_DIR; the long form REPOST_WITH_AGENT_DATA_DIR was the original
+  // internal name and is kept for backward compat).
+  return (
+    process.env.REPOST_DATA_DIR ||
+    process.env.REPOST_WITH_AGENT_DATA_DIR ||
+    DEFAULT_DATA_DIR
+  );
 }
 
 export function getLegacyDataDir(): string {

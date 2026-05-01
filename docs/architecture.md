@@ -43,10 +43,11 @@ repost-with-agent pair list
 repost-with-agent pair show <pair-id>
 repost-with-agent pair preview <pair-id>
 repost-with-agent pair history <pair-id>
+repost-with-agent pair post <pair-id> --approve   # approval-gated live publish
 repost-with-agent migrate linkedin-to-x
 ```
 
-Future commands can add `pair test`, `pair run`, pause/resume, and scheduler helpers once live publishing is fully policy-gated.
+Future commands can add `pair test`, pause/resume, and scheduler helpers.
 
 ### 3. Agent-operated setup layer
 
@@ -171,10 +172,11 @@ interface DestinationAdapter {
   type: string;
   test(pair): Promise<AuthHealth>;
   preview(item, pair): Promise<DraftPost>;
+  publish?(item, draft, pair): Promise<PublishResult>;   // approval-gated live publish
 }
 ```
 
-A future live-publish adapter extension should add `publish(...)` only after manual approval/live policy gates are explicit.
+`publish()` is called only by `repost-with-agent pair post <id> --approve`. The orchestrator re-runs preview, re-checks dedupe at post-time, refuses on `preview-only` mode, and refuses without explicit `--approve`. See `src/core/orchestrator.ts:publishNextForPair`.
 
 Each `SourceItem` needs stable identity fields:
 

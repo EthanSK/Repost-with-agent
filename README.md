@@ -69,7 +69,7 @@ npx repost-with-agent pair create \
   --destination-account "@<you>"
 ```
 
-New pairs default to `mode: preview-only` and `enabled: false`. This is intentional. The agent must run a successful preview before suggesting `pair edit` to flip mode to `approval-required`.
+New pairs default to `mode: preview-only` and `enabled: false`. This is intentional. The agent must run a successful preview before flipping mode to `approval-required` (today: edit `~/.repost-with-agent/pairs.json` directly; a dedicated `pair edit` command is a future addition).
 
 ### 6. Dedupe baseline import (one-time, if migrating)
 
@@ -363,7 +363,19 @@ Facebook support is treated as legacy / experimental until a cautious destinatio
 - Conservative cadence is for spam / duplicate reduction, not detection evasion.
 - Live posting requires explicit `--approve`; the orchestrator re-checks dedupe at post-time.
 
-See [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), [docs/migration.md](docs/migration.md).
+See [docs/WORKFLOW.md](docs/WORKFLOW.md) for the full end-to-end walkthrough, plus [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), [docs/migration.md](docs/migration.md).
+
+## Screenshots
+
+CLI session — `pair list` / `pair show` / `pair history` / live `pair post --approve`:
+
+![Repost-with-agent CLI session](docs/screenshots/cli-terminal.png)
+
+GitHub Pages site (`site/index.html`):
+
+![Repost-with-agent site](docs/screenshots/site-full.png)
+
+Live test post produced by `pair post --approve` on 2026-05-01: https://x.com/REEEthan_YT/status/2050303942857310541.
 
 ## License
 
