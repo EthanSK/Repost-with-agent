@@ -1,54 +1,82 @@
 # X (Twitter) destination notes
 
-Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-destination` or `check-destination` task with `platform: "x"`.
+Per-platform DOM hints for the running agent. Read this BEFORE you start a
+`repost-run` / `repost-backfill` step that touches X (either as source or
+destination).
 
 ## Auth
 
-- Login: persistent browser profile must already have a logged-in `x.com` session.
-- The agent CANNOT log in for the user. If the session is expired, return an `error-result` with `category: "needs-login"`.
+- Login: the browser MCP profile must already have a logged-in `x.com`
+  session. The agent cannot log in for the user. If the session is expired,
+  append `pair.publish.failed` audit with `category: "needs-login"` and stop.
 
 ## URLs
 
-- Compose page: `https://x.com/compose/post` (full-page composer; reliable across logged-in accounts).
+- Compose: `https://x.com/compose/post` — full-page composer; reliable across
+  logged-in accounts.
 - Profile feed: `https://x.com/<handle>` (e.g. `https://x.com/REEEthan_YT`).
 
-## Posting flow (`post-to-destination`)
+## Posting flow
 
 1. Navigate to `https://x.com/compose/post`.
-2. Wait for the textarea (`[data-testid="tweetTextarea_0"]` is the stable selector as of 2026-05).
-3. Click into the textarea.
-4. Type / paste `draft_text` exactly.
-5. Click the Post button (`[data-testid="tweetButtonInline"]` or `[data-testid="tweetButton"]`).
-6. Wait for the URL to change to `https://x.com/<handle>/status/<id>` — that's the `posted_url`.
-7. Extract the numeric `<id>` for `posted_id`.
+2. Wait for the textarea: `[data-testid="tweetTextarea_0"]` (stable selector
+   as of 2026-05).
+3. Click into it.
+4. Type the draft body EXACTLY.
+5. Click the Post button: `[data-testid="tweetButtonInline"]` or
+   `[data-testid="tweetButton"]`.
+6. Wait for the URL to change to `https://x.com/<handle>/status/<id>`.
+7. Extract the numeric `<id>` for `destinationId`. Capture the full URL as
+   `destinationUrl`.
 
 ## Char cap
 
-- 280 chars (free / classic).
-- 25 000 chars (Premium / Verified).
+- Free / classic accounts: 280 chars.
+- Premium / Verified: 25 000 chars.
 
-The orchestrator uses 280 by default in `DEFAULT_PLATFORM_MAX_LENGTH`. If the user is on Premium, pass `--overlength-strategy truncate` (no-op for shorter drafts) or set the destination max-length override on the pair.
+The default in the `repost-run` length check is 280. If the user is on
+Premium, set the per-pair `policy.overlengthStrategy: "truncate"` or override
+the cap explicitly.
 
-## Source scraping (`fetch-source`)
+## Source scraping
 
 - Profile URL: `https://x.com/<handle>`.
-- Scroll to load posts. X's timeline virtualization aggressively unmounts off-screen posts, so the agent should scrape as it scrolls (don't rely on all loaded posts being in the DOM).
+- Scroll to load posts. X's timeline virtualizes aggressively and unmounts
+  off-screen posts — **scrape as you scroll**, don't rely on all loaded posts
+  being in the DOM after several scrolls.
 - Per post, scrape:
-  - Post text (`[data-testid="tweetText"]`).
-  - Canonical URL: the timestamp `<a>` tag wrapping the relative time link.
-  - `publishedAt`: parse the timestamp's `title` or `datetime` attribute.
+  - **Body**: `[data-testid="tweetText"]`.
+  - **Canonical URL**: the timestamp `<a>` tag wrapping the relative-time link
+    (resolve to absolute URL).
+  - **`publishedAt`**: parse the timestamp's `title` or `datetime` attribute.
+  - **`sourceItemId`**: the numeric ID from the URL.
 
-## Destination dedupe (`check-destination`)
+Skip retweets (they have a "<user> reposted" indicator above the tweet) when
+fetching as a source. They're not original content.
 
-- Navigate to the destination account's profile.
+## Destination dedupe
+
+For destination dedupe on X:
+
+- Navigate to the destination account profile.
 - Scroll to load 50–100 recent posts.
-- Compare against `candidate_text` using the same fuzzy logic as v2's X adapter:
-  - Strip trailing URL on both sides (X collapses URLs to t.co aliases that won't match the LinkedIn URL).
-  - Whitespace-collapse, lowercase, strip trailing punctuation.
-  - Exact match OR ≥80-char prefix overlap → `exists: true`.
+- Compare against `candidate_text` using the `repost-dedup` skill's algorithm.
+  **Important**: strip URLs from BOTH sides before comparing — X rewrites
+  every URL into a `t.co/<hash>` alias that won't match the LinkedIn /
+  Bluesky / etc. source URL.
 
 ## Known quirks
 
-- **t.co URL substitution.** X rewrites every URL in posted text to a `t.co/<hash>` alias. This means a post you publish with `https://example.com/article` will show up in the destination scrape as `t.co/abc123`. Strip URLs from both candidate and scraped text before comparing.
-- **Threading.** v2 had logic to thread long drafts. v3.0.0 does not — overlength drafts are either skipped (`--overlength-strategy skip`) or truncated (`--overlength-strategy truncate`). Threading can be re-introduced as a per-platform agent skill if needed.
-- **Quoted reposts** show up in the profile feed but are typically dedupe-irrelevant; the agent should skip them in `fetch-source` (they're not original content) but treat them like normal posts in `check-destination`.
+- **`t.co` URL substitution.** X rewrites every URL in posted text to a
+  `t.co/<hash>` alias. A post you publish with `https://example.com/article`
+  shows up in the destination scrape as `t.co/abc123`. Strip URLs from both
+  candidate and scraped text before comparing.
+- **Threading.** Long drafts can't be threaded automatically in v4 —
+  overlength drafts are either skipped (`overlengthStrategy: "skip"`) or
+  truncated (`"truncate"`). Re-introduce threading as a separate skill if
+  needed.
+- **Quoted reposts.** Show up in the profile feed but are dedupe-irrelevant.
+  Skip them in source scrape (they're not original content); treat them like
+  normal posts in destination dedupe.
+- **Login walls.** X sometimes shows a login modal even for logged-in users
+  on certain endpoints. Detect and bail with `category: "needs-login"`.

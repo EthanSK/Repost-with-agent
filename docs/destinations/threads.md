@@ -1,19 +1,22 @@
 # Threads destination notes
 
-Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-destination` or `check-destination` task with `platform: "threads"`.
+Per-platform DOM hints for the running agent. Read this BEFORE you start a
+`repost-run` / `repost-backfill` step that touches Threads.
 
 ## Auth
 
-- Login: persistent browser profile must have a logged-in `threads.net` session.
-- Threads auth piggybacks off Instagram. If `instagram.com` is not also logged in, expect login flow redirects.
-- If session is expired, return an `error-result` with `category: "needs-login"`.
+- Login: the browser MCP profile must have a logged-in `threads.net` session.
+- Threads auth piggybacks off Instagram. If `instagram.com` is not also logged
+  in, expect login flow redirects.
+- If session is expired, append `pair.publish.failed` audit with `category:
+  "needs-login"` and stop.
 
 ## URLs
 
 - Compose: `https://www.threads.net/` (home feed) — there's a persistent "New thread" composer at the top, or click the `+` icon in the bottom nav (mobile-style web app).
 - Profile: `https://www.threads.net/@<handle>`.
 
-## Posting flow (`post-to-destination`)
+## Posting flow
 
 1. Navigate to `https://www.threads.net/`.
 2. Click the "Start a thread..." input at the top, OR click the `+` icon in the side nav.
@@ -26,9 +29,7 @@ Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-desti
 
 - 500 chars per single thread post.
 
-`DEFAULT_PLATFORM_MAX_LENGTH.threads = 500`.
-
-## Source scraping (`fetch-source`)
+## Source scraping
 
 - Profile URL: `https://www.threads.net/@<handle>`.
 - Scroll to load threads.
@@ -39,7 +40,13 @@ Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-desti
 
 ## Known quirks
 
-- **Threads-of-threads.** A "thread" can contain multiple posts. For `fetch-source`, treat each top-level original thread as one item — don't surface follow-up posts as separate items.
-- **Cross-posting from Instagram.** Threads users sometimes have content auto-mirrored from Instagram. The cross-mirror posts are usually marked with an Instagram badge — skip them in `fetch-source` since they're not original Threads content.
-- **Login wall.** Anonymous browsing of Threads is partially supported but inconsistent. The agent should always operate from a logged-in session.
-- **DOM is React Native Web** with mobile-first selectors. Prefer accessibility-role queries.
+- **Threads-of-threads.** A "thread" can contain multiple posts. For source
+  scrape, treat each top-level original thread as one item — don't surface
+  follow-up posts as separate items.
+- **Cross-posting from Instagram.** Threads users sometimes have content
+  auto-mirrored from Instagram. Mirror posts are marked with an Instagram badge
+  — skip them in source scrape since they're not original Threads content.
+- **Login wall.** Anonymous browsing of Threads is partially supported but
+  inconsistent. Always operate from a logged-in session.
+- **DOM is React Native Web** with mobile-first selectors. Prefer
+  accessibility-role queries.

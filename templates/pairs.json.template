@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 4,
+  "pairs": [
+    {
+      "id": "linkedin-to-x",
+      "name": "LinkedIn to X",
+      "enabled": false,
+      "mode": "preview-only",
+      "runMode": "listen-for-future",
+      "source": {
+        "platform": "linkedin",
+        "url": "https://www.linkedin.com/in/<your-handle>/recent-activity/all/",
+        "profileUrl": "https://www.linkedin.com/in/<your-handle>"
+      },
+      "destination": {
+        "platform": "x",
+        "accountHint": "@<your-handle>",
+        "profileUrl": "https://x.com/<your-handle>"
+      },
+      "schedule": {
+        "kind": "cron",
+        "tz": "Europe/London",
+        "expression": "0 */5 * * *",
+        "everyHours": 5
+      },
+      "policy": {
+        "maxItemsPerRun": 1,
+        "minDelayBetweenPostsMinutes": 60,
+        "blockOnUncertainDuplicate": true,
+        "overlengthStrategy": "skip"
+      },
+      "createdAt": "2026-05-01T12:00:00Z",
+      "updatedAt": "2026-05-01T12:00:00Z"
+    }
+  ]
+}

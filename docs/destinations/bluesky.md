@@ -1,19 +1,24 @@
 # Bluesky destination notes
 
-Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-destination` or `check-destination` task with `platform: "bluesky"`.
+Per-platform DOM hints for the running agent. Read this BEFORE you start a
+`repost-run` / `repost-backfill` step that touches Bluesky (either as source
+or destination).
 
 ## Auth
 
-- Login: persistent browser profile must already have a logged-in `bsky.app` session (or whichever PDS the user is on).
-- App passwords are only relevant for the AT Protocol API path, which v3.0.0 does NOT use. Browser session is enough.
-- If session is expired, return an `error-result` with `category: "needs-login"`.
+- Login: the browser MCP profile must already have a logged-in `bsky.app`
+  session (or whichever PDS the user is on).
+- App passwords are only relevant for the AT Protocol API path, which v4.0.0
+  does NOT use. Browser session is enough.
+- If session is expired, append `pair.publish.failed` audit with `category:
+  "needs-login"` and stop.
 
 ## URLs
 
 - Compose: home page `https://bsky.app/` has a "New Post" button at top-left; OR navigate to `https://bsky.app/compose` if Bluesky exposes a direct compose URL (not all PDSs do).
 - Profile feed: `https://bsky.app/profile/<handle>` (e.g. `https://bsky.app/profile/ethansk.bsky.social`).
 
-## Posting flow (`post-to-destination`)
+## Posting flow
 
 1. Navigate to `https://bsky.app/`.
 2. Click the "New Post" / `+` button (top-left in the app shell).
@@ -26,9 +31,7 @@ Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-desti
 
 - 300 chars (graphemes, not bytes — but in practice 300 chars is the safe bet).
 
-`DEFAULT_PLATFORM_MAX_LENGTH.bluesky = 300`.
-
-## Source scraping (`fetch-source`)
+## Source scraping
 
 - Profile URL: `https://bsky.app/profile/<handle>`.
 - Scroll to load posts. Bluesky uses an infinite-scroll list similar to X.
@@ -37,13 +40,26 @@ Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-desti
   - Canonical URL: `https://bsky.app/profile/<handle>/post/<rkey>` — extractable from the post's permalink/timestamp `<a>` tag.
   - `publishedAt`: parse the visible relative timestamp.
 
+## Destination dedupe
+
+For destination dedupe on Bluesky:
+
+- Navigate to `https://bsky.app/profile/<handle>`.
+- Scroll to load 50–100 recent posts.
+- Compare against `candidate_text` using the `repost-dedup` skill's algorithm.
+
 ## Known quirks
 
-- **Reposts** (Bluesky's "Repost" / quote-post) appear in the profile feed. Skip them in `fetch-source` — only return original posts.
-- **Embedded URL cards** auto-generate when you paste a URL. The card is part of the rendered post but the source `text` is just the URL — preserve as-is.
+- **Reposts** (Bluesky's "Repost" / quote-post) appear in the profile feed.
+  Skip them in source scrape — only return original posts.
+- **Embedded URL cards** auto-generate when you paste a URL. The card is part
+  of the rendered post but the source `text` is just the URL — preserve as-is.
 - **Hashtags** become `#tag` clickable text. Plain text travels fine.
-- **Replies** are rendered as part of a thread on the profile feed. Skip them — only top-level posts.
+- **Replies** are rendered as part of a thread on the profile feed. Skip them
+  — only top-level posts.
 
 ## DOM stability
 
-Bluesky is React Native Web; selectors are less stable than X. The agent should prefer to use accessible-role queries (`role="button"`, `aria-label="New post"`) over CSS selectors.
+Bluesky is React Native Web; selectors are less stable than X. Prefer
+accessible-role queries (`role="button"`, `aria-label="New post"`) over CSS
+selectors.

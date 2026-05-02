@@ -1,11 +1,14 @@
 # Facebook destination notes
 
-Per-platform DOM hints for the agent. Read this when fulfilling a `post-to-destination` or `check-destination` task with `platform: "facebook"`.
+Per-platform DOM hints for the running agent. Read this BEFORE you start a
+`repost-run` / `repost-backfill` step that touches Facebook.
 
 ## Auth
 
-- Login: persistent browser profile must have a logged-in `facebook.com` session.
-- Facebook will sometimes prompt for 2FA / device-confirmation challenges. The agent CANNOT solve these — return an `error-result` with `category: "needs-login"` if a challenge appears.
+- Login: the browser MCP profile must have a logged-in `facebook.com` session.
+- Facebook will sometimes prompt for 2FA / device-confirmation challenges.
+  The agent CANNOT solve these — append `pair.publish.failed` audit with
+  `category: "needs-login"` if a challenge appears.
 
 ## Targets
 
@@ -15,7 +18,10 @@ Facebook supports posting to:
 - **Page** you administer.
 - **Group** you're a member of.
 
-For v3.0.0, the `destination_account` field is the target's identifier — for a page, the page handle; for a personal timeline, the user's handle. The agent should switch into the right "audience" before posting (Facebook's composer has an audience picker).
+In v4, the `destination.accountHint` field is the target's identifier — for a
+page, the page handle; for a personal timeline, the user's handle. Switch into
+the right "audience" before posting (Facebook's composer has an audience
+picker).
 
 ## URLs
 
@@ -23,7 +29,7 @@ For v3.0.0, the `destination_account` field is the target's identifier — for a
 - Compose (page): `https://www.facebook.com/<page-handle>` then click "Create post".
 - Profile feed: `https://www.facebook.com/<handle>` or `https://www.facebook.com/profile.php?id=<id>`.
 
-## Posting flow (`post-to-destination`)
+## Posting flow
 
 1. Navigate to the appropriate compose URL based on the target type.
 2. Click into the "What's on your mind?" / "Write a post..." textbox.
@@ -36,9 +42,7 @@ For v3.0.0, the `destination_account` field is the target's identifier — for a
 
 - 63 206 chars (Facebook's published limit; effectively no practical cap).
 
-`DEFAULT_PLATFORM_MAX_LENGTH.facebook = 63206`.
-
-## Source scraping (`fetch-source`)
+## Source scraping
 
 - Profile / page URL: `https://www.facebook.com/<handle>`.
 - Scroll to load posts. Facebook's feed virtualization is aggressive — scrape as you scroll.
@@ -51,6 +55,10 @@ For v3.0.0, the `destination_account` field is the target's identifier — for a
 
 - **Privacy-restricted posts** may appear in the feed but resolve to a 404 / "content unavailable" page when unauthenticated. The agent should skip posts whose visibility is not Public, since the destination dedupe and cross-post path can't read them reliably.
 - **Reactions and comments** are not part of `text`. Don't include them.
-- **Embedded video / live posts**: skip in v3.0.0 (text-only mirror).
-- **Page vs profile vs group composer DOM** — the three look similar but use slightly different selectors. Use accessibility-role queries to find the textbox/button, not CSS selectors.
-- **2FA / login challenge** is the most common failure. If the user is prompted to confirm a new device, the agent has to surface it and let the user complete it manually.
+- **Embedded video / live posts**: skip in v4 (text-only mirror).
+- **Page vs profile vs group composer DOM** — the three look similar but use
+  slightly different selectors. Use accessibility-role queries to find the
+  textbox/button, not CSS selectors.
+- **2FA / login challenge** is the most common failure. If the user is
+  prompted to confirm a new device, surface it and let the user complete it
+  manually.
