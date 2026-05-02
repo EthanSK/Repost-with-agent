@@ -1,0 +1,32 @@
+{
+  "name": "repost-with-agent",
+  "owner": {
+    "name": "EthanSK",
+    "url": "https://github.com/EthanSK/Repost-with-agent"
+  },
+  "metadata": {
+    "description": "Local marketplace for Repost-with-agent — a skill-only Claude Code / OpenClaw plugin that drives the running agent through cross-platform reposting (LinkedIn, X, Bluesky, Threads, Facebook) using its existing browser MCP. No CLI, no MCP server, no platform SDKs."
+  },
+  "plugins": [
+    {
+      "name": "repost-with-agent",
+      "description": "Skill-only reposting workflow plugin. Skills + slash commands instruct the running agent (Claude Code via chrome-devtools-mcp, OpenClaw via its built-in browser tool) how to scrape a source profile, dedupe against history + destination, expand shortened URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. JSON state lives at ~/.repost-with-agent/. No code on disk performs any of the work — the agent does it all with native tools.",
+      "category": "productivity",
+      "source": ".",
+      "homepage": "https://github.com/EthanSK/Repost-with-agent",
+      "keywords": [
+        "repost",
+        "skill",
+        "browser-mcp",
+        "chrome-devtools-mcp",
+        "linkedin",
+        "x",
+        "bluesky",
+        "threads",
+        "facebook",
+        "claude-code",
+        "openclaw"
+      ]
+    }
+  ]
+}

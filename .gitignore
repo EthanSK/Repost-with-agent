@@ -1,6 +1,21 @@
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*.log
+
+# Local backups produced by scripts/install.sh
+*.bak.*
+
+# Per-machine state (user data lives in ~/.repost-with-agent, not in the repo)
+/.repost-with-agent/
+
+# v3 build artefacts that should never come back
 node_modules/
 dist/
 .env
 *.js.map
 *.d.ts
-*.log
+
+# Claude Code worktrees from agent runs (already managed elsewhere)
+.claude/worktrees/

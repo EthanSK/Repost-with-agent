@@ -2,26 +2,12 @@
   "schema_version": 1,
   "id": "repost-with-agent",
   "name": "Repost-with-agent",
-  "description": "Agent-driven, browser-based reposting (v3.0.0). The CLI is a thin orchestrator over JSON state; the agent (Claude Code via chrome-devtools-mcp, OpenClaw via its built-in browser tool) drives the user's logged-in browser to do the actual cross-posting. No API SDKs, no Playwright. Supports LinkedIn, X, Bluesky, Threads, Facebook. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm to Ethan with source + destination URL via `notify configure`. Silent publishes are a bug. See CLAUDE.md / AGENTS.md / README §3.",
-  "runtime": {
-    "type": "node",
-    "entry": "dist/index.js"
-  },
-  "config_schema": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "dataDir": {
-        "type": "string",
-        "description": "Optional override for ~/.repost-with-agent."
-      },
-      "defaultTimezone": {
-        "type": "string",
-        "description": "Default timezone for saved schedules."
-      }
-    }
-  },
+  "version": "4.0.0",
+  "description": "Skill-only OpenClaw plugin for agent-driven, browser-based reposting (v4.0.0 — no CLI, no MCP server). The running agent (OpenClaw via its built-in browser tool, Claude Code via chrome-devtools-mcp, etc.) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe, expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. Supports LinkedIn, X, Bluesky, Threads, Facebook. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
   "skills_roots": [
     "skills"
+  ],
+  "commands_roots": [
+    "commands"
   ]
 }

@@ -1,38 +1,25 @@
 {
   "name": "repost-with-agent",
-  "version": "3.0.0",
-  "description": "Agent-driven, browser-based reposting workflow. The CLI is a thin orchestrator over JSON state; the agent (Claude Code / OpenClaw) drives the user's logged-in browser via its own browser MCP.",
-  "main": "dist/index.js",
-  "bin": {
-    "repost-with-agent": "./dist/index.js"
+  "version": "4.0.0",
+  "description": "Skill-only Claude Code / OpenClaw plugin for agent-driven, browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. No CLI, no MCP server, no Playwright, no platform SDKs — just skills + commands + JSON state.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EthanSK/Repost-with-agent.git"
   },
-  "scripts": {
-    "build": "tsc",
-    "test": "npm run build && node tests/dedupe-regression.js && node tests/scheduling-regression.js && node tests/backfill-regression.js && node tests/notify-regression.js && node tests/truncate-regression.js && node tests/overlength-regression.js && node tests/url-expander-regression.js && node tests/agent-task-contract-regression.js",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "list": "tsx src/index.ts pair list",
-    "pair:list": "tsx src/index.ts pair list"
-  },
+  "homepage": "https://github.com/EthanSK/Repost-with-agent",
   "keywords": [
+    "claude-code-plugin",
+    "openclaw-plugin",
+    "skill",
     "repost",
-    "social",
     "linkedin",
     "x",
+    "twitter",
     "bluesky",
     "threads",
     "facebook",
-    "agent",
-    "browser-mcp"
-  ],
-  "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "commander": "^12.1.0"
-  },
-  "devDependencies": {
-    "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.6.0"
-  }
+    "browser-mcp",
+    "chrome-devtools-mcp"
+  ]
 }
