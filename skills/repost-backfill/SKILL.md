@@ -35,8 +35,27 @@ Same as `repost-run`: Read, Edit, Write, Bash, browser MCP,
 Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it exists. Backfill is
 the highest-volume publish path on this plugin, so prior learnings about
 this pair's pagination caps, rate-limit signatures, destination-dedupe
-quirks, and per-account DOM oddities are especially valuable here. Apply the
-relevant quirks BEFORE you start the source pagination walk.
+quirks, and per-account DOM oddities are especially valuable here.
+
+**Priority order — read this carefully:**
+
+1. **First, scan the most-recent entry's `### Selectors` and `### Step
+   playbook` sub-sections.** Use them VERBATIM in steps 3 (source
+   pagination) and 6 (publish loop) — they're a recipe the prior run
+   already verified worked, so you skip the DOM re-discovery cost on every
+   loop iteration.
+2. **Second, scan the entry's `### Quirks` block** for rate-limit
+   signatures, pagination caps, and "skip if X" rules. Backfill loops
+   exercise these the most aggressively, so plan around them up front
+   (e.g. set `intervalMinutes` to whatever the prior run found cleared
+   the rate-limit modal).
+3. **Third, scan older entries** for any superseding context.
+4. **Fall back to `docs/destinations/<platform>.md` ONLY when learnings.md
+   is silent on a step**, OR when a cached selector fails to match the
+   live DOM.
+
+When a cached selector / step FAILS mid-loop, capture the updated
+mechanics in your reasoning and flush them at the **Final step** below.
 
 Track newly-discovered quirks in your reasoning as the loop runs — for
 example, "between item 7 and item 8 the destination's rate-limit modal
@@ -46,7 +65,8 @@ Don't append to learnings.md mid-loop; batch the writes at the **Final
 step** below so a mid-loop crash doesn't corrupt the file with a
 half-written entry.
 
-Full rules + good/bad entry examples: `skills/repost-learnings/SKILL.md`.
+Full rules + entry shape (with the 3 optional `###` sub-sections):
+`skills/repost-learnings/SKILL.md`.
 
 ## Step 2 — Resume state file
 
@@ -143,24 +163,42 @@ likes a wrap-up.
 
 Before exiting, append any quirks you tracked during the loop to
 `~/.repost-with-agent/pairs/<id>/learnings.md`. Use `>>` via Bash —
-append-only. Each entry:
+append-only. Each entry uses the structured shape:
 
 ```
 ## YYYY-MM-DD HH:MM — <one-line summary>
 
-<2–5 sentences: what you saw, why it matters, what to do next time.>
+<2–5 sentences of prose: what you saw, why it matters, implication.>
+
+### Selectors          (optional — STRONGLY preferred when you have any)
+- <label>: `<selector>` (<platform>, <where in flow>)
+
+### Step playbook     (optional — STRONGLY preferred when you have any)
+1. <imperative step using the selectors above>
+
+### Quirks            (optional)
+- <one-line edge case / rate-limit signature / timing>
 ```
 
 Backfill is unusually rich source of learnings — each loop iteration touches
 the source + destination DOM, exercises the dedupe path, and stresses the
-rate-limit envelope. Examples worth saving:
+rate-limit envelope. Use the structured sections aggressively here, because
+the next backfill run can save real time by following your selectors +
+step playbook verbatim instead of re-discovering them.
 
-- "Destination rate-limit modal appears after the 4th publish in a 30-min
-  window for this account; bumping `intervalMinutes` to 12 cleared it."
-- "Source pagination on this LinkedIn account caps at ~60 posts (not 100);
-  set realistic `--max` going forward."
-- "Between item 7 and item 8, the destination scrape returned an empty
-  feed for 90s before recovering — likely a cache flush."
+Examples worth capturing as full structured entries:
+
+- A `### Selectors` block listing the destination compose textbox,
+  Post button, and rate-limit modal. A `### Quirks` line: "Destination
+  rate-limit modal appears after the 4th publish in a 30-min window for
+  this account; bumping `intervalMinutes` to 12 cleared it."
+- A `### Step playbook` capturing the exact source-pagination scroll
+  count + wait that worked. A `### Quirks` line: "Source pagination on
+  this LinkedIn account caps at ~60 posts (not 100); set realistic
+  `--max` going forward."
+- A `### Quirks` line: "Between item 7 and item 8, the destination scrape
+  returned an empty feed for 90s before recovering — likely a cache flush;
+  add a 60s retry before flagging `pair.dedupe.uncertain`."
 
 If a fresh observation contradicts an older entry, do NOT delete the older
 one. Use `Edit` to add ` [obsoleted YYYY-MM-DD]` to the older heading, then
@@ -168,7 +206,8 @@ append a new entry that mentions which prior entry it supersedes.
 
 If the loop was uneventful and matched all prior expectations — write
 nothing. The file is for deltas, not heartbeats. See
-`skills/repost-learnings/SKILL.md` for full "signal vs noise" rules.
+`skills/repost-learnings/SKILL.md` for full "signal vs noise" rules + the
+good/bad entry example showing all three optional sub-sections.
 
 ## Telegram-confirm every successful publish — non-negotiable
 

@@ -170,17 +170,31 @@ on each cron tick — quirks accumulate here over time. (Ethan voice 6029,
 
 ### Format
 
+Each entry is free-form prose followed by **three OPTIONAL structured
+sub-sections** — `### Selectors`, `### Step playbook`, and `### Quirks`.
+The structured sections turn the file into an actionable cache the next
+run can grep + skim, instead of forcing it to re-read prose paragraphs.
+
 ```markdown
 # <pair-id> learnings
 
 ## YYYY-MM-DD HH:MM — <one-line summary>
 
-<2–5 sentences of detail. What you saw, why it matters, what to do about it
-next time. Be specific about DOM selectors, URLs, or pagination behavior.>
+<2–5 sentences of prose: what you saw, why it matters, implication.>
+
+### Selectors          (optional — STRONGLY preferred when applicable)
+- <label>: `<selector>` (<platform>, <where in flow>)
+
+### Step playbook     (optional — STRONGLY preferred when applicable)
+1. <imperative step using the selectors above>
+2. ...
+
+### Quirks            (optional)
+- <one-line edge case / "skip if X" / timing note>
 
 ## YYYY-MM-DD HH:MM — <next entry>
 
-<body>
+<body — same shape>
 
 ## YYYY-MM-DD HH:MM — <obsoleted entry> [obsoleted YYYY-MM-DD]
 
@@ -189,12 +203,28 @@ next time. Be specific about DOM selectors, URLs, or pagination behavior.>
 
 - Top-of-file H1: `# <pair-id> learnings`.
 - Each entry is an `##` heading with timestamp + summary, followed by 2-5
-  sentences of detail.
+  sentences of prose context.
+- The three `###` sub-sections (`Selectors`, `Step playbook`, `Quirks`)
+  are OPTIONAL. Omit any with no content rather than writing them empty.
+  Strongly preferred whenever the entry captures actionable mechanics —
+  they let future runs follow a recipe instead of re-discovering it.
 - Append-only via `>>` in Bash. The only allowed edit to a historical entry
   is a targeted `Edit` that adds ` [obsoleted YYYY-MM-DD]` to the heading
   when a fresh observation contradicts it.
 - See `templates/learnings.md.template` for the placeholder stub used on
   first run.
+
+### Read-priority for runs
+
+When `repost-run` / `repost-backfill` reads this file at the start of a
+run, it should:
+
+1. Try the most-recent entry's `### Selectors` + `### Step playbook`
+   verbatim FIRST (those are a recipe a prior run already verified).
+2. Apply the entry's `### Quirks` block as guards / "skip if" rules.
+3. Fall back to `docs/destinations/<platform>.md` defaults only when
+   learnings.md is silent on a step, or when a cached selector fails
+   to match the live DOM (record the new selector at end of run).
 
 ### Lifecycle
 

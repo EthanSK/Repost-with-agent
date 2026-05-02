@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.1.0)
+# Repost-with-agent (v4.2.0)
 
 A skill-only Claude Code / OpenClaw plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
@@ -31,7 +31,12 @@ itself runs zero code at runtime.
 The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
 every run — pagination caps, DOM changes, rate-limit signatures, and
 account-specific gotchas accumulate across cron ticks instead of being
-rediscovered from scratch each time. (See
+rediscovered from scratch each time. v4.2.0 adds a structured entry shape
+(optional `### Selectors`, `### Step playbook`, and `### Quirks`
+sub-sections) so each entry doubles as a recipe the next run can follow
+verbatim — read learnings.md FIRST, fall back to
+`docs/destinations/<platform>.md` only when learnings.md is silent or a
+cached selector misses. (See
 [`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
 
 (See [`docs/architecture.md`](docs/architecture.md) for the long version.)
@@ -130,7 +135,10 @@ All state lives at `~/.repost-with-agent/`:
 - `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
   this at the start of every run and appends new quirks at the end. Quirks
   accumulate across cron ticks so the agent doesn't re-figure pagination
-  caps / DOM changes / rate-limit signatures from scratch each time.
+  caps / DOM changes / rate-limit signatures from scratch each time. Each
+  entry has free-form prose plus optional structured sub-sections
+  (`### Selectors`, `### Step playbook`, `### Quirks`) so the next run
+  can follow a recipe verbatim.
 - `pairs/<id>/backfill-state.json` — transient resume state for backfills.
 - `pairs/<id>/logs/cron.log` — stdout+stderr from the launchd / cron tick.
 

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "repost-with-agent",
   "name": "Repost-with-agent",
-  "version": "4.1.0",
-  "description": "Skill-only OpenClaw plugin for agent-driven, browser-based reposting (v4.1.0 — no CLI, no MCP server). The running agent (OpenClaw via its built-in browser tool, Claude Code via chrome-devtools-mcp, etc.) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe, expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. Maintains a per-pair learnings.md so the agent doesn't re-figure platform quirks every cron tick. Supports LinkedIn, X, Bluesky, Threads, Facebook. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
+  "version": "4.2.0",
+  "description": "Skill-only OpenClaw plugin for agent-driven, browser-based reposting (v4.2.0 — no CLI, no MCP server). The running agent (OpenClaw via its built-in browser tool, Claude Code via chrome-devtools-mcp, etc.) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe, expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. Maintains a per-pair learnings.md so the agent doesn't re-figure platform quirks every cron tick. Supports LinkedIn, X, Bluesky, Threads, Facebook. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
   "skills_roots": [
     "skills"
   ],

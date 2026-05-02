@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "repost-with-agent",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Skill-only Claude Code plugin for agent-driven, browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. The running agent uses its existing tools (Read, Edit, Write, Bash, chrome-devtools-mcp, plugin:telegram:telegram) to scrape, dedupe, post, log history, and Telegram-confirm. Maintains a per-pair learnings.md so the agent doesn't re-figure platform quirks every cron tick. No CLI, no MCP server, no platform SDKs.",
   "skills": [
     "skills/repost-pair-setup",

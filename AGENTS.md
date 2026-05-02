@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.1.0)
+# AGENTS.md — Repost-with-agent (v4.2.0)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.1.0 in one paragraph
+## v4.2.0 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -44,7 +44,7 @@ stops. There's no fallback.
 | `~/.repost-with-agent/pairs.json` | Array of pair configs (schemaVersion 4) |
 | `~/.repost-with-agent/pairs/<id>/posted.jsonl` | Append-only NDJSON history |
 | `~/.repost-with-agent/pairs/<id>/audit.jsonl` | Append-only NDJSON audit |
-| `~/.repost-with-agent/pairs/<id>/learnings.md` | Free-form notes |
+| `~/.repost-with-agent/pairs/<id>/learnings.md` | Per-pair institutional memory (free-form prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections; try cached selectors FIRST, fall back to `docs/destinations/<platform>.md`) |
 | `~/.repost-with-agent/pairs/<id>/backfill-state.json` | Transient backfill resume |
 | `~/.repost-with-agent/pairs/<id>/logs/cron.log` | Cron / launchd tick logs |
 

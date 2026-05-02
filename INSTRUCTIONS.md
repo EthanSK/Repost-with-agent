@@ -18,8 +18,13 @@ skill.
 The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
 every run — pagination caps, DOM changes, rate-limit signatures, and
 account-specific gotchas accumulate across cron ticks instead of being
-rediscovered from scratch each time. Read `skills/repost-learnings/SKILL.md`
-for the full lifecycle + good/bad-entry guidance.
+rediscovered from scratch each time. v4.2.0 adds a structured entry shape:
+each entry can include optional `### Selectors`, `### Step playbook`, and
+`### Quirks` sub-sections so the next run can grep + skim for actionable
+mechanics instead of re-reading prose. **Read learnings.md FIRST; fall
+back to `docs/destinations/<platform>.md` only when learnings.md is silent
+or a cached selector misses.** Read `skills/repost-learnings/SKILL.md` for
+the full lifecycle + good/bad-entry guidance.
 
 ## The non-negotiable rule
 
@@ -37,7 +42,7 @@ for the full lifecycle + good/bad-entry guidance.
 - **Pair configs**: `~/.repost-with-agent/pairs.json` (schemaVersion 4).
 - **Per-pair history**: `~/.repost-with-agent/pairs/<id>/posted.jsonl` (NDJSON, append-only).
 - **Per-pair audit**: `~/.repost-with-agent/pairs/<id>/audit.jsonl` (NDJSON, append-only).
-- **Per-pair learnings**: `~/.repost-with-agent/pairs/<id>/learnings.md` (free-form Markdown).
+- **Per-pair learnings**: `~/.repost-with-agent/pairs/<id>/learnings.md` (free-form Markdown prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections per entry).
 - **Backfill resume state**: `~/.repost-with-agent/pairs/<id>/backfill-state.json` (transient).
 - **Cron / launchd logs**: `~/.repost-with-agent/pairs/<id>/logs/cron.log`.
 - **Skill bodies**: `skills/<name>/SKILL.md`.
@@ -110,9 +115,13 @@ If the user runs `/repost-run <id>`:
 
 1. Read `skills/repost-run/SKILL.md` and follow it step by step.
 2. Step 1.5 — read `~/.repost-with-agent/pairs/<id>/learnings.md` for prior
-   quirks before scraping.
+   quirks before scraping. Try the most-recent entry's `### Selectors` and
+   `### Step playbook` sub-sections verbatim FIRST; fall back to
+   `docs/destinations/<platform>.md` only when learnings.md is silent.
 3. Telegram-confirm at the end. Non-negotiable.
-4. Final step — append any newly-discovered quirks to `learnings.md`.
+4. Final step — append any newly-discovered quirks to `learnings.md` using
+   the structured shape (prose + optional `### Selectors` / `### Step
+   playbook` / `### Quirks`).
 
 If the cron job spawned you fresh with `/repost-run all`:
 

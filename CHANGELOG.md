@@ -1,5 +1,115 @@
 # Changelog
 
+## v4.2.0 — 2026-05-01 — Structured learnings.md entries (selectors + playbooks)
+
+**Additive change.** Extends the v4.1.0 learnings.md format so each entry
+can include three OPTIONAL structured sub-sections — `### Selectors`,
+`### Step playbook`, and `### Quirks` — that turn institutional memory
+from free-form prose into an actionable cache the next run can grep, skim,
+and follow verbatim.
+
+(Ethan voice 6083, 2026-05-01: "Make sure the reposting, the instructions
+for the learning also say to add like selectors so it's just easier next
+time to quickly follow the steps that they're having to figure out from
+scratch because that saves a lot of time.")
+
+### Why
+
+v4.1.0 introduced the learnings.md lifecycle but only specified free-form
+prose entries. That captured *context* well ("LinkedIn moved the button")
+but didn't capture *mechanics* in a shape future runs could mechanically
+follow. The next run still had to translate prose into selectors + click
+order, which left most of the time-saving on the table.
+
+v4.2.0 adds an explicit structured shape so each entry doubles as a
+recipe: future runs read the cached selectors + step playbook FIRST and
+fall back to `docs/destinations/<platform>.md` only when learnings.md is
+silent or a cached selector misses. When a cached selector fails, that's
+itself a quirk worth recording (DOM moved again).
+
+### Entry shape
+
+```markdown
+## YYYY-MM-DD HH:MM — <one-line summary>
+
+<2–5 sentences of prose: what you saw, why it matters, implication.>
+
+### Selectors          (optional — STRONGLY preferred when applicable)
+- <label>: `<selector>` (<platform>, <where in flow>)
+
+### Step playbook     (optional — STRONGLY preferred when applicable)
+1. <imperative step using the selectors above>
+
+### Quirks            (optional)
+- <one-line edge case / "skip if X" / timing note>
+```
+
+The three `###` sub-sections are OPTIONAL — omit any with no content
+rather than writing them empty. Free-form prose-only entries stay valid
+(useful for behavioral observations that don't yet have an actionable
+selector). But entries WITHOUT selectors / step playbooks / a sharply-
+described quirk are still considered low-value: the file is for
+actionable deltas, not vague impressions.
+
+### Read-priority for runs
+
+When `repost-run` / `repost-backfill` reads learnings.md at the start of
+a run, the priority is:
+
+1. Most-recent entry's `### Selectors` + `### Step playbook` — try
+   verbatim FIRST.
+2. Most-recent entry's `### Quirks` — apply as guards / "skip if" rules.
+3. Older entries — for superseding context (`Supersedes the YYYY-MM-DD entry.`).
+4. `docs/destinations/<platform>.md` — fall back ONLY when learnings.md
+   is silent, or when a cached selector fails to match the live DOM.
+
+### Changed
+
+- `skills/repost-learnings/SKILL.md` — extended file-format spec with the
+  three optional `###` sub-sections, updated good/bad-entry examples
+  (good entry now shows all three sections), expanded append snippet
+  with both prose-only and full-structured forms, lifecycle step 1
+  spells out the read-priority rule.
+- `templates/learnings.md.template` — placeholder comment block now
+  documents the structured shape with a worked example.
+- `skills/repost-run/SKILL.md` — Step 1.5 explicitly tells the agent
+  to try `### Selectors` + `### Step playbook` verbatim FIRST and fall
+  back to `docs/destinations/<platform>.md` only on miss; Final step
+  documents the structured-entry append shape.
+- `skills/repost-backfill/SKILL.md` — same priority instruction in
+  Step 1.5; Step 9 documents the structured-entry append shape.
+- `docs/state-files.md` — `learnings.md` section now documents the
+  three optional sub-sections + read-priority rule.
+- `docs/destinations/{linkedin,x,bluesky,threads,facebook}.md` — top
+  callout strengthened to "Read order: learnings.md FIRST, this doc
+  second" with the explicit structured-section reference.
+- `README.md`, `CLAUDE.md`, `AGENTS.md`, `INSTRUCTIONS.md` — version
+  bumps + a one-paragraph mention of the structured entry shape and
+  read-priority rule.
+- `.claude-plugin/plugin.json`, `openclaw.plugin.json`, `package.json`
+  — `version` bumped to 4.2.0.
+
+### Preserved
+
+- `pairs.json` schema — unchanged.
+- `posted.jsonl` schema — unchanged.
+- `audit.jsonl` event taxonomy — unchanged.
+- The non-negotiable Telegram-confirm rule.
+- The learnings.md lifecycle (read at start, append at end, mark obsolete
+  via heading edit) — only the entry format inside is extended.
+- All v4.0.0 / v4.1.0 skill names, slash command shapes, install paths,
+  and state-file locations.
+
+### Migration
+
+No migration required. Existing free-form prose entries remain valid
+(the new sub-sections are additive). The first time a run discovers a
+quirk after upgrade, it appends an entry using the new shape; older
+entries stay untouched. The existing `linkedin-to-x` pair's stub
+`learnings.md` had no entries to migrate.
+
+---
+
 ## v4.1.0 — 2026-05-01 — Per-pair learnings.md institutional memory
 
 **Additive change.** Adds a per-pair `learnings.md` file pattern so the

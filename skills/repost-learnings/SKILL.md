@@ -28,7 +28,12 @@ link to it.
 1. **Start of every run** (`repost-run`, `repost-backfill`, the cron-spawned
    subagent): Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it
    exists. Treat it as up-front context — quirks to be aware of before you
-   start scraping or composing.
+   start scraping or composing. **Prioritize the most-recent entry's
+   `### Selectors` and `### Step playbook` sub-sections — try those
+   verbatim FIRST, before falling back to the platform's general
+   `docs/destinations/<platform>.md` hints.** When a cached selector
+   fails (DOM has shifted again), that's itself worth recording as a new
+   entry at the end of this run with updated mechanics.
 2. **During execution**: if you encounter a quirk, gotcha, or unexpected
    DOM / behavior, capture it as a draft note (in your reasoning, or in a
    scratch variable). Don't append to the file mid-run if you can avoid it —
@@ -52,8 +57,21 @@ is an `##` heading with the format:
 ```
 ## YYYY-MM-DD HH:MM — <one-line summary>
 
-<2–5 sentences of detail. What you saw, why it matters, what to do about it
-next time. Be specific about DOM selectors, URLs, or pagination behavior.>
+<2–5 sentences of free-form prose: what you saw, why it matters,
+implication. Keep this short — the actionable "do this next time" detail
+goes into the optional structured sections below, not into the prose.>
+
+### Selectors  (optional)
+- <element label>: `<CSS selector or accessibility path>` (<platform>, <where in flow>)
+- ...
+
+### Step playbook  (optional)
+1. <imperative step using the selectors above>
+2. ...
+
+### Quirks  (optional)
+- <one-line description of an edge case, race condition, or "skip if X">
+- ...
 ```
 
 Obsoleted entries get a suffix on the heading:
@@ -62,8 +80,44 @@ Obsoleted entries get a suffix on the heading:
 ## 2026-04-15 09:30 — Bluesky compose button is in the sidebar [obsoleted 2026-05-12]
 ```
 
-That's all the structure. The body of each entry is free-form Markdown —
-inline code blocks, bullet lists, even a small code snippet are all fine.
+The prose paragraph stays free-form Markdown (inline code, bullet lists,
+small snippets are all fine). The three `###` sub-sections are OPTIONAL,
+appended only when relevant — but **strongly preferred** for any entry
+that captures actionable mechanics, because they give the next run a
+recipe to follow instead of mechanics to re-discover.
+
+### Why the structured sections exist
+
+Free-form prose is good for context ("LinkedIn moved the button"); it's
+bad for mechanics ("here's the exact selector + click order to use next
+time"). Splitting them lets future runs **grep + skim** for the actionable
+parts without re-reading every prose paragraph. (Ethan voice 6083,
+2026-05-01: "Make sure the reposting, the instructions for the learning
+also say to add like selectors so it's just easier next time to quickly
+follow the steps that they're having to figure out from scratch because
+that saves a lot of time.")
+
+### Section guidance
+
+- **`### Selectors`** — one bullet per element. Format:
+  `` `<label>`: `<selector>` (<platform>, <where>) ``. Use whatever
+  selector form your browser MCP can re-use (CSS, ARIA path, text-based
+  locator). When in doubt, prefer ARIA / role-based selectors — they
+  survive cosmetic redesigns better than class chains.
+- **`### Step playbook`** — numbered imperative steps that REFERENCE
+  the selectors above by their label (not by re-quoting the selector
+  string). The next run reads the playbook top-to-bottom and tries the
+  steps verbatim FIRST, falling back to the platform's general
+  `docs/destinations/<platform>.md` only when a step fails.
+- **`### Quirks`** — one-liners for edge cases that don't fit a step
+  ("skip reposts that have a 'Reposted by' header", "modal sometimes
+  needs a 200ms sleep before accepting input", "scroll past the 60th
+  item triggers a 'You're caught up' footer"). Anything the next run
+  needs to *guard against* but that isn't a positive step.
+
+Omit any section that has no content — don't write empty `### Selectors`
+or "n/a" placeholders. An entry with only prose is still valid (e.g., a
+behavioral observation that has no actionable selector yet).
 
 ## What to write down
 
@@ -99,23 +153,58 @@ inline code blocks, bullet lists, even a small code snippet are all fine.
   one-off, leave it out; you can add it later if you see it again.
 - Secrets, tokens, cookies, session data — never. The file is `0644`.
 
-## Good entry example
+## Good entry example (with all three structured sections)
 
 ```markdown
 ## 2026-05-12 14:22 — LinkedIn recent-activity pagination cap dropped to ~60
 
 Backfill run hit the end of `/recent-activity/all/` after ~60 posts loaded
 (was ~100 in the docs). Scrolled 8× and got a "You're caught up" footer
-instead of more posts. Likely a LinkedIn-side change.
+instead of more posts. Likely a LinkedIn-side change. Treat the footer as
+a hard stop and emit `pair.fetch.exhausted` rather than retrying.
 
-Implication: backfill `--max` over 60 will silently stop early without an
-error. The fetch loop should treat the "You're caught up" footer as a
-hard stop and emit `pair.fetch.exhausted` rather than retrying. Already
-hits `pair.dedupe.local` cleanly afterward, so no duplicate publishes —
-but the user should be told the actual count if they asked for more.
+### Selectors
+- Profile feed list: `main ul.feed-shared-update-list` (linkedin, source scrape)
+- Each post item: `ul.feed-shared-update-list > li` (linkedin, source scrape)
+- Post permalink anchor: `a.update-components-actor__meta-link[href*="/feed/update/"]` (linkedin, per-post)
+- Reposted-by header (skip these): `[data-test-reshared-mini-update-v2-header]` (linkedin, per-post)
+- "You're caught up" footer: `div[data-finite-scroll-hotkey-context="FEED"] >> text="You're all caught up"` (linkedin, end-of-feed marker)
+- Compose modal textbox: `div[role="textbox"][contenteditable="true"]` (linkedin, share modal)
+- Compose modal Post button: `button.share-actions__primary-action` (linkedin, share modal)
+
+### Step playbook
+1. Navigate to `<source.url>` (`/in/<handle>/recent-activity/all/`).
+2. Wait for `Profile feed list` to render.
+3. Scroll the feed container 1× and wait 600ms for new items to mount.
+4. For each visible `Each post item`:
+   - If it contains a `Reposted-by header`, SKIP it (don't repost others' content).
+   - Else extract `Post permalink anchor`'s `href` (canonical URL) + the post body text.
+5. Repeat scroll until either (a) you have ≥ `--max` non-duplicate candidates, or
+   (b) the `"You're caught up" footer` appears — that's a hard stop.
+6. Filter the collected candidates against `posted.jsonl` (local dedupe).
+
+### Quirks
+- LinkedIn virtualizes the feed aggressively — scrape posts as you scroll, do not
+  rely on all loaded posts staying in the DOM.
+- `lnkd.in` shorteners in the post body must be expanded via `repost-url-expand`
+  before publish, but during scrape leave them as-is (don't resolve mid-scrape).
+- Backfill `--max` over ~60 will silently stop early once the footer appears;
+  the fetch loop should treat that as exhaustion, not failure.
 ```
 
-## Bad entry example (do NOT write entries like this)
+The prose at the top gives context. The selectors give the next run a
+ready-made reference. The playbook gives a recipe the next run can follow
+verbatim. The quirks block surfaces edge cases that don't fit a step.
+
+Note that this entry intentionally **DUPLICATES some material** (selectors)
+that's also in `docs/destinations/linkedin.md`. That's fine: the per-pair
+file wins on conflict (it reflects the most-recent observed behavior),
+and having the selectors in one grep-able place per pair beats forcing
+the next run to cross-reference two files.
+
+## Bad entry examples (do NOT write entries like these)
+
+### Heartbeat (zero signal)
 
 ```markdown
 ## 2026-05-12 14:25 — Run worked
@@ -124,16 +213,33 @@ The run succeeded. Posted 1 item from LinkedIn to X. Telegram confirmed.
 Nothing weird happened.
 ```
 
-Why it's bad: zero signal. The audit log already records `pair.publish.success`
-+ `pair.publish.notify.success`. A future run gains nothing from reading this
-entry. A learnings file full of "nothing weird happened" entries actively
-slows future runs because the agent has to read past the noise to find the
-real quirks.
+Why it's bad: zero signal. The audit log already records
+`pair.publish.success` + `pair.publish.notify.success`. A future run gains
+nothing from reading this entry.
 
-If a run was uneventful, write nothing. The file is for deltas, not
-heartbeats.
+### Vague prose with no actionable mechanics
+
+```markdown
+## 2026-05-12 14:25 — LinkedIn was being slow today
+
+The compose modal took a while to open. Eventually it worked.
+```
+
+Why it's bad: no selector, no timing number, no step. The next run can't
+do anything with "a while". If the issue was reproducible, the entry
+should pin down the selector that was slow, the rough delay observed, and
+add a `### Step playbook` step that adds a sleep there.
+
+If a run was uneventful — write nothing. The file is for actionable
+deltas, not heartbeats. **Entries without selectors / step playbooks / or
+a sharply-described quirk are still considered low-value** even when
+they're not pure heartbeats: free-form "the page was weird" prose is
+what we're trying to avoid. Either pin down the actionable detail or
+skip the entry.
 
 ## Append snippet (Bash)
+
+Minimum (prose-only entry):
 
 ```bash
 PAIR_ID="<id>"
@@ -142,9 +248,36 @@ TS="$(date -u +'%Y-%m-%d %H:%M')"
 SUMMARY="<one-line summary>"
 {
   printf '\n## %s — %s\n\n' "$TS" "$SUMMARY"
-  printf '%s\n' "<2–5 sentences of detail.>"
+  printf '%s\n' "<2–5 sentences of prose.>"
 } >> "$LEARNINGS"
 ```
+
+Full (with structured sections — preferred whenever the entry has
+actionable mechanics):
+
+```bash
+PAIR_ID="<id>"
+LEARNINGS="$HOME/.repost-with-agent/pairs/$PAIR_ID/learnings.md"
+TS="$(date -u +'%Y-%m-%d %H:%M')"
+SUMMARY="<one-line summary>"
+{
+  printf '\n## %s — %s\n\n' "$TS" "$SUMMARY"
+  printf '%s\n\n' "<2–5 sentences of prose: what you saw, why it matters, implication.>"
+
+  printf '### Selectors\n'
+  printf -- '- <label>: `<selector>` (<platform>, <where>)\n'
+  printf -- '- ...\n\n'
+
+  printf '### Step playbook\n'
+  printf '1. <imperative step using the selectors above>\n'
+  printf '2. ...\n\n'
+
+  printf '### Quirks\n'
+  printf -- '- <one-line edge case>\n'
+} >> "$LEARNINGS"
+```
+
+Omit any `###` block that has no content rather than writing it empty.
 
 Always use `>>`. Never rewrite the file. The only allowed edit to historical
 entries is appending `[obsoleted YYYY-MM-DD]` to a heading — and even that

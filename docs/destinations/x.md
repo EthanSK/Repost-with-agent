@@ -7,10 +7,18 @@ destination).
 > **These hints are STARTING points.** The pair-level
 > `~/.repost-with-agent/pairs/<id>/learnings.md` may extend or override
 > anything here as the agent discovers quirks specific to Ethan's account or
-> a recent X UI change. Always read the pair's `learnings.md` before
-> applying these defaults — the per-pair file wins on conflict, since it
-> reflects the most recent observed behavior. See
-> `skills/repost-learnings/SKILL.md`.
+> a recent X UI change.
+>
+> **Read order: learnings.md FIRST, this doc second.** Specifically, scan
+> the most-recent learnings entry's `### Selectors` and `### Step
+> playbook` sub-sections and try them verbatim before falling back to the
+> defaults below. The per-pair file wins on conflict — it reflects the
+> most recent observed behavior. Only fall back to this doc when
+> learnings.md is silent on the step you need, or when a cached selector
+> fails to match the live DOM (in which case capture the updated
+> selector in a new learnings entry at end of run). See
+> `skills/repost-learnings/SKILL.md` for the entry shape + read-priority
+> rules.
 
 ## Auth
 

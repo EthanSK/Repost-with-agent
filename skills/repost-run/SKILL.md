@@ -43,22 +43,49 @@ substitute curl/Playwright/etc.
 Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it exists. Treat the
 file as up-front context — it accumulates platform quirks, account-specific
 DOM changes, pagination caps, and rate-limit signatures the agent has
-discovered on prior runs. Examples of what you might find:
+discovered on prior runs.
 
-- "Bluesky's compose button moved from the top-right `+` to a sidebar 'New
-  post' button on mobile-narrow viewports."
-- "X's profile-page recent-posts now require scrolling 4× before old posts
-  appear."
-- "LinkedIn's `lnkd.in/` shortener sometimes redirects to a login wall —
-  fall back to `canonicalUrl` in that case."
+**Priority order — read this carefully:**
 
-Apply the relevant quirks BEFORE you start scraping or composing. If the
-file doesn't exist or contains only the placeholder stub, proceed without
-prior context — and seed the file as you discover quirks during this run.
+1. **First, scan the most-recent entry's `### Selectors` and `### Step
+   playbook` sub-sections.** Those are a recipe the prior run already
+   verified worked. Use them VERBATIM in steps 3 (scrape) and 8 (publish)
+   below — they save the most time when correct, because you don't have
+   to re-discover the platform's DOM from scratch.
+2. **Second, scan the entry's `### Quirks` block** for edge cases to
+   guard against (e.g. "skip reposts that have a 'Reposted by' header",
+   "modal needs 200ms sleep before accepting input", "scroll past 60th
+   item triggers 'You're caught up' footer"). These usually wrap or
+   gate the playbook steps.
+3. **Third, scan older entries** for any superseding context the most
+   recent entry references (`Supersedes the YYYY-MM-DD entry.`).
+4. **Fall back to `docs/destinations/<platform>.md` ONLY when learnings.md
+   is silent on the step you're about to do**, OR when a cached selector
+   from learnings.md fails to match the live DOM (the platform changed
+   again).
+
+When a cached selector / step FAILS, that's a new quirk worth recording
+in the **Final step** below — treat the failure as evidence the DOM has
+shifted again, and capture the updated mechanics.
+
+If the file doesn't exist or contains only the placeholder stub, proceed
+using `docs/destinations/<platform>.md` defaults — and seed the file with
+selectors + a step playbook as you discover what works during this run.
+
+Examples of what you might find in a learnings.md entry:
+
+- A `### Selectors` block listing the actual CSS selectors that worked
+  for the share modal textbox + Post button on the user's account.
+- A `### Step playbook` numbering the click-and-wait sequence the prior
+  run used to publish successfully.
+- A `### Quirks` block flagging "Bluesky's compose button moved from the
+  top-right `+` to a sidebar 'New post' button on mobile-narrow viewports"
+  or "X's profile-page recent-posts require scrolling 4× before old
+  posts appear".
 
 Track newly-discovered quirks in your reasoning (don't append mid-run; batch
 the writes at the **Final step** below to avoid corrupting the file on a
-crash). Full rules: `skills/repost-learnings/SKILL.md`.
+crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 
 ## Step 2 — Decide what we're allowed to do
 
@@ -233,13 +260,31 @@ Print to the user (in the agent transcript, NOT Telegram):
 
 Before exiting, flush any quirks you tracked during this run to
 `~/.repost-with-agent/pairs/<id>/learnings.md`. Use `>>` via Bash —
-append-only. Each entry:
+append-only. Each entry uses the structured shape:
 
 ```
 ## YYYY-MM-DD HH:MM — <one-line summary>
 
-<2–5 sentences: what you saw, why it matters, what to do next time.>
+<2–5 sentences of prose: what you saw, why it matters, implication.>
+
+### Selectors          (optional — STRONGLY preferred when you have any)
+- <label>: `<selector>` (<platform>, <where in flow>)
+
+### Step playbook     (optional — STRONGLY preferred when you have any)
+1. <imperative step using the selectors above>
+2. ...
+
+### Quirks            (optional)
+- <one-line edge case>
 ```
+
+The `###` sub-sections are optional but **strongly preferred** whenever
+you have actionable mechanics — they let the next run grep + skim for
+selectors and follow your playbook verbatim instead of re-discovering
+the DOM. If a cached selector from a prior entry FAILED in this run,
+record the new working selector in your `### Selectors` block and add a
+quirk like `Supersedes the YYYY-MM-DD entry — DOM moved.` (and edit the
+older entry's heading to add ` [obsoleted YYYY-MM-DD]`).
 
 If a fresh observation contradicts an older entry, do NOT delete the older
 one. Use `Edit` to add ` [obsoleted YYYY-MM-DD]` to the older heading, then
@@ -248,7 +293,8 @@ supersedes.
 
 If nothing weird happened — write nothing. The file is for deltas, not
 heartbeats. See `skills/repost-learnings/SKILL.md` for the full
-"signal vs noise" rules + good/bad entry examples.
+"signal vs noise" rules + the good/bad entry example showing all three
+optional sub-sections.
 
 ## Cron / launchd context
 
