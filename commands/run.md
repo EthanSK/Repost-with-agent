@@ -13,13 +13,21 @@ Live publish (approval-gated; only when the user explicitly authorizes it):
 repost-with-agent pair post <id> --approve
 ```
 
+Backfill (newest-first walk-back through historical posts):
+
+```bash
+repost-with-agent pair backfill <id> --dry-run        # see the plan
+repost-with-agent pair backfill <id> --allow-publish  # actually publish
+```
+
 `pair post` always:
 
-1. re-runs preview,
+1. emits a `fetch-source` agent-task and waits for your scrape result,
 2. re-checks dedupe at post-time (race-safe),
 3. refuses on `preview-only` mode,
 4. refuses without `--approve`,
-5. blocks `uncertain` matches unless `--allow-uncertain` is also passed.
+5. blocks `uncertain` matches unless `--allow-uncertain` is also passed,
+6. emits a `post-to-destination` agent-task; you drive the browser to publish; CLI captures the result, appends to `posted.jsonl`, fires Telegram notify.
 
 Do not run `pair post --approve` without explicit current-conversation user authorization.
 

@@ -6,7 +6,9 @@ Typical flow:
 
 1. `repost-with-agent pair list`
 2. `repost-with-agent pair show <id>`
-3. `repost-with-agent pair create ...`
+3. `repost-with-agent pair create --source-platform <linkedin|x|bluesky|threads|facebook> --destination-platform <linkedin|x|bluesky|threads|facebook> --source-url ... --destination-account ...`
+
+v3.0.0 architecture: this CLI is a thin orchestrator over JSON state. The agent (Claude Code / OpenClaw) drives the user's logged-in browser via its own browser MCP. There is no API path and no Playwright in this codebase.
 
 ## Telegram-confirm every successful publish — non-negotiable
 

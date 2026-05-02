@@ -1,68 +1,51 @@
-# Migration from linkedin-to-x
+# Migration history
 
-The old project was a hardcoded LinkedIn → X/Facebook cross-poster. Repost-with-agent generalizes that into saved source→destination pairs.
+> **For migrating from v2 to v3.0.0** (the agent-driven rewrite, 2026-05-01) → see [migration-v2-to-v3.md](migration-v2-to-v3.md).
+>
+> This page documents the older v1 (`linkedin-to-x`) → v2 (`repost-with-agent`, pair-based) migration. v3 dropped the explicit `migrate linkedin-to-x` CLI verb because v2 has been the public surface for several months. If you still have a v1 install, run `repost-with-agent` v2.6.0 first to migrate, then upgrade to v3.
 
-## Old locations
+## v1 (linkedin-to-x) → v2 (repost-with-agent)
+
+The original project was a hardcoded LinkedIn → X/Facebook cross-poster. v2 generalized that into saved source → destination pairs.
+
+### Old locations
 
 ```text
 ~/Projects/linkedin-to-x       # old local repo path, if present
 ~/.linkedin-to-x               # old runtime state
 ```
 
-The local repo folder should be renamed to something like:
-
-```text
-~/Projects/Repost-with-agent
-```
-
-The public GitHub remote may still point at `EthanSK/linkedin-to-x` until the public repo rename step.
-
-## Old state to preserve
+### Old state to preserve
 
 - `posted.md` — old X posting tracker.
 - `posted-facebook.json` if present.
 - `x-tokens.json` token location/reference; do not copy secrets into repo.
 - logs: `sync.log`, `loop.log`, launchd logs.
 
-Deprecated legacy commands continue to use `~/.linkedin-to-x/posted.md` by default so old dedupe history is preserved. New pair workflows use `~/.repost-with-agent/`.
+### v1 → v2 migration command (deprecated in v3)
 
-## New state location
-
-```text
-~/.repost-with-agent/
-  pairs.json
-  pairs/<pair-id>/state.json
-  pairs/<pair-id>/posted.jsonl
-  pairs/<pair-id>/audit.jsonl
-  pairs/<pair-id>/learnings.md
-```
-
-## Migration command
+The `repost-with-agent migrate linkedin-to-x` verb shipped in v2 imported `posted.md` snippets into the v2 `pairs/<id>/posted.jsonl` shape. v3.0.0 removed the verb (it was a one-shot tool only relevant to legacy v1 installs). If you need to import legacy `posted.md` history into a v3 pair, do it manually:
 
 ```bash
-repost-with-agent migrate linkedin-to-x
+# Pseudocode — the format conversion is straightforward.
+# v1 format: ID + datestamp + snippet, one per line.
+# v3 format: NDJSON entry per line in ~/.repost-with-agent/pairs/<id>/posted.jsonl.
 ```
 
-Expected behavior:
-
-1. create a default `linkedin-to-x` pair;
-2. import old posted snippets/ids into per-pair posted history;
-3. preserve old files untouched;
-4. write a migration audit event;
-5. report any auth/token paths that need manual verification.
+Or check out the v2.6.0 tag, run `repost-with-agent migrate linkedin-to-x`, then upgrade to v3.0.0 (which auto-migrates the v2-shaped `pairs.json`).
 
 ## Known old failure to keep as regression
 
-On 2026-03-24 the old app posted a duplicate to X:
+On 2026-03-24 the v1 app posted a duplicate to X:
 
 ```text
 https://x.com/i/status/2036422890271215716
 ```
 
-The duplicate involved a Producer Player LinkedIn post that was already on X. A later commit fixed the dedupe bug:
+The duplicate involved a Producer Player LinkedIn post that was already on X. A later v1 commit fixed the dedupe bug:
 
 ```text
 9d37108 Fix deduplication bug causing duplicate cross-posts
 ```
 
-Repost-with-agent must preserve a regression test or fixture for duplicate prevention.
+The fix is exercised by `tests/dedupe-regression.js` — the test fixture replicates the v1 entry shape and asserts that re-posting the same content (different URL) produces `decidePreviewStatus: duplicate`. v3.0.0 retains this test untouched.

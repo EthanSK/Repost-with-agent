@@ -1,14 +1,14 @@
 # Repost-with-agent
 
-Preview-first agent reposting. Saved source → destination pairs, persistent history, real dedupe, no stealth, no ban evasion.
+Agent-driven, browser-based reposting. The CLI is a thin orchestrator over JSON state; the agent (Claude Code via `chrome-devtools-mcp`, OpenClaw via its built-in browser tool) drives the user's logged-in browser to do the actual cross-posting.
 
-The agent does the reposting through a logged-in browser profile the user controls. This repo supplies the schema, dedupe, audit logs, learnings, adapters, CLI, and host integrations (Claude Code, OpenClaw, agent-bridge). It is *not* a standalone autonomous social-posting framework.
+v3.0.0 (2026-05-01) is a deliberate strip-and-rewrite. There is **no API path** (no `@atproto/api`, no Threads Graph, no twitter SDK, no facebook-nodejs-business-sdk) and **no Playwright** in `src/`. Platform names (`linkedin`, `x`, `bluesky`, `threads`, `facebook`) are free-form string labels in pair config; the agent reads them at task-execution time and picks the right URL templates and DOM selectors.
 
-The first concrete adapter pair is LinkedIn source → X destination.
+> **The whole project is just instructions for an agent.** (Ethan voice 6016, 2026-05-01.)
 
 ---
 
-> **Important — Telegram-confirm every successful publish — non-negotiable.** Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path (direct API call, scripted action, etc.) you MUST also fire a Telegram confirmation. Silent publishes are a bug. Wire it up once, before the first live publish:
+> **Important — Telegram-confirm every successful publish — non-negotiable.** Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you are an agent operating on this repo and you trigger a publish through any non-CLI path you MUST also fire a Telegram confirmation. Silent publishes are a bug. Wire it up once, before the first live publish:
 >
 > ```bash
 > repost-with-agent notify configure --bot-token <TELEGRAM_BOT_TOKEN> --chat-id <CHAT_ID> --test
@@ -26,7 +26,10 @@ The first concrete adapter pair is LinkedIn source → X destination.
 
 - Node 18+ (`node --version`).
 - macOS / Linux. Windows works but isn't routinely tested.
-- A persistent browser profile dir for the agent to drive Playwright against. Default is `~/.claude/playwright-profile/` for Claude Code, `~/.openclaw/playwright-profile/` for OpenClaw. Override via `PLAYWRIGHT_PROFILE_DIR`.
+- An agent harness with a working browser MCP:
+  - **Claude Code**: `chrome-devtools-mcp` (preferred) or `claude-in-chrome` plugin connected.
+  - **OpenClaw**: built-in browser tool enabled.
+- The user logged into source AND destination platforms inside the agent's persistent browser profile. The agent CANNOT log in for the user.
 
 ### 2. Install
 
@@ -36,35 +39,30 @@ cd Repost-with-agent
 ./scripts/install-for-openclaw.sh    # works for Claude Code too — name is historical
 ```
 
-The script: runs `npm install`, builds the TypeScript, smoke-tests `npx repost-with-agent --version`, creates `~/.repost-with-agent/`, prints the OpenClaw plugin id + skills root.
+The script: runs `npm install` (commander only — no Playwright, no API SDKs), builds the TypeScript, smoke-tests `npx repost-with-agent --version`, creates `~/.repost-with-agent/`, prints the OpenClaw plugin id + skills root.
 
-For Claude Code plugin install, point at `.claude-plugin/plugin.json`:
+For Claude Code plugin install:
 
 ```bash
-# in your Claude Code plugin root or via /plugins:
 ln -s "$PWD/.claude-plugin" ~/.claude/plugins/repost-with-agent
 ```
 
-### 3. Environment variables
+### 3. Wire up Telegram notify (do this FIRST)
 
-Copy `.env.example` to `.env` and fill what you need:
+```bash
+repost-with-agent notify configure --bot-token <TELEGRAM_BOT_TOKEN> --chat-id <CHAT_ID> --test
+repost-with-agent notify status     # MUST report `Resolved source: file` (or `env`)
+```
 
-| Var | Purpose |
-| --- | --- |
-| `LINKEDIN_PROFILE_URL` | The `/recent-activity/all/` URL of the LinkedIn account to mirror. |
-| `PLAYWRIGHT_PROFILE_DIR` | Persistent browser profile path (must already be logged into LinkedIn). |
-| `X_CLIENT_ID` / `X_CLIENT_SECRET` | X OAuth 2.0 PKCE app — only needed if using `repost-with-agent auth` for API-based posting. |
-| `X_CHAR_LIMIT` | `25000` for X Premium, `280` otherwise. |
-| `REPOST_DATA_DIR` | Override `~/.repost-with-agent` if needed. |
-| `FACEBOOK_*` | Optional, deprecated path. Default off. |
+If the test message doesn't land, fix this BEFORE flipping any pair to live. Without it, every live publish prints a loud WARN and writes a `pair.publish.notify_skipped_unconfigured` audit event but the post WILL still go out — that's a project bug, not a feature.
 
 ### 4. Persistent browser login (one-time, human required)
 
-The agent CANNOT log in for the user. The persistent profile must already have valid sessions for both source and destination. Have the human:
+The agent CANNOT log in for the user. Have the human:
 
-1. Open the Playwright profile dir manually (`npx playwright open --user-data-dir=$PLAYWRIGHT_PROFILE_DIR https://www.linkedin.com/`).
-2. Log into LinkedIn (handle 2FA / CAPTCHA).
-3. In the same profile, log into `https://x.com/`.
+1. Open the agent's persistent browser profile.
+2. Log into the source platform (LinkedIn / X / Bluesky / Threads / Facebook). Handle 2FA / CAPTCHA inline.
+3. In the same profile, log into the destination platform.
 
 Stop and ping the user if either login challenge appears at runtime. **Never bypass CAPTCHA / 2FA / phone verification.**
 
@@ -72,125 +70,99 @@ Stop and ping the user if either login challenge appears at runtime. **Never byp
 
 ```bash
 npx repost-with-agent pair create \
-  --name "LinkedIn to X" \
-  --source-type linkedin-profile-activity \
+  --source-platform linkedin \
   --source-url "https://www.linkedin.com/in/<you>/recent-activity/all/" \
-  --destination-type x-account \
-  --destination-account "@<you>"
+  --destination-platform x \
+  --destination-account "@<your-handle>" \
+  --run-mode listen-for-future \
+  --mode preview-only
 ```
 
-New pairs default to `mode: preview-only` and `enabled: false`. This is intentional. The agent must run a successful preview before flipping mode to `approval-required` (today: edit `~/.repost-with-agent/pairs.json` directly; a dedicated `pair edit` command is a future addition).
+New pairs default to `mode: preview-only` and `enabled: false`. This is intentional. Run a successful preview before flipping mode to `approval-required` or `live-approved`.
 
-### 6. Dedupe baseline import (one-time, if migrating)
+Supported `--source-platform` and `--destination-platform` values: `linkedin`, `x`, `bluesky`, `threads`, `facebook`. The fields are free-form strings, so adding a new platform is a matter of writing `docs/destinations/<platform>.md` and teaching the agent the URL templates.
 
-If the user previously ran the legacy `linkedin-to-x` tool, import its history so old posts don't re-publish:
-
-```bash
-npx repost-with-agent migrate linkedin-to-x \
-  --source-url "https://www.linkedin.com/in/<you>/recent-activity/all/" \
-  --destination-account "@<you>"
-```
-
-This creates a *separate* legacy pair, imports `~/.linkedin-to-x/posted.md` into per-pair `posted.jsonl`, and leaves the old files untouched. Verify with:
-
-```bash
-npx repost-with-agent pair history linkedin-to-x
-```
-
-The dedupe layer matches on `sourceItemId` → `canonicalUrl` → `contentHash`. All three must miss for an item to be considered new. See `src/core/dedupe.ts`.
-
-### 7. Dry run / preview
+### 6. Preview the pair
 
 ```bash
 npx repost-with-agent pair preview <pair-id>
 ```
 
-Outputs auth health, candidate list, drafted post text, dedupe decision (`new` / `duplicate` / `uncertain`), and any warnings. Posts nothing. Audit-logs to `~/.repost-with-agent/pairs/<pair-id>/audit.jsonl`.
+What happens:
 
-### 8. Approval-required publish
+1. CLI loads the pair config.
+2. Orchestrator emits a `[agent-task fetch-source ...]` banner. The task JSON is also written to `~/.repost-with-agent/agent-tasks/<correlation_id>.task.json`.
+3. The agent (you) reads the task and uses its browser MCP to navigate to `pair.source.url`, scroll until enough posts load, scrape post text + canonical URL.
+4. The agent writes a `fetch-source-result` to `<correlation_id>.result.json`. The orchestrator picks it up.
+5. CLI prints the draft + dedupe decision + warnings.
 
-The agent never auto-publishes. To live-publish the next eligible candidate:
+Posts nothing. Audit-logs to `~/.repost-with-agent/pairs/<pair-id>/audit.jsonl`.
+
+### 7. Approval-required publish
 
 ```bash
+npx repost-with-agent pair edit <pair-id> --mode live-approved --enable
 npx repost-with-agent pair post <pair-id> --approve
 ```
 
-Mode must be `approval-required` or `live-approved`. The command re-runs preview, re-checks dedupe at post-time (race-safe), and refuses if the top candidate is `uncertain` unless you also pass `--allow-uncertain`. On success it appends to `posted.jsonl` with `sourceItemId`, `canonicalUrl`, `contentHash`, `destinationId`, `postedAt`, `summary`.
+The command re-runs preview, re-checks dedupe at post-time (race-safe), refuses if the top candidate is `uncertain` unless you also pass `--allow-uncertain`, and refuses on `preview-only` mode. On success it appends to `posted.jsonl`, fires Telegram notify, and emits `pair.publish.success`.
 
-### 9. Telegram-on-publish notifier (mandatory before first live run)
+Drafts that exceed the destination's char cap (X=280, Bluesky=300, Threads=500, Facebook=63206, LinkedIn=3000) are blocked at publish time by default. Pass `--overlength-strategy truncate` to opt in to smart truncation (sentence-boundary / word-boundary / hard-cut + ellipsis).
 
-**Telegram-confirm every successful publish — non-negotiable.** Wire this up once per machine before flipping any pair to live. The CLI fires a Telegram message immediately after every confirmed publish (manual `pair post --approve`, `pair scheduled-run --allow-publish`, `pair backfill --allow-publish`). Silent publishes are a project bug.
-
-```bash
-repost-with-agent notify configure \
-  --bot-token <TELEGRAM_BOT_TOKEN> \
-  --chat-id <CHAT_ID> \
-  --test
-```
-
-`--test` sends a one-off "wired up" message so you can confirm delivery before relying on it.
-
-Config sources (priority order):
-
-1. `~/.repost-with-agent/notify.json` (written with mode `0600` because the bot token is sensitive).
-2. Env vars `REPOST_TELEGRAM_BOT_TOKEN` + `REPOST_TELEGRAM_CHAT_ID` (fallback for CI / cron environments).
-
-If neither is set, every successful publish prints a loud `WARN` to stderr **and** writes a `pair.publish.notify_skipped_unconfigured` audit event so the omission is impossible to miss.
-
-Audit events emitted alongside the existing `pair.publish.success`:
-
-- `notify.publish.success` — Telegram delivered.
-- `notify.publish.failure` + `pair.publish.notify_failed` — Telegram HTTP / network error. Publish itself stays successful; this is non-fatal but means Ethan didn't get the ping.
-- `pair.publish.notify_skipped_unconfigured` — no notify config found.
-
-Inspect / re-test:
+### 8. Backfill (newest-first walk-back)
 
 ```bash
-repost-with-agent notify status        # masked token + resolved source
-repost-with-agent notify test          # send a one-off test notify
+npx repost-with-agent pair backfill <pair-id> --pages 2 --max 20 --interval-minutes 10 --dry-run
+npx repost-with-agent pair backfill <pair-id> --pages 2 --max 20 --interval-minutes 10 --allow-publish
 ```
 
-### 10. Sanity checklist before handing back to the user
+v3.0.0 ordering: **newest-first** (Ethan voice 6021). Cross-state dedupe runs against both `posted.jsonl` AND the destination platform itself (via a `check-destination` agent task). Idempotent restart — the resume state file lets a killed backfill pick up where it left off. See [docs/WORKFLOW.md](docs/WORKFLOW.md).
+
+### 9. Sanity checklist before handing back to the user
 
 - [ ] `npx repost-with-agent pair list` shows the new pair.
 - [ ] `npx repost-with-agent pair preview <id>` succeeds without auth errors.
 - [ ] `~/.repost-with-agent/pairs/<id>/posted.jsonl` exists (or is empty if first run).
 - [ ] `audit.jsonl` has a `pair.created` and `pair.preview` entry.
-- [ ] **`repost-with-agent notify status` reports `source: file` (or `env`), not `none`. Required before any live publish — see §9.**
-- [ ] Cron / launchd / OpenClaw schedule (if requested) is registered with `max_items_per_run: 1` and `approval: manual` unless the user explicitly asked for live.
+- [ ] **`repost-with-agent notify status` reports `source: file` (or `env`), not `none`.**
+- [ ] Cron / launchd / OpenClaw schedule (if requested) is registered with `--allow-publish` only when the user explicitly authorizes live posting.
 
 ---
+
+## v3.0.0 architecture in two paragraphs
+
+The CLI is a thin orchestrator over `~/.repost-with-agent/pairs.json`, per-pair `posted.jsonl`, and an audit log. The orchestrator emits typed `AgentTask` JSON (kinds: `fetch-source`, `post-to-destination`, `check-destination`) and consumes typed `AgentResult` JSON. The agent fulfils each task by driving the user's logged-in browser via its own browser MCP. Tasks are delivered via stdout banners + filesystem inbox at `~/.repost-with-agent/agent-tasks/`, OR via an in-process callback (used by tests + inline-driven CLI flows).
+
+Two run-modes (Ethan voice 6021): **`backfill`** walks back through historical posts newest-first; **`listen-for-future`** runs as a continuous tail via the host scheduler (`pair scheduled-run`). Both modes share the same agent-task contract; only the orchestration loop differs. Drafts pass through a fail-soft URL expander before publish (5-hop, 5-second, lnkd.in / t.co / bit.ly / etc.) — see [docs/url-expander.md](docs/url-expander.md).
+
+Full layer model: [docs/architecture.md](docs/architecture.md). Per-platform DOM hints: [docs/destinations/](docs/destinations/).
 
 ## Terminology
 
 | Term | Meaning |
 | --- | --- |
-| **Pair** | A saved (source, destination, policy, schedule) record stored in `~/.repost-with-agent/pairs.json`. Identified by a slug like `linkedin-to-x`. |
-| **Source** | Where content is fetched from. Currently: `linkedin-profile-activity`. The source adapter scrapes via the persistent Playwright profile. |
-| **Destination** | Where content is published. Currently: `x-account`. The destination adapter uses X OAuth 2.0 (PKCE) tokens stored in `~/.repost-with-agent/x-tokens.json`. |
-| **Adapter** | The thin per-platform layer that exposes `test()`, `fetchCandidates()`, `preview()`, `publish()`. Lives under `src/adapters/sources/` and `src/adapters/destinations/`. Add a new platform = add a new adapter. |
-| **Preview** | Read-only run: auth check + candidate fetch + draft + dedupe decision. Posts nothing. Always idempotent. |
-| **Approve** | A human / authorized agent setting `--approve` (and optionally `--allow-uncertain`) on `pair post`. Without it the orchestrator returns `needs-approval` and writes nothing. |
-| **Publish** | The actual destination call. Only happens when (a) mode is not `preview-only`, (b) `--approve` is set, (c) dedupe re-check at post-time is clean, (d) destination auth health is `ok`. |
-| **`posted.jsonl`** | Per-pair history at `~/.repost-with-agent/pairs/<id>/posted.jsonl`. One JSON line per published item. Schema: `sourceItemId`, `canonicalUrl`, `contentHash`, `destinationType`, `destinationId`, `postedAt`, `summary`. The dedupe layer reads this on every preview / post. |
-| **`audit.jsonl`** | Per-pair audit log at `~/.repost-with-agent/pairs/<id>/audit.jsonl`. Records every `pair.preview`, `pair.publish.*`, `pair.created`, etc. event. Useful for debugging duplicates and run failures. |
-| **Dedupe baseline** | The set of `posted.jsonl` entries an agent / migration has loaded into the pair before its first live run. Critical: any new candidate with a matching `sourceItemId`, `canonicalUrl`, or normalized `contentHash` is rejected before the destination call. |
-| **`accountHint`** | Human-readable destination identifier (e.g. `@example`) stored on the pair. Not the auth credential — auth lives in `authRef` plus the OAuth token store. |
-| **Pair mode** | One of `preview-only` (default; refuses to publish), `approval-required` (publishes only with explicit `--approve`), `live-approved` (publishes with `--approve`; reserved for trusted operator-driven runs). |
-| **Workspace** | An optional user-owned directory created by `scripts/init_repost_with_agent_workspace.py`. Holds `user-setup.json`, `queue.jsonl`, `state.json`, `logs/`. Use this when you want queue-driven runs instead of pair-driven runs. |
-| **Run policy** | Schedule + concurrency knobs on a pair or workspace: `max_items_per_run`, `min_interval_minutes`, `approval`, `mode`. Read by the host scheduler, not by the CLI itself. |
-| **Learnings** | A free-form Markdown file at `~/.repost-with-agent/pairs/<id>/learnings.md` loaded before every preview / run. Record duplicate patterns, formatting quirks, platform cautions there. |
-
----
+| **Pair** | A saved (source platform, destination platform, policy, schedule, run-mode) record stored in `~/.repost-with-agent/pairs.json`. Identified by a slug like `linkedin-to-x`. |
+| **Source platform** | Free-form string label (e.g. `linkedin`, `x`, `bluesky`). The agent reads it and picks the right URL templates / DOM selectors. |
+| **Destination platform** | Same as above, on the publish side. |
+| **Run mode** | `backfill` (walk-back, newest-first) or `listen-for-future` (continuous tail via host scheduler). |
+| **Pair mode** | One of `preview-only` (default; refuses to publish), `approval-required` (publishes only with explicit `--approve`), `live-approved` (publishes with `--approve`; required for unattended scheduled runs). |
+| **Agent task** | A typed JSON message the CLI hands to the agent (`fetch-source`, `post-to-destination`, `check-destination`). Each carries a `correlation_id`; the agent echoes it back in the matching `AgentResult`. |
+| **Preview** | Read-only run: emit `fetch-source` task, consume result, dedupe-check, build draft. Posts nothing. Always idempotent. |
+| **Approve** | A human / authorized agent setting `--approve` on `pair post`. Without it the orchestrator returns `needs-approval` and writes nothing. |
+| **Publish** | The actual destination call (a `post-to-destination` agent task). Only happens when (a) mode is not `preview-only`, (b) `--approve` is set, (c) dedupe re-check at post-time is clean, (d) overlength check passes. |
+| **`posted.jsonl`** | Per-pair history at `~/.repost-with-agent/pairs/<id>/posted.jsonl`. One JSON line per published item. The dedupe layer reads this on every preview / post. |
+| **`audit.jsonl`** | Per-pair audit log. Records every `pair.preview`, `pair.publish.*`, `pair.created`, `pair.scheduled.*`, `pair.backfill.*` event. |
+| **URL expander** | Pre-publish helper that follows shortener redirects (lnkd.in / t.co / bit.ly / etc.) up to 5 hops with a 5-second per-hop timeout. Fail-soft. |
+| **Learnings** | A free-form Markdown file at `~/.repost-with-agent/pairs/<id>/learnings.md` loaded before every preview / run. |
 
 ## Principles
 
 - Preview first. New pairs default to `preview-only`.
 - User controlled. No hidden posting, no stealth, no CAPTCHA / 2FA bypass.
-- Official APIs where possible.
-- Agent-operated browser flows where APIs are unavailable, using a persistent profile the user controls.
+- Agent's browser MCP > custom Playwright stack. The same logged-in profile the user maintains for ad-hoc browsing IS the profile the reposting tool uses.
+- No platform API SDKs. The whole point of v3 is delegation to the agent's browser.
 - Multiple saved pairs with persistent history, audit logs, and learnings loaded every run.
-- Usable through OpenClaw or Claude Code as the operator, without making the project about agent infrastructure.
+- Usable through Claude Code or OpenClaw without the project becoming an "agent framework".
 
 ## Install
 
@@ -205,99 +177,48 @@ Or use the one-shot installer:
 ./scripts/install-for-openclaw.sh
 ```
 
-The public CLI is:
+The CLI is:
 
 ```bash
 npx repost-with-agent --help
 ```
 
-Legacy alias still works:
-
-```bash
-npx linkedin-to-x --help
-```
-
 ## Runtime state
-
-Public repo files stay in the repo. Runtime state stays outside it:
 
 ```text
 ~/.repost-with-agent/
-  pairs.json
-  x-tokens.json
-  notify.json                 # Telegram-on-publish config (mode 0600)
+  pairs.json                                # All pair configs
+  pairs.json.v2.bak                         # One-shot v2 → v3 backup (only if migration ran)
+  notify.json                               # Telegram bot token + chat id (mode 0600)
+  agent-tasks/<correlation_id>.task.json     # CLI → agent
+  agent-tasks/<correlation_id>.result.json   # agent → CLI
   pairs/<pair-id>/
     audit.jsonl
     drafts.jsonl
     findings.jsonl
     posted.jsonl
     state.json
+    backfill-state.json                     # Resume state during a backfill
     learnings.md
+    logs/                                   # launchd stdout / stderr
 ```
-
-Legacy runtime state stays at `~/.linkedin-to-x/`; migration imports from it without deleting or archiving it.
-
-## Agent workspace template
-
-For queue-based agent runs, create a user-owned workspace outside the repo:
-
-```bash
-python3 scripts/init_repost_with_agent_workspace.py ~/repost_with_agent_workspace
-```
-
-That creates:
-
-```text
-repost_with_agent_workspace/
-  user-setup.json   # accounts, browser profile, target platforms, publish/run policy
-  queue.jsonl       # one queued repost item per line
-  state.json        # completed/drafted/blocked/failed/skipped tracking
-  logs/             # concise proof and run notes
-```
-
-Default workspace policy is manual / approval-first: the agent may prepare previews / drafts, but must stop before public posting unless the current request and setup explicitly authorize live posting.
 
 ## Pair commands
 
 ```bash
-npx repost-with-agent pair create ...      # see Agent setup guide §5
+npx repost-with-agent pair create --source-platform <p> --destination-platform <p> ...
 npx repost-with-agent pair list
 npx repost-with-agent pair show <id>
 npx repost-with-agent pair preview <id>
 npx repost-with-agent pair history <id>
-npx repost-with-agent pair post <id> --approve [--allow-uncertain]
+npx repost-with-agent pair post <id> --approve [--allow-uncertain] [--overlength-strategy truncate]
 npx repost-with-agent pair backfill <id> --max 20 --pages 2 --interval-minutes 10 \
-    [--overlength-strategy skip|truncate]
-                                           # plan-only by default; pass
-                                           # --allow-publish to live-publish a
-                                           # backfill batch (requires
-                                           # mode=live-approved). Cross-state
-                                           # dedupe against both posted.jsonl
-                                           # AND destination history.
-                                           # --overlength-strategy controls
-                                           # what happens when a draft exceeds
-                                           # the destination's char cap (X=280):
-                                           #   skip (default; drops the
-                                           #     candidate at plan time, audit
-                                           #     event pair.backfill.skipped_overlength)
-                                           #   truncate (smart-shorten at
-                                           #     sentence/word boundary +
-                                           #     ellipsis, audit event
-                                           #     pair.backfill.truncated +
-                                           #     truncated:true on publish.end)
-                                           # See docs/WORKFLOW.md "Backfill
-                                           # mode".
+    [--allow-publish] [--overlength-strategy skip|truncate]
+npx repost-with-agent pair scheduled-run <id> [--allow-publish] [--json]
+npx repost-with-agent pair schedule <id> [--apply launchd] [--allow-publish]
+npx repost-with-agent pair unschedule <id>
+npx repost-with-agent pair edit <id> --mode <m> --run-mode <m> --schedule-kind <k> ...
 ```
-
-## X auth
-
-If you want to prepare X OAuth2 tokens for live posting:
-
-```bash
-npx repost-with-agent auth
-```
-
-Tokens stored in `~/.repost-with-agent/x-tokens.json`. If new tokens are absent, the tool also checks the legacy location `~/.linkedin-to-x/x-tokens.json`.
 
 ## Notify commands
 
@@ -307,26 +228,26 @@ npx repost-with-agent notify status
 npx repost-with-agent notify test [--pair-id <id>]
 ```
 
-**Telegram-confirm every successful publish — non-negotiable.** See §9 of the Agent setup guide for the full contract.
+**Telegram-confirm every successful publish — non-negotiable.** See §3 of the Agent setup guide for the full contract.
 
-## Migration from `linkedin-to-x`
+## URL expander
 
 ```bash
-npx repost-with-agent migrate linkedin-to-x \
-  --source-url "https://www.linkedin.com/in/<you>/recent-activity/all/" \
-  --destination-account "@<you>"
+npx repost-with-agent urls expand <url>                                    # follow one URL
+npx repost-with-agent urls expand-text "Check out https://lnkd.in/abc"     # expand every URL in text
 ```
 
-Behavior:
+5 hops max, 5-second timeout per request, fail-soft. See [docs/url-expander.md](docs/url-expander.md).
 
-- creates a disabled `preview-only` pair;
-- imports old `~/.linkedin-to-x/posted.md` entries into per-pair `posted.jsonl`;
-- records an audit event with the known duplicate incident: 2026-03-24 duplicate post `https://x.com/i/status/2036422890271215716`, fix commit `9d37108`;
-- leaves legacy files untouched.
+## Migration from v2
+
+v2-shaped `pairs.json` is auto-migrated on first read of any pair command. The original is backed up to `~/.repost-with-agent/pairs.json.v2.bak`; the migration injects `platform` labels into `source` / `destination`, sets `runMode: "listen-for-future"`, stamps `schemaVersion: 3`. Existing `posted.jsonl` history is preserved untouched.
+
+See [docs/migration-v2-to-v3.md](docs/migration-v2-to-v3.md) for the full walkthrough including auth-state changes (the v2 X OAuth tokens are now ignored — log in via the browser instead).
 
 ## Scheduling
 
-Scheduling is host-driven. Repost-with-agent does not run a daemon — OpenClaw cron / launchd / system cron fires the tick and invokes a deterministic CLI entry point that runs preview-or-publish under the saved policy and emits structured `pair.scheduled.*` audit events.
+Scheduling is host-driven. Repost-with-agent does not run a daemon — OpenClaw cron / launchd / system cron fires the tick and invokes a deterministic CLI entry point that runs preview-or-publish under the saved policy.
 
 Per-tick CLI entry point (host scheduler should call this):
 
@@ -339,76 +260,17 @@ Helpers to wire up the host scheduler:
 ```bash
 repost-with-agent pair schedule <pair-id>            # render launchd plist + crontab line + openclaw cron command
 repost-with-agent pair schedule <pair-id> --apply launchd
-                                                     # write ~/Library/LaunchAgents/com.repost-with-agent.<id>.plist
-repost-with-agent pair unschedule <pair-id>          # remove the launchd plist
+repost-with-agent pair unschedule <pair-id>
 repost-with-agent pair edit <pair-id> --schedule-kind cron --schedule-expression "0 10 * * 1-5" --timezone Europe/London
-                                                     # update the saved schedule fields
 ```
 
 See [docs/scheduling.md](docs/scheduling.md) for the outcome taxonomy, audit-log format, cron-to-launchd translation rules, and the full safety matrix.
 
-Recommended flow:
-
-1. create the pair
-2. preview it
-3. inspect history / learnings
-4. `pair edit <id>` to set the schedule fields (`--schedule-kind cron --schedule-expression "..."` etc.)
-5. `pair schedule <id>` and apply to your scheduler of choice
-6. tail `~/.repost-with-agent/pairs/<id>/audit.jsonl` to confirm ticks fire
-
-Scheduled ticks default to **preview-only**. `--allow-publish` is opt-in AND requires `pair.mode === "live-approved"`. Do not schedule blind public posting by default.
-
-### OpenClaw cron example
-
-`pair schedule <id>` prints a ready-to-run `openclaw cron add` command. The example below is the equivalent hand-written form:
-
-```bash
-openclaw cron add \
-  --name "Repost-with-agent preview" \
-  --cron "0 10 * * 1-5" \
-  --tz "Europe/London" \
-  --session isolated \
-  --message "Use the repost-with-agent skill. Run \`repost-with-agent pair scheduled-run linkedin-to-x\`. Read its JSON stdout, summarise outcome (preview-only / new-candidate / duplicate / blocked / published), and report any blockers. Do NOT pass --allow-publish unless the saved policy explicitly authorises live posting." \
-  --announce
-```
-
-For a queue workspace, make the workspace path explicit in the message:
-
-```bash
-openclaw cron add \
-  --name "Repost workspace preview" \
-  --cron "0 10 * * *" \
-  --tz "Europe/London" \
-  --session isolated \
-  --message "Use the repost-with-agent skill with ~/repost_with_agent_workspace. Read user-setup.json, queue.jsonl, state.json, and logs; process at most 1 eligible item; stop at draft/preview when publish_mode or approval is manual; update state/logs; announce the result." \
-  --announce
-```
-
-Inspect:
-
-```bash
-openclaw cron list
-openclaw cron show <job-id>
-openclaw cron runs --id <job-id>
-```
+Scheduled ticks default to **preview-only**. `--allow-publish` is opt-in AND requires `pair.mode === "live-approved"`.
 
 ## Agent-bridge integration
 
 Repost-with-agent is reachable via [agent-bridge](https://github.com/EthanSK/agent-bridge) so a Claude / OpenClaw session on one machine can drive a Repost-with-agent install on another.
-
-**Pattern:** the remote agent receives a natural-language `/repost <verb> [args]` message and routes it to `scripts/agent-bridge-handler.sh`, which wraps the safe subset of CLI commands. There is no separate MCP server — the existing `bridge_send_message` channel + a shell handler is enough.
-
-From the calling side:
-
-```text
-bridge_send_message({
-  machine: "<paired-machine>",
-  target: "claude-code" | "openclaw/<account>",
-  message: "/repost preview linkedin-to-x"
-})
-```
-
-The receiving agent reads `scripts/agent-bridge-handler.sh` and runs the matching verb:
 
 | Verb | Maps to |
 | --- | --- |
@@ -416,40 +278,28 @@ The receiving agent reads `scripts/agent-bridge-handler.sh` and runs the matchin
 | `show <id>` | `pair show <id>` |
 | `preview <id>` | `pair preview <id>` |
 | `history <id>` | `pair history <id>` |
-| `scheduled-run <id>` | `pair scheduled-run <id> --json` (always preview-only over the bridge — never propagates `--allow-publish` from a remote agent) |
+| `scheduled-run <id>` | `pair scheduled-run <id> --json` (always preview-only over the bridge) |
 | `schedule <id>` | `pair schedule <id>` (read-only render of scheduling artifacts) |
 | `status` | env summary + pair count |
 | `safe-publish <id>` | refuses; emits a JSON `needs-approval` stub asking the local operator to run the publish themselves |
 
-The handler is deliberately read-only / approval-gated. **No remote machine can publish on your behalf.** A live publish always needs the local operator to run `pair post <id> --approve` directly.
+The handler is deliberately read-only / approval-gated. **No remote machine can publish on your behalf.**
 
 ## Agent-operated setup files
 
-The repo ships lightweight host integration so an agent can drive the workflow without re-implementing scraping / posting:
-
-- `openclaw.plugin.json`
-- `.claude-plugin/plugin.json`
-- `skills/repost-pair-setup/SKILL.md`
-- `skills/repost-run/SKILL.md`
-- `commands/pair.md`
-- `commands/preview.md`
-- `commands/run.md`
-- `scripts/install-for-openclaw.sh`
-- `scripts/agent-bridge-handler.sh`
+```
+openclaw.plugin.json
+.claude-plugin/plugin.json
+skills/repost-pair-setup/SKILL.md
+skills/repost-run/SKILL.md
+commands/pair.md
+commands/preview.md
+commands/run.md
+scripts/install-for-openclaw.sh
+scripts/agent-bridge-handler.sh
+```
 
 These integrations are only for controlling the cross-posting workflow: create pairs, preview, inspect history, run / schedule safely. They are not a separate agent app / framework.
-
-## Legacy commands
-
-Old direct commands are still present for compatibility and are marked deprecated:
-
-- `repost-with-agent sync`
-- `repost-with-agent list`
-- `repost-with-agent start`
-
-These preserve the old hardcoded LinkedIn → X / Facebook behavior and use the legacy tracker location (`~/.linkedin-to-x/posted.md`, overrideable with `LINKEDIN_TO_X_DATA_DIR`). New setup should use `pair` commands.
-
-Facebook support is treated as legacy / experimental until a cautious destination adapter exists. Do not enable blind Facebook posting by default; keep it approval-gated and explicitly configured.
 
 ## Safety
 
@@ -460,19 +310,7 @@ Facebook support is treated as legacy / experimental until a cautious destinatio
 - Conservative cadence is for spam / duplicate reduction, not detection evasion.
 - Live posting requires explicit `--approve`; the orchestrator re-checks dedupe at post-time.
 
-See [docs/WORKFLOW.md](docs/WORKFLOW.md) for the full end-to-end walkthrough, [docs/scheduling.md](docs/scheduling.md) for the host-scheduler contract, plus [docs/architecture.md](docs/architecture.md), [docs/setup-flow.md](docs/setup-flow.md), [docs/safety.md](docs/safety.md), [docs/migration.md](docs/migration.md).
-
-## Screenshots
-
-CLI session — `pair list` / `pair show` / `pair history` / live `pair post --approve`:
-
-![Repost-with-agent CLI session](docs/screenshots/cli-terminal.png)
-
-GitHub Pages site (`site/index.html`):
-
-![Repost-with-agent site](docs/screenshots/site-full.png)
-
-Live test post produced by `pair post --approve` on 2026-05-01: https://x.com/REEEthan_YT/status/2050303942857310541.
+See [docs/safety.md](docs/safety.md), [docs/WORKFLOW.md](docs/WORKFLOW.md), [docs/scheduling.md](docs/scheduling.md), [docs/architecture.md](docs/architecture.md), [docs/url-expander.md](docs/url-expander.md), [docs/migration-v2-to-v3.md](docs/migration-v2-to-v3.md).
 
 ## License
 

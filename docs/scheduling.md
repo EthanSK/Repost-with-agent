@@ -1,6 +1,8 @@
-# Scheduling
+# Scheduling (v3.0.0)
 
-Repost-with-agent does **not** ship its own scheduler daemon. Scheduling is host-driven: the actual tick is fired by OpenClaw cron, system cron, launchd, or any other scheduler that can invoke a CLI on a cadence. Repost-with-agent provides:
+Repost-with-agent does **not** ship its own scheduler daemon. Scheduling is host-driven: the actual tick is fired by OpenClaw cron, system cron, launchd, or any other scheduler that can invoke a CLI on a cadence. The `listen-for-future` run-mode of a pair is exactly this — the host scheduler tails the source profile via `pair scheduled-run`, and the agent posts new content as it appears.
+
+Repost-with-agent provides:
 
 1. A deterministic per-tick CLI entry point: `repost-with-agent pair scheduled-run <pair-id>`.
 2. A render/install helper for host scheduling artifacts: `repost-with-agent pair schedule <pair-id>`.
@@ -37,9 +39,10 @@ What it does on every tick:
 | `min-delay` | `pair.policy.minDelayBetweenPostsMinutes` window is still open since the last successful publish. Skipped. |
 | `blocked-mode` | `--allow-publish` was set but pair mode isn't `live-approved`. Ran preview only. |
 | `needs-approval` | Reserved for future flows where `pair post` returns this status; currently the scheduler refuses to set it. |
-| `auth-failed` | Destination adapter test failed (token expired, login lapsed, etc.). Exit code 2. |
-| `publish-failed` | Destination publish call returned an error. Exit code 2. |
-| `published` | A post was published. `posted.jsonl` was updated and `pair.publish.success` was logged. |
+| `auth-failed` | The agent reported the destination needs a fresh login or config (`category: "needs-login"` / `"needs-config"` on the agent's error result). Exit code 2. |
+| `publish-failed` | The agent's `post-to-destination-result` was an error result, or the destination call returned an error. Exit code 2. |
+| `overlength-blocked` | The drafted text exceeds the destination platform's char cap (X=280, Bluesky=300, Threads=500, Facebook=63206, LinkedIn=3000). Use `--overlength-strategy truncate` on `pair post` to opt in to smart truncation. |
+| `published` | A post was published. `posted.jsonl` was updated, `pair.publish.success` was logged, and Telegram notify fired. |
 
 ## Wiring up a host scheduler
 

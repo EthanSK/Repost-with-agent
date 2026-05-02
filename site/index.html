@@ -86,8 +86,8 @@
             <span class="v"><span class="mark">id + url + hash</span></span>
           </div>
           <div class="hero-stat">
-            <span class="k">First adapter</span>
-            <span class="v"><span class="mark">LinkedIn &rarr; X</span></span>
+            <span class="k">Platforms</span>
+            <span class="v"><span class="mark">LinkedIn / X / Bluesky / Threads / Facebook</span></span>
           </div>
           <div class="hero-stat">
             <span class="k">License</span>
@@ -133,17 +133,21 @@ git clone https://github.com/EthanSK/Repost-with-agent.git
 cd Repost-with-agent
 ./scripts/install-for-openclaw.sh
 
-<span class="t-comment"># 2. Save your first pair (preview-only by default)</span>
-npx repost-with-agent pair create \
-  --source-type linkedin-profile-activity \
-  --source-url "https://www.linkedin.com/in/&lt;you&gt;/recent-activity/all/" \
-  --destination-type x-account \
-  --destination-account "@&lt;you&gt;"
+<span class="t-comment"># 2. Wire up Telegram notify (NON-NEGOTIABLE before any live publish)</span>
+npx repost-with-agent notify configure --bot-token &lt;T&gt; --chat-id &lt;C&gt; --test
 
-<span class="t-comment"># 3. Preview before posting anything</span>
+<span class="t-comment"># 3. Save your first pair (preview-only by default)</span>
+npx repost-with-agent pair create \
+  --source-platform linkedin \
+  --source-url "https://www.linkedin.com/in/&lt;you&gt;/recent-activity/all/" \
+  --destination-platform x \
+  --destination-account "@&lt;you&gt;" \
+  --run-mode listen-for-future
+
+<span class="t-comment"># 4. Preview &mdash; the agent drives the browser via its MCP</span>
 npx repost-with-agent pair preview linkedin-to-x
 
-<span class="t-comment"># 4. Publish only with explicit approval</span>
+<span class="t-comment"># 5. Publish only with explicit approval</span>
 npx repost-with-agent pair post linkedin-to-x --approve</pre>
           </div>
         </div>

@@ -1,5 +1,113 @@
 # Changelog
 
+## v3.0.0 — 2026-05-02 — Strip-and-rewrite, agent-driven
+
+**Major architectural change.** The CLI is now a thin orchestrator over JSON state; the agent (Claude Code via `chrome-devtools-mcp`, OpenClaw via its built-in browser tool) drives the user's logged-in browser to do the actual reposting. There is **no API path** and **no Playwright** in `src/`. (Ethan voice 6016 + 6018 + 6021, 2026-05-01.)
+
+### Stripped (the v3 architectural sin to never reintroduce)
+
+- `src/x-client.ts` (520 LOC X API).
+- `src/linkedin-scraper.ts` (279 LOC Playwright).
+- `src/facebook-client.ts` (Facebook Graph API).
+- `src/adapters/{sources,destinations}/` (per-platform adapter classes).
+- `src/legacy-commands.ts`, `src/tracker.ts` (legacy `linkedin-to-x` sync path).
+- `playwright`, `dotenv` deps from `package.json`. The runtime now ships with `commander` only.
+- The `auth`, `sync`, `list`, `start`, `migrate linkedin-to-x` CLI verbs (legacy / replaced by browser-driven flows + auto-migration).
+- `docs/substack-investigation.md` (Substack dropped from v3 scope per Ethan voice 6021 — "not really social media").
+
+### Added — agent-task contract
+
+- `src/core/agent-task-contract.ts` — typed `AgentTask` / `AgentResult` union covering `fetch-source`, `post-to-destination`, `check-destination` across all platforms. Includes inbox file helpers (`writeAgentTask`, `readAgentTask`, `writeAgentResult`, `readAgentResult`) routing through `~/.repost-with-agent/agent-tasks/<correlation_id>.{task,result}.json`.
+- `src/core/agent-runner.ts` — `runAgentTask(task, options)` dispatches via in-process handler callback (used by tests + inline-driven CLI flows) OR via filesystem inbox + stdout banner (decoupled invocation). The orchestrator is the only place that knows about agents; everywhere else just calls the runner.
+- New `error-result` shape with `category` field (`needs-login` / `needs-config` / `rate-limit` / `platform-error` / `unknown`) so the orchestrator can route auth failures vs transient errors vs platform misconfig.
+
+### Added — URL expander (Ethan voice 6018, 6021)
+
+- `src/core/url-expander.ts` — follows shortener redirects to the final destination URL before publish.
+  - Max 5 hops, 5-second timeout per request, fail-soft on any error (timeout / network / loop / hop-cap / missing Location).
+  - HEAD first, fallback to GET on 405/501.
+  - Loop detection (URL appears twice in chain).
+  - Covers lnkd.in, t.co, bit.ly, buff.ly, goo.gl, tinyurl.com, ow.ly, rb.gy, is.gd, shorturl.at, tiny.cc, cutt.ly, youtu.be, fb.me, trib.al, plus any URL that issues a 30x.
+- `expandUrlsInText(body)` substitutes every shortened URL in a block of text.
+- New helper commands: `repost-with-agent urls expand <url>` and `repost-with-agent urls expand-text "<body>"`.
+- Audit event `pair.publish.url_expanded` per substitution, with `{shortenedUrl, expandedUrl, hopCount}`.
+- `tests/url-expander-regression.js` (new) — 12 sections covering single hop, multi-hop, MAX_HOPS cap, redirect loop, timeout fail-soft, network fail-soft, HEAD 405 → GET fallback, missing Location, expandUrlsInText substitution, isShortener helper, smoke test for every known shortener.
+
+### Added — two run-modes (Ethan voice 6021)
+
+- `pair.runMode` field on `PairRecord`:
+  - `"backfill"` — walk back through historical posts. Run via `pair backfill <id>`. **Newest-first** ordering (was oldest-first in v2).
+  - `"listen-for-future"` (default for migrated v2 pairs) — continuous tail. Host scheduler invokes `pair scheduled-run <id>` at the configured cadence. Always preview-only unless `--allow-publish` AND `pair.mode=live-approved`.
+- `pair create --run-mode <mode>` and `pair edit --run-mode <mode>` flags.
+- `orderNewestFirst` (replaces `orderOldestFirst`) — sorts by `publishedAt` descending, falls back to source-order ascending.
+
+### Added — generic platform support
+
+- `pair.source.platform` / `pair.destination.platform` — free-form string labels (e.g. `"linkedin"`, `"x"`, `"bluesky"`, `"threads"`, `"facebook"`). Replaces v2's `type` field (which was an adapter id).
+- `pair create --source-platform <p> --destination-platform <p>` flags (replaces v2's `--source-type` / `--destination-type`).
+- Platforms supported in v3.0.0: **LinkedIn, X, Bluesky, Threads, Facebook**.
+- Default per-platform char caps in `DEFAULT_PLATFORM_MAX_LENGTH`: X=280, Bluesky=300, Threads=500, Facebook=63206, LinkedIn=3000. Override via `--overlength-strategy` on `pair post` / `pair backfill`.
+
+### Added — overlength enforcement on `pair post`
+
+- `pair post <id> --approve --overlength-strategy {skip|truncate}` — same semantics as `pair backfill`'s strategy. `skip` (default) refuses; `truncate` smart-shortens.
+- New audit events: `pair.publish.overlength-blocked`, `pair.publish.truncated`.
+- New scheduled-run outcome: `overlength-blocked`.
+
+### Added — v2 → v3 pair migration
+
+- One-shot migration on first read of a v2-shaped `pairs.json`:
+  - Backs up the original to `~/.repost-with-agent/pairs.json.v2.bak`.
+  - Translates `type` → `platform` for known v2 adapter ids (`linkedin-profile-activity` → `linkedin`, `x-account` → `x`, `facebook-page` → `facebook`, `bluesky-account` → `bluesky`, `threads-account` → `threads`).
+  - Sets `runMode: "listen-for-future"` (preserves v2's only-mode-it-had semantics).
+  - Stamps `schemaVersion: 3`.
+- Verified locally on Ethan's existing `linkedin-to-x` pair: all 11 entries in `posted.jsonl` preserved untouched; pair loads cleanly; `pair show` / `pair history` work.
+- See `docs/migration-v2-to-v3.md` for the full walkthrough.
+
+### Added — agent-task-contract regression tests
+
+- `tests/agent-task-contract-regression.js` (new) — 9 sections covering correlation-id format, inbox round-trip, error result type guard, summarizeTask formatting, in-process handler dispatch, runAgentTaskExpect type-mismatch throw, full preview/publish path with mock agent, agent-error-result-halts-publish.
+
+### Changed
+
+- `src/core/orchestrator.ts:previewPair()` and `publishNextForPair()` now take `PreviewOptions` / `PublishPairOptions` instead of source/destination adapter instances. The agent task handler is supplied via `options.agent.handler` for in-process tests OR omitted to use the inbox path.
+- `src/core/backfill.ts:runBackfill()` similarly takes only `BackfillOptions` (no adapter args). The CLI no longer constructs / registers adapters.
+- `src/core/scheduling.ts:runScheduled()` drops adapter args; passes through to `publishNextForPair`.
+- `src/index.ts` simplified — removed `--source-type` / `--destination-type` flags (replaced with `--source-platform` / `--destination-platform`), removed legacy `auth | sync | list | start | migrate` verbs, added `--run-mode` flag on `pair create` / `pair edit`, added `--overlength-strategy` flag on `pair post`, added `urls expand | expand-text` helper subcommands.
+- `tests/backfill-regression.js`, `tests/overlength-regression.js` rewritten to drive `runBackfill` via in-process agent task handler. All assertions preserved.
+- `tests/dedupe-regression.js`, `tests/scheduling-regression.js`, `tests/notify-regression.js`, `tests/truncate-regression.js` unchanged (they exercise pure functions that didn't change).
+- README / CLAUDE.md / AGENTS.md / openclaw.plugin.json / both `skills/*/SKILL.md` / all `commands/*.md` rewritten to reflect the v3 architecture and to describe the agent-task contract.
+- `docs/architecture.md`, `docs/WORKFLOW.md`, `docs/setup-flow.md`, `docs/safety.md`, `docs/scheduling.md`, `docs/migration.md` rewritten / updated for v3.
+- `docs/url-expander.md` (new), `docs/migration-v2-to-v3.md` (new), `docs/destinations/{linkedin,x,bluesky,threads,facebook}.md` (new) added.
+- `examples/pairs.example.json` rewritten to v3 shape (`platform` + `runMode` + `schemaVersion: 3`).
+- `.env.example` cut down to just the data-dir override and Telegram-notify fallback. v2's X / LinkedIn / Facebook / Playwright env vars are gone.
+- `scripts/install-for-openclaw.sh` updated to reflect v3 (no X auth flow / Playwright profile / browser-login walkthrough; just notify + pair create + schedule).
+- Bumped `VERSION` to `3.0.0` in both `package.json` and `src/index.ts`.
+
+### Removed
+
+- All v2 API SDKs and Playwright. **Do not reintroduce.** The architectural sin to avoid.
+- The `linkedin-to-x` legacy bin alias from `package.json`.
+- The `pair migrate linkedin-to-x` command (auto-migration on read replaces it).
+
+### Migration checklist for v2 users
+
+1. Pull v3.0.0.
+2. `npm install` (Playwright + dotenv are removed; commander only).
+3. `npm run build`.
+4. Run any `pair list` or `pair show` command — auto-migration runs once. Backup at `~/.repost-with-agent/pairs.json.v2.bak`.
+5. Log into both source AND destination platforms inside the agent's persistent browser profile (chrome-devtools-mcp's profile or whichever your harness drives). v2's X OAuth tokens are now ignored.
+6. Verify `pair history <id>` still shows existing `posted.jsonl` entries.
+7. Verify `notify status` reports `source: file` (or `env`).
+8. Re-create any `--source-type substack-publication` pairs as a different platform — Substack is dropped from v3 scope.
+9. See `docs/migration-v2-to-v3.md`.
+
+### Test results
+
+All 8 regression suites green: `dedupe`, `scheduling`, `backfill`, `notify`, `truncate`, `overlength`, `url-expander`, `agent-task-contract`. No live network or browser interactions.
+
+---
+
 ## v2.6.0 — 2026-05-02
 
 ### Fixed — LinkedIn pagination cap

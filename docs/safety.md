@@ -14,22 +14,21 @@ Repost-with-agent is for responsible, user-controlled reposting. It must not bec
 
 ## Defaults
 
-- New pairs start in `preview-only` mode.
-- Queue workspaces start with `publish_mode: manual` and `run_policy.approval: manual`.
-- First run must be preview/dry-run.
-- Live posting requires explicit current-request approval or an explicit saved approval state.
-- Max 1 item per scheduled run by default.
-- Block on uncertain duplicate.
-- Prefer official APIs where available.
+- New pairs start in `preview-only` mode and `enabled: false`.
+- First run must be preview / dry-run.
+- Live posting requires explicit current-request approval (`--approve`) or an explicit saved approval state (`pair.mode: live-approved` + `--allow-publish` on scheduled / backfill).
+- Max 1 item per scheduled run by default (`policy.maxItemsPerRun: 1`).
+- Min-delay between posts enforced (`policy.minDelayBetweenPostsMinutes`).
+- Block on uncertain duplicate (unless `--allow-uncertain` is explicitly set).
+- Block overlength drafts by default (`--overlength-strategy skip`); user must opt into truncation.
+- Browser-driven posting via the user's logged-in session — no API SDKs, no parallel browser stack.
 - Keep detailed audit logs.
-
-## Facebook and other destination adapters
-
-Facebook support is legacy/experimental until it is exposed through a cautious destination adapter. Treat it as disabled by default, require explicit configuration, and keep public posting approval-gated.
 
 ## Browser automation
 
-Browser automation is acceptable for transparent, user-controlled workflows where the user is logged in and the platform allows the behavior. It should not be used to bypass platform security or pretend to be a human.
+Browser automation is acceptable for transparent, user-controlled workflows where the user is logged in and the platform allows the behavior. It should not be used to bypass platform security or pretend to be a human. The agent drives the user's actual logged-in browser via its own browser MCP — there is no "second" browser stack maintained by this repo.
+
+The user CANNOT delegate login to the agent. Every platform must already be logged into the persistent browser profile the agent uses.
 
 ## Rate/cadence policy
 

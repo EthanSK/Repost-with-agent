@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 #
-# install-for-openclaw.sh — One-shot setup for Repost-with-agent under OpenClaw
-# (and Claude Code; the name is historical).
+# install-for-openclaw.sh — One-shot setup for Repost-with-agent v3.0.0
+# under OpenClaw and Claude Code (the name is historical).
 #
 # Idempotent. Safe to re-run.
 #
 # Steps:
 #   1. Verify Node + npm available.
-#   2. Install npm deps + build TypeScript.
+#   2. Install npm deps (commander only — no Playwright, no API SDKs in v3)
+#      + build TypeScript.
 #   3. Smoke-test the CLI (`--version` plus `pair --help`).
 #   4. Ensure runtime data dir (~/.repost-with-agent) exists.
 #   5. Print the OpenClaw skills_root and plugin id so the operator (or
@@ -22,10 +23,14 @@
 #                                         #   leave the data dir untouched.
 #
 # This script does NOT install OpenClaw itself, install cron jobs, or log you
-# into LinkedIn / X. Scheduling is wired up explicitly per pair via:
+# into any platform. Scheduling is wired up explicitly per pair via:
 #     npx repost-with-agent pair schedule <pair-id>
 #     npx repost-with-agent pair schedule <pair-id> --apply launchd
 # or by hand (see docs/scheduling.md).
+#
+# v3.0.0 architecture: the CLI is a thin orchestrator. The agent drives the
+# user's logged-in browser via its own browser MCP. There is no Playwright,
+# no API SDKs, and no per-platform config in this script.
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -111,7 +116,7 @@ log "Smoke-testing CLI (--version + pair --help)..."
 node "$REPO_DIR/dist/index.js" --version
 node "$REPO_DIR/dist/index.js" pair --help >/dev/null
 
-mkdir -p "$DATA_DIR/pairs"
+mkdir -p "$DATA_DIR/pairs" "$DATA_DIR/agent-tasks"
 log "Runtime data dir ready at $DATA_DIR"
 
 PLUGIN_MANIFEST="$REPO_DIR/openclaw.plugin.json"
@@ -125,42 +130,49 @@ fi
 cat <<EOF
 
 ---
-Repost-with-agent is installed.
+Repost-with-agent v3.0.0 is installed.
 
 Next steps for the operator:
-  1. Register the plugin with your OpenClaw install. Pointing at this repo:
+  1. Wire up Telegram notify (NON-NEGOTIABLE before any live publish):
+       npx repost-with-agent notify configure --bot-token <T> --chat-id <C> --test
+       npx repost-with-agent notify status     # MUST report source: file or env
+
+  2. Make sure the agent's persistent browser profile is logged into BOTH the
+     source AND destination platforms you'll cross-post between. The agent
+     CANNOT log in for the user.
+
+  3. Register the plugin with your OpenClaw install. Pointing at this repo:
        openclaw plugins register "$REPO_DIR/openclaw.plugin.json"
      (or copy/symlink the directory into your configured plugins root).
 
-  2. Log into LinkedIn (and X if you'll use the OAuth flow) inside the
-     persistent Playwright profile referenced by PLAYWRIGHT_PROFILE_DIR or
-     pluginConfig.playwrightProfileDir.
-
-  3. Create your first pair:
+  4. Create your first pair:
        npx repost-with-agent pair create \\
-         --source-type linkedin-profile-activity \\
+         --source-platform linkedin \\
          --source-url "https://www.linkedin.com/in/<you>/recent-activity/all/" \\
-         --destination-type x-account \\
-         --destination-account "@<you>"
+         --destination-platform x \\
+         --destination-account "@<you>" \\
+         --run-mode listen-for-future \\
+         --mode preview-only
 
-  4. Preview before publishing:
+  5. Preview before publishing:
        npx repost-with-agent pair preview <pair-id>
+     The CLI will emit a [agent-task fetch-source ...] banner. The agent (you)
+     reads the task and uses its browser MCP to fulfil it.
 
-  5. Wire up scheduling per pair (one of):
+  6. Wire up scheduling per pair (one of):
        # OpenClaw users:
-       npx repost-with-agent pair schedule <pair-id>     # prints the openclaw cron add command
+       npx repost-with-agent pair schedule <pair-id>     # prints openclaw cron add command
        # macOS launchd:
        npx repost-with-agent pair schedule <pair-id> --apply launchd
        launchctl load ~/Library/LaunchAgents/com.repost-with-agent.<pair-id>.plist
        # System cron:
-       npx repost-with-agent pair schedule <pair-id>     # prints the crontab line; pipe into crontab -e
+       npx repost-with-agent pair schedule <pair-id>     # prints crontab line; pipe into crontab -e
 
      The host scheduler should call:
        repost-with-agent pair scheduled-run <pair-id>
      which is the deterministic, auditable per-tick entry point.
 
-Live publishing always requires an explicit --approve flag and a non-preview
-pair mode. Scheduled runs default to preview-only; pass --allow-publish only
-when the saved policy explicitly authorises live posting. See README and
-docs/safety.md.
+Live publishing always requires explicit --approve and a non-preview pair mode.
+Scheduled runs default to preview-only; pass --allow-publish only when the saved
+policy explicitly authorises live posting. See README and docs/safety.md.
 EOF
