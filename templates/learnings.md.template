@@ -1,0 +1,38 @@
+# <pair-id> learnings
+
+_No learnings recorded yet — the agent will append entries as it discovers
+quirks during runs._
+
+<!--
+Lifecycle (full spec: skills/repost-learnings/SKILL.md):
+
+1. Start of every run: the agent reads this file as up-front context.
+2. End of every run: the agent appends any newly-discovered quirks below as:
+
+       ## YYYY-MM-DD HH:MM — <one-line summary>
+
+       <2–5 sentences of detail.>
+
+3. Append-only via `>>` in Bash. NEVER rewrite existing entries.
+4. If a fresh observation contradicts an older entry, append a new entry
+   AND add ` [obsoleted YYYY-MM-DD]` to the older heading via a targeted
+   Edit. Don't delete history.
+
+Save it (signal):
+  - Persistent DOM changes, pagination caps, rate-limit signatures,
+    shortener edge cases, account-specific behaviors, per-platform timing.
+Don't save it (noise):
+  - One-off transient errors, anything in docs/destinations/<platform>.md,
+    "the run succeeded" summaries, anything you're <75% sure is reproducible.
+
+Example good entry:
+
+    ## 2026-05-12 14:22 — LinkedIn recent-activity pagination cap dropped to ~60
+
+    Backfill run hit the end of `/recent-activity/all/` after ~60 posts loaded
+    (was ~100 in the docs). Scrolled 8× and got a "You're caught up" footer
+    instead of more posts. Likely a LinkedIn-side change.
+
+    Implication: backfill `--max` over 60 will silently stop early without
+    an error. Treat the "You're caught up" footer as a hard stop.
+-->
