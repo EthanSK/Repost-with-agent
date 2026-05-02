@@ -53,7 +53,9 @@ skill workflows.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | truncate"
+        "overlengthStrategy": "skip | truncate",
+        "semanticDedupeEnabled": true,
+        "semanticDedupeWindowSize": 30
       },
       "createdAt": "<ISO-8601>",
       "updatedAt": "<ISO-8601>"
@@ -77,6 +79,17 @@ skill workflows.
   - `skip` — drafts exceeding destination char cap are skipped. Default.
   - `truncate` — drafts are shrunk to `(cap − 24)` chars + `… <source URL>` suffix.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
+- `policy.semanticDedupeEnabled` — when `true` (default), Layer 2 semantic
+  dedupe runs after Layer 1 fuzzy-string match clears a candidate. When
+  `false`, only Layer 1 runs and the candidate publishes immediately on
+  Layer 1 clear. See `skills/repost-dedup-semantic/SKILL.md` for the
+  reasoning algorithm.
+- `policy.semanticDedupeWindowSize` — positive integer (default `30`).
+  How many recent destination posts the Layer 2 semantic check compares
+  the candidate against. Reuses the destination scrape Layer 1 already
+  produced. Tune up for high-volume destinations (X power-users) and
+  down for low-volume destinations (Substack-style); 30 is a sweet spot
+  for most accounts.
 - `schedule.everyHours` — positive integer; used by `repost-listen-for-future-setup` to compute the launchd `StartInterval` in seconds.
 
 ### Migration from v3
@@ -145,6 +158,8 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.dedupe.local`                     | Local dedupe completed. Includes `duplicates`, `survivors`. |
 | `pair.dedupe.remote`                    | Destination scrape + fuzzy-match completed. Includes `duplicates`, `survivors`. |
 | `pair.dedupe.uncertain`                 | Destination scrape failed; candidates left undecided. Includes reason. |
+| `pair.dedupe.semantic_clean`            | (Optional) Layer 2 semantic dedupe ran and cleared the candidate. Includes `candidateExcerpt`, `windowSize`, `candidatesCompared`. |
+| `pair.publish.semantic_duplicate`       | **Layer 2 semantic dedupe match — candidate skipped pre-publish.** Includes `pairId`, `sourceItemId`, `candidateExcerpt` (first 200 chars), `matchedExistingUrl`, `matchedExistingExcerpt` (first 200 chars), `agentReasoning` (1-3 sentence justification), `windowSize` (number of destination posts compared). See `skills/repost-dedup-semantic/SKILL.md`. |
 | `pair.publish.start`                    | About to drive the destination compose flow. |
 | `pair.publish.url_expanded`             | One shortened URL was expanded. Includes `from`, `to`. |
 | `pair.publish.url_expand_failed`        | One URL expansion failed. Includes `url`, `error`. |
@@ -159,6 +174,30 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.backfill.would_publish`           | Dry-run hit on a candidate. |
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
 | `pair.backfill.skipped_now_duplicate`   | Re-check between publishes found the candidate had been posted by another path. |
+
+### `pair.publish.semantic_duplicate` schema
+
+Layer 2 (semantic) dedupe match — candidate skipped pre-publish. Full
+field shape:
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "pair.publish.semantic_duplicate",
+  "pairId": "<id>",
+  "sourceItemId": "<candidate sourceItemId>",
+  "candidateExcerpt": "<first 200 chars of candidate draft>",
+  "matchedExistingUrl": "<destination URL of the matched existing post>",
+  "matchedExistingExcerpt": "<first 200 chars of the matched existing post>",
+  "agentReasoning": "<1-3 sentence justification — why these are the same communicative content>",
+  "windowSize": 30
+}
+```
+
+Emitted by `skills/repost-dedup-semantic/SKILL.md` when the agent decides a
+candidate is a paraphrased duplicate of an existing destination post. The
+candidate is NOT published, and a catch-up entry is appended to
+`posted.jsonl` so the same candidate isn't re-evaluated next tick.
 
 ## `pairs/<id>/learnings.md`
 

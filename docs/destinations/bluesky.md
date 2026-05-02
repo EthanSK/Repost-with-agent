@@ -65,6 +65,15 @@ For destination dedupe on Bluesky:
 - Scroll to load 50–100 recent posts.
 - Compare against `candidate_text` using the `repost-dedup` skill's algorithm.
 
+### Layer 2 semantic dedupe
+
+Layer 2 (`skills/repost-dedup-semantic/SKILL.md`) runs against the
+destination's last 30 posts by default. Bluesky cadence varies by user;
+30 is a sensible default. For very active Bluesky users (multiple
+posts/day), bump `pair.policy.semanticDedupeWindowSize` to 50+ so the
+agent compares against a wider recent slice. For low-volume / Substack-
+style accounts, 30 is more than enough.
+
 ## Known quirks
 
 - **Reposts** (Bluesky's "Repost" / quote-post) appear in the profile feed.

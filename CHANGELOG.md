@@ -1,5 +1,116 @@
 # Changelog
 
+## v4.3.0 — 2026-05-01 — Layer 2 semantic dedupe (agent reasoning over destination)
+
+**Additive change.** Adds a second dedupe layer on top of v4.2.0's existing
+Layer 1 (exact `sourceItemId` lookup + fuzzy-string match against the
+destination feed). Layer 2 has the running agent read the candidate draft
+alongside the destination's most recent posts and use its OWN reasoning to
+decide whether the candidate is "essentially the same announcement /
+opinion / claim, different words." Catches paraphrased duplicates that
+Layer 1's string-match cannot.
+
+(Ethan voice 6106, 2026-05-01: *"It should make sure the agent actually
+semantically looks and processes the content of the message and checks the
+target destination and sees if there's a post with similar wording already
+there. If because there is, then it shouldn't go through. So the ID thing
+in the JSON files, etc., that's precise, and that's like layer one. But
+layer two is it should check the semantics, and if there's something
+already similar, it shouldn't post a duplicate. That'll be embarrassing."*)
+
+### Why
+
+v4.2.0 dedupe was string-only. A post like "Just shipped a new feature for
+cross-posting between LinkedIn and X — agents do the work, no APIs, no
+Playwright" and a candidate "We just launched our cross-poster from
+LinkedIn to X. Pure agent-driven. No APIs needed." both make the same
+announcement, but the strings are different enough that fuzzy-prefix
+overlap won't catch the duplicate. The agent's existing semantic
+understanding is the right tool to apply at this layer — no extra
+infrastructure (no embeddings DB, no extra LLM call); the running agent
+just looks at both texts and judges.
+
+### Layer separation
+
+| Layer | Skill | Method | Catches | Cost |
+| ----- | ----- | ------ | ------- | ---- |
+| 1 | `repost-dedup` | Exact `sourceItemId` match + fuzzy-string match (normalize + ≥80-char prefix overlap) | Verbatim and near-verbatim re-posts | Cheap (string ops) |
+| 2 | `repost-dedup-semantic` | Agent reads candidate + recent destination posts, judges semantic redundancy | Paraphrased duplicates ("same point, different words") | One reasoning pass |
+
+Both layers run in series. Layer 1 first as a quick filter; Layer 2 only
+on Layer-1-clean candidates. **A candidate must pass BOTH to publish.**
+
+### How the agent makes the judgment
+
+For each candidate, the agent asks literally: *"Would a reader who has
+already seen one of these existing destination posts find the candidate
+redundant?"* Same announcement, same opinion, same claim, same
+call-to-action implied → skip. Same theme but different specifics or a
+different communicative function → proceed. **Lean conservative** — when
+on the fence, skip; missed posts are cheap, embarrassing duplicates are
+expensive.
+
+The skill body documents three GOOD MATCH (skip) examples and three
+WEAK MATCH (proceed) examples to anchor the agent's judgment.
+
+### Added
+
+- `skills/repost-dedup-semantic/SKILL.md` — new skill defining Layer 2.
+  Worked examples for "skip" vs "proceed" decisions, the explicit
+  judgment question, the procedure step-by-step, and the
+  `pair.publish.semantic_duplicate` audit shape.
+- `pair.policy.semanticDedupeEnabled` (default `true`) — pair-level
+  toggle.
+- `pair.policy.semanticDedupeWindowSize` (default `30`) — how many recent
+  destination posts the agent compares the candidate against. Reuses the
+  scrape Layer 1 already produced. Tune up for high-volume destinations
+  (X power-users), down for low-volume (Substack-style).
+- `pair.publish.semantic_duplicate` audit event — fired when Layer 2
+  decides a candidate is a paraphrased duplicate. Fields: `pairId`,
+  `sourceItemId`, `candidateExcerpt` (first 200 chars),
+  `matchedExistingUrl`, `matchedExistingExcerpt` (first 200 chars),
+  `agentReasoning` (1-3 sentence justification), `windowSize`.
+
+### Changed
+
+- `skills/repost-run/SKILL.md` — adds Step 4.5 "Layer 2 dedupe (semantic
+  similarity, agent reasoning)" between Step 4 and Step 5. Documents
+  reuse of the Step 4 destination scrape and the policy gate.
+- `skills/repost-backfill/SKILL.md` — adds Step 5.5 documenting Layer 2,
+  and updates Step 6's publish-loop ordering so Layer 2 runs per-iteration
+  against the freshest destination state (catches in-loop publishes).
+- `skills/repost-dedup/SKILL.md` — heading retitled "Layer 1", new
+  "Layer separation" section explaining Layer 1 vs Layer 2 trade-offs and
+  why both run in series.
+- `templates/pairs.json.template` — adds `semanticDedupeEnabled: true` +
+  `semanticDedupeWindowSize: 30` to the policy block.
+- `docs/state-files.md` — adds the two new policy fields to the schema +
+  field invariants, adds `pair.publish.semantic_duplicate` (with full
+  field schema block) and `pair.dedupe.semantic_clean` (optional) to the
+  audit-event taxonomy.
+- `docs/destinations/{x,linkedin,bluesky,threads,facebook}.md` — adds a
+  Layer 2 window-size guidance subsection per platform (high-volume vs
+  low-volume cadence).
+- `README.md`, `INSTRUCTIONS.md`, `CLAUDE.md`, `AGENTS.md` — version
+  bumped to 4.3.0; "Two-layer dedupe" / "Project rules" sections rewritten
+  to explain Layer 1 + Layer 2 separation, cite Ethan voice 6106, and
+  document the conservative-on-fence stance.
+- `package.json`, `.claude-plugin/plugin.json`, `openclaw.plugin.json` —
+  version bumped to 4.3.0; manifest skill list now includes
+  `skills/repost-dedup-semantic`.
+
+### Backward compatibility
+
+100% backward compatible. The two new `pair.policy` fields default to
+`true` / `30` if absent, so existing v4.2.0 pair configs work unchanged.
+Existing `posted.jsonl` and `audit.jsonl` files are untouched. Layer 1
+behavior is unchanged. The only observable change for an existing pair is
+that the agent now also runs the Layer 2 reasoning pass before publish —
+which the user explicitly asked for.
+
+If a user wants pure string-only dedupe (the v4.2.0 behavior), set
+`pair.policy.semanticDedupeEnabled: false`.
+
 ## v4.2.0 — 2026-05-01 — Structured learnings.md entries (selectors + playbooks)
 
 **Additive change.** Extends the v4.1.0 learnings.md format so each entry

@@ -4,11 +4,17 @@ description: Reference for the Repost-with-agent dedupe algorithm — how to fuz
 when_to_trigger: Any time you (the agent) need to decide whether a candidate post is already published, either locally (in posted.jsonl) or remotely (on the destination platform).
 ---
 
-# Repost Dedup
+# Repost Dedup — Layer 1 (exact + fuzzy string matching)
 
 Reference algorithm for deciding whether a candidate post is a duplicate of
 something already on the destination. Two checks: local (against
 `posted.jsonl`) and remote (against the actual destination feed).
+
+This skill is **Layer 1** of a two-layer dedupe pipeline. It catches
+verbatim and near-verbatim re-posts via cheap string ops. **Layer 2**
+(`skills/repost-dedup-semantic/SKILL.md`) catches paraphrased duplicates via
+agent semantic reasoning. Both layers must clear before publish — see
+"Layer separation" below.
 
 ## Why two checks?
 
@@ -19,6 +25,29 @@ something already on the destination. Two checks: local (against
   another tool, retweets, etc.
 
 Both checks are mandatory before any publish.
+
+## Layer separation — Layer 1 vs Layer 2
+
+Repost-with-agent v4.3+ runs dedupe in two passes:
+
+| Layer | Skill                          | Method                                                                                | Catches                                                | Cost                |
+| ----- | ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------- |
+| 1     | `repost-dedup` (this skill)    | Exact `sourceItemId` lookup + fuzzy-string match (normalize + ≥80-char prefix overlap) | Verbatim and near-verbatim re-posts                    | Cheap (string ops)  |
+| 2     | `repost-dedup-semantic`        | Agent reads candidate + recent destination posts and judges semantic redundancy        | Paraphrased duplicates ("same point, different words") | One reasoning pass  |
+
+Layer 1 runs first as a quick filter. Only candidates that survive Layer 1
+proceed to Layer 2. **A candidate is publishable iff it clears BOTH layers.**
+
+Layer 1 cannot catch a paraphrase like "We just shipped X — agents do the
+work, no APIs" vs. an existing "Just launched the X cross-poster. Pure
+agent-driven, no API needed." The strings differ enough that fuzzy-prefix
+overlap won't trigger; only Layer 2's semantic check catches it. Conversely,
+Layer 2 is wasted on verbatim re-posts where Layer 1's string match is
+trivially correct and orders of magnitude cheaper. Run them in series.
+
+Layer 2 is enabled by default (`pair.policy.semanticDedupeEnabled: true`)
+and can be turned off per-pair if you genuinely want only string-level
+dedupe.
 
 ## Local dedupe
 
@@ -114,8 +143,13 @@ For each candidate, produce one of three verdicts:
 
 ## See also
 
-- `skills/repost-run/SKILL.md` — calls this dedupe at step 4.
-- `skills/repost-backfill/SKILL.md` — runs dedupe once across the full
-  candidate set (newest-first) before the publish loop.
+- `skills/repost-dedup-semantic/SKILL.md` — **Layer 2** semantic dedupe (agent
+  reasoning over candidate vs. recent destination posts). Runs AFTER this
+  skill on Layer-1-clean candidates. Catches paraphrased duplicates.
+- `skills/repost-run/SKILL.md` — calls this dedupe at step 4 (Layer 1) and
+  `repost-dedup-semantic` at step 4.5 (Layer 2).
+- `skills/repost-backfill/SKILL.md` — runs Layer 1 once across the full
+  candidate set (newest-first) and Layer 2 per loop iteration before the
+  publish loop.
 - `docs/destinations/<platform>.md` — per-platform quirks (e.g. X's `t.co`
-  rewriting, Bluesky's link cards).
+  rewriting, Bluesky's link cards) plus Layer 2 window-size guidance.

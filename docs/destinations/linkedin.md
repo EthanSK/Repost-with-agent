@@ -83,6 +83,16 @@ For `check-destination` semantics on LinkedIn:
   `repost-dedup` skill's algorithm (whitespace-collapse, lowercase, strip
   URLs, exact-normalized OR ≥80-char prefix overlap).
 
+### Layer 2 semantic dedupe
+
+Layer 2 (`skills/repost-dedup-semantic/SKILL.md`) runs against the
+destination's last 30 posts by default. LinkedIn cadence is moderate (a
+few posts per week is typical), so 30 typically covers ~2-3 months of
+content — usually enough to catch paraphrased duplicates without tuning.
+Bump `pair.policy.semanticDedupeWindowSize` higher only if you find the
+agent missing semantic duplicates that are clearly older than the
+default window.
+
 ## Known quirks
 
 - **Mention links** (`<span class="mention">@User</span>`) become plain

@@ -68,6 +68,21 @@ picker).
   - Canonical URL: post permalink (extractable from the timestamp `<a>` tag).
   - `publishedAt`: the visible timestamp.
 
+## Destination dedupe
+
+- Navigate to the destination profile / page / group.
+- Scroll to load 50–100 recent posts.
+- Compare against `candidate_text` using the `repost-dedup` skill's algorithm.
+
+### Layer 2 semantic dedupe
+
+Layer 2 (`skills/repost-dedup-semantic/SKILL.md`) runs against the
+destination's last 30 posts by default. Facebook personal timelines /
+pages tend to have lower volume than X or Threads, so 30 is usually
+plenty. Bump `pair.policy.semanticDedupeWindowSize` only if the
+destination is a high-frequency page; for Substack-style low-volume
+publishing, 30 is generous.
+
 ## Known quirks
 
 - **Privacy-restricted posts** may appear in the feed but resolve to a 404 / "content unavailable" page when unauthenticated. The agent should skip posts whose visibility is not Public, since the destination dedupe and cross-post path can't read them reliably.

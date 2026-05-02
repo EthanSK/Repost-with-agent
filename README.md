@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.2.0)
+# Repost-with-agent (v4.3.0)
 
 A skill-only Claude Code / OpenClaw plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
@@ -38,6 +38,36 @@ verbatim — read learnings.md FIRST, fall back to
 `docs/destinations/<platform>.md` only when learnings.md is silent or a
 cached selector misses. (See
 [`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
+
+## Two-layer dedupe
+
+Every publish must clear BOTH layers before going live:
+
+- **Layer 1 — strings.** Exact `sourceItemId` match against
+  `posted.jsonl` plus a fuzzy-string match (normalize whitespace,
+  lowercase, strip URLs, ≥80-char prefix overlap) against the
+  destination's recent posts. Cheap. Catches verbatim and near-verbatim
+  re-posts. See
+  [`skills/repost-dedup/SKILL.md`](skills/repost-dedup/SKILL.md).
+- **Layer 2 — agent semantic check.** After Layer 1 clears, the agent
+  reads the candidate draft alongside the destination's most recent 30
+  posts (override per-pair via `pair.policy.semanticDedupeWindowSize`)
+  and uses its own reasoning to decide whether the candidate is
+  "essentially the same announcement / opinion / claim, different
+  words." Catches paraphrased duplicates. v4.3.0+. See
+  [`skills/repost-dedup-semantic/SKILL.md`](skills/repost-dedup-semantic/SKILL.md).
+
+Ethan voice 6106 (2026-05-01): *"It should make sure the agent actually
+semantically looks and processes the content of the message and checks
+the target destination and sees if there's a post with similar wording
+already there. If because there is, then it shouldn't go through... that'll
+be embarrassing."*
+
+Layer 2 is enabled by default and can be turned off per-pair with
+`pair.policy.semanticDedupeEnabled: false`. The agent leans conservative
+on the threshold — when on the fence between "proceed" and "skip", it
+skips, since a missed post is much cheaper than an embarrassing
+duplicate.
 
 (See [`docs/architecture.md`](docs/architecture.md) for the long version.)
 
@@ -119,7 +149,8 @@ MUST also fire a Telegram confirmation.
 - `skills/repost-backfill/` — multi-post historical walk.
 - `skills/repost-listen-for-future-setup/` — install scheduler.
 - `skills/repost-history/` — tail posted.jsonl.
-- `skills/repost-dedup/` — fuzzy-match algorithm reference.
+- `skills/repost-dedup/` — Layer 1 fuzzy-match algorithm reference.
+- `skills/repost-dedup-semantic/` — Layer 2 semantic-similarity check (agent reasoning).
 - `skills/repost-url-expand/` — shortener resolution.
 - `skills/repost-notify/` — Telegram payload spec + non-negotiable rule.
 - `skills/repost-learnings/` — per-pair institutional-memory file (read at
@@ -176,7 +207,9 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip"
+        "overlengthStrategy": "skip",
+        "semanticDedupeEnabled": true,
+        "semanticDedupeWindowSize": 30
       }
     }
   ]
@@ -233,8 +266,9 @@ missing is the playbook. v4 ships only the playbook.
 - New pairs default to preview-only + disabled.
 - Live publishes always require either `mode: live-approved` (for cron-driven
   ticks) or explicit per-post user authorization (`mode: approval-required`).
-- Dedupe is re-checked between every publish; uncertain matches are skipped
-  unless explicitly overridden.
+- Dedupe is re-checked between every publish — both Layer 1 (string match)
+  and Layer 2 (agent semantic check) must clear; uncertain matches are
+  skipped unless explicitly overridden.
 
 ## License
 

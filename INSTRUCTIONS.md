@@ -58,10 +58,19 @@ the full lifecycle + good/bad-entry guidance.
 3. **Live publishes need either `mode: "live-approved"` (for cron-driven ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
-4. **Dedupe is re-checked at every publish.** Both local (against
-   `posted.jsonl`) and remote (against the destination feed scrape).
-   Uncertain matches are skipped unless `policy.blockOnUncertainDuplicate` is
-   `false`.
+4. **Dedupe runs in two layers, both must clear.**
+   - **Layer 1** (`skills/repost-dedup/SKILL.md`) — local exact match
+     against `posted.jsonl` plus remote fuzzy-string match against the
+     destination feed. Cheap, catches verbatim re-posts.
+   - **Layer 2** (`skills/repost-dedup-semantic/SKILL.md`) — agent
+     reasons over the candidate draft and the destination's most recent
+     30 posts (override per-pair via `policy.semanticDedupeWindowSize`)
+     to catch paraphrased duplicates ("same announcement, different
+     words"). Lean conservative — when on the fence, skip. (Ethan voice
+     6106, 2026-05-01: *"that'll be embarrassing."*) Enabled by default,
+     opt out per-pair via `policy.semanticDedupeEnabled: false`.
+   - Uncertain matches are skipped unless
+     `policy.blockOnUncertainDuplicate` is `false`.
 5. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
    operates on user-controlled, transparent login sessions.
 6. **You CANNOT log in for the user.** If a session is expired, append
@@ -93,6 +102,7 @@ See `docs/state-files.md` for the full table. Key events:
 - `pair.publish.notify_skipped_unconfigured` — silent publish. **Treat as a
   project bug.** Tell the user immediately.
 - `pair.publish.url_expanded` — one URL was successfully expanded.
+- `pair.publish.semantic_duplicate` — Layer 2 semantic dedupe match. Candidate skipped pre-publish; includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.uncertain` — destination scrape failed; treat candidates conservatively.
 
 ## Cross-machine context

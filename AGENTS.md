@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.2.0)
+# AGENTS.md — Repost-with-agent (v4.3.0)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.2.0 in one paragraph
+## v4.3.0 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -61,7 +61,8 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 | `repost-backfill` | User wants a multi-post historical walk |
 | `repost-listen-for-future-setup` | User wants to install scheduler |
 | `repost-history` | User wants to tail posted.jsonl |
-| `repost-dedup` | Reference for fuzzy-match algorithm |
+| `repost-dedup` | Reference for Layer 1 fuzzy-match algorithm (exact + string match) |
+| `repost-dedup-semantic` | Reference for Layer 2 semantic-similarity check (agent reasoning over candidate vs. recent destination posts; default 30-post window) |
 | `repost-url-expand` | Reference for shortener resolution |
 | `repost-notify` | The Telegram-confirm payload + non-negotiable rule |
 | `repost-learnings` | Per-pair institutional-memory file lifecycle (read at start of every run, appended at the end) |
@@ -93,8 +94,17 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
 - Live publishes need `mode: "live-approved"` (cron) or explicit per-post
   authorization (`mode: "approval-required"`).
-- Dedupe is re-checked at every publish; uncertain matches are skipped unless
-  `policy.blockOnUncertainDuplicate: false`.
+- **Two-layer dedupe — both must clear.** Layer 1 (`repost-dedup`) is
+  exact + fuzzy string match — cheap, catches verbatim re-posts. Layer
+  2 (`repost-dedup-semantic`, v4.3.0+) is the agent's own semantic
+  judgment over the candidate vs. the destination's most recent 30
+  posts (override via `policy.semanticDedupeWindowSize`) — catches
+  paraphrased duplicates ("same announcement, different words"). Lean
+  conservative: when on the fence, skip — Ethan would rather miss a
+  post than ship an embarrassing duplicate (Ethan voice 6106,
+  2026-05-01). Layer 2 is enabled by default; opt out per-pair via
+  `policy.semanticDedupeEnabled: false`. Uncertain matches are skipped
+  unless `policy.blockOnUncertainDuplicate: false`.
 - No stealth, no CAPTCHA / 2FA bypass, no hidden posting.
 - You CANNOT log in for the user. `category: "needs-login"` on session expiry.
 - `posted.jsonl` / `audit.jsonl` are append-only.

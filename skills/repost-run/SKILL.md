@@ -121,15 +121,17 @@ If the page shows a logged-out indicator (login modal, "sign in to continue"
 CTA), STOP and tell the user "needs-login on <platform>". Do not try to log
 in.
 
-## Step 4 — Dedupe (local + destination)
+## Step 4 — Layer 1 dedupe (local + destination, exact + fuzzy-string match)
 
-Use the `repost-dedup` skill semantics. In summary:
+Use the `repost-dedup` skill semantics. This is **Layer 1** — cheap string
+ops that catch verbatim and near-verbatim re-posts.
 
 1. **Local dedupe.** Read `~/.repost-with-agent/pairs/<id>/posted.jsonl`
    (line-delimited JSON, may be empty). For each candidate from step 3, drop it
    if its `sourceItemId` already appears in any line.
 2. **Destination dedupe.** Use the browser MCP to navigate to
-   `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. For each
+   `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. **Keep
+   this scrape in your reasoning** — Layer 2 (step 4.5) reuses it. For each
    *remaining* candidate, fuzzy-match the candidate text against the scraped
    destination posts:
    - Normalize: collapse whitespace, lowercase, strip trailing punctuation,
@@ -139,6 +141,41 @@ Use the `repost-dedup` skill semantics. In summary:
 3. If `policy.blockOnUncertainDuplicate === true` and you cannot positively
    determine for any reason (page failed to load, content was paywalled,
    etc.), treat the candidate as "uncertain" and SKIP it (do not publish).
+
+## Step 4.5 — Layer 2 dedupe (semantic similarity, agent reasoning)
+
+Use the `repost-dedup-semantic` skill. This is **Layer 2** — your own
+semantic judgment over the candidate vs. the destination scrape from step 4.
+Catches paraphrased duplicates that Layer 1's string-match cannot
+("essentially the same announcement / opinion / claim, different words").
+
+> Ethan voice 6106 (2026-05-01): *"It should make sure the agent actually
+> semantically looks and processes the content of the message and checks the
+> target destination and sees if there's a post with similar wording already
+> there... that'll be embarrassing."*
+
+1. Check `pair.policy.semanticDedupeEnabled` (default `true`). If `false`,
+   skip Layer 2 entirely and go to step 5 — the user explicitly opted out.
+2. Take the most-recent `pair.policy.semanticDedupeWindowSize` (default 30)
+   destination posts from the step 4 scrape.
+3. For each candidate that survived Layer 1, ask yourself: *"Would a reader
+   who has already seen any of these existing posts find this candidate
+   redundant?"* Apply the worked examples in `skills/repost-dedup-semantic/SKILL.md`
+   (announcements, opinions, claims with the same communicative function →
+   skip; same theme but different specifics or different communicative
+   function → proceed).
+4. **Lean conservative.** When on the fence, skip — Ethan would rather miss
+   a post than ship an embarrassing paraphrased duplicate.
+5. If you decide **semantic-duplicate**: append a
+   `pair.publish.semantic_duplicate` audit event with
+   `{candidateExcerpt, matchedExistingUrl, matchedExistingExcerpt,
+   agentReasoning, windowSize}`, append a catch-up entry to `posted.jsonl`,
+   and drop the candidate from the publish set. (See
+   `skills/repost-dedup-semantic/SKILL.md` for the full audit shape.)
+6. If you decide **semantic-unique**: proceed to step 5.
+
+Layer 2 is OPTIONAL but RECOMMENDED — it's enabled by default. A candidate
+must clear BOTH Layer 1 and Layer 2 before it's eligible for publish.
 
 ## Step 5 — Pick the next item
 
@@ -322,7 +359,8 @@ which category:
 
 ## See also
 
-- `skills/repost-dedup/SKILL.md` — dedupe algorithm details.
+- `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
+- `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).
 - `skills/repost-url-expand/SKILL.md` — URL expansion details.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
 - `skills/repost-learnings/SKILL.md` — pair-level institutional-memory file.

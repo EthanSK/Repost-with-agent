@@ -1,10 +1,10 @@
-# CLAUDE.md — Repost-with-agent (v4.2.0)
+# CLAUDE.md — Repost-with-agent (v4.3.0)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.2.0 architecture in one paragraph
+## v4.3.0 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -87,6 +87,31 @@ in Bash. Shorteners covered: `lnkd.in`, `t.co`, `bit.ly`, `buff.ly`, `goo.gl`,
 
 See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 
+## Two-layer dedupe (v4.3.0+)
+
+Every publish must clear BOTH layers:
+
+- **Layer 1 — strings.** Local exact `sourceItemId` match against
+  `posted.jsonl` plus remote fuzzy-string match (normalize whitespace +
+  lowercase + strip URLs + ≥80-char prefix overlap) against the
+  destination's recent posts. Cheap, catches verbatim re-posts. See
+  `skills/repost-dedup/SKILL.md`.
+- **Layer 2 — agent semantic check.** After Layer 1 clears, you (the
+  agent) read the candidate draft + the destination's most recent 30
+  posts (`pair.policy.semanticDedupeWindowSize`, default 30) and decide
+  with your own reasoning whether the candidate is "essentially the
+  same announcement / opinion / claim, different words." Catches
+  paraphrased duplicates. See `skills/repost-dedup-semantic/SKILL.md`.
+
+Ethan voice 6106 (2026-05-01): *"It should make sure the agent actually
+semantically looks and processes the content of the message and checks
+the target destination and sees if there's a post with similar wording
+already there... that'll be embarrassing."*
+
+Layer 2 is enabled by default (`pair.policy.semanticDedupeEnabled: true`)
+and can be turned off per-pair. Lean conservative on the threshold —
+when on the fence, skip.
+
 ## Audit events to grep for
 
 - `pair.publish.success` — destination confirmed the post.
@@ -96,6 +121,7 @@ See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 - `pair.publish.notify_skipped_unconfigured` — silent publish. **Treat as a
   project bug.** Fix immediately.
 - `pair.publish.url_expanded` — one URL was successfully expanded.
+- `pair.publish.semantic_duplicate` — Layer 2 dedupe match; candidate skipped pre-publish. Includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.uncertain` — destination scrape failed; candidates skipped.
 
 ## Cron / launchd context
@@ -118,11 +144,13 @@ ticks.
 - Live publishes always need either `mode: "live-approved"` (for cron-driven
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.
-- Dedupe is re-checked at every publish: local (against `posted.jsonl`) +
-  remote (against destination feed scrape, fuzzy-match: normalize whitespace,
-  lowercase, strip URLs, exact-normalized OR ≥80-char prefix overlap).
+- Dedupe is re-checked at every publish — both layers (Layer 1 string
+  match: local `posted.jsonl` + remote fuzzy-match with normalize +
+  ≥80-char prefix overlap; Layer 2 agent semantic check over the
+  destination's last 30 posts) must clear.
 - Uncertain matches are skipped unless `policy.blockOnUncertainDuplicate` is
-  `false`.
+  `false`. Layer 2 can be turned off per-pair via
+  `policy.semanticDedupeEnabled: false`.
 - No stealth, no CAPTCHA / 2FA bypass, no hidden posting. Browser automation
   is only ever for transparent user-controlled login sessions.
 - You CANNOT log in for the user. If the session is expired, append

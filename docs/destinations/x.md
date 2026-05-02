@@ -81,6 +81,15 @@ For destination dedupe on X:
   every URL into a `t.co/<hash>` alias that won't match the LinkedIn /
   Bluesky / etc. source URL.
 
+### Layer 2 semantic dedupe
+
+Layer 2 (`skills/repost-dedup-semantic/SKILL.md`) runs against the
+destination's last 30 posts by default. **For X power-users (multiple
+posts per day), consider raising `pair.policy.semanticDedupeWindowSize`
+to 50–100** so the agent has enough recent context to spot paraphrased
+duplicates from the past week or two. Reuse the same scrape Layer 1
+already produced — no extra browser cost.
+
 ## Known quirks
 
 - **`t.co` URL substitution.** X rewrites every URL in posted text to a

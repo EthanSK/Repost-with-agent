@@ -54,6 +54,20 @@ Per-platform DOM hints for the running agent. Read this BEFORE you start a
   - Canonical URL: `https://www.threads.net/@<handle>/post/<id>`.
   - `publishedAt`: the visible relative timestamp.
 
+## Destination dedupe
+
+- Navigate to `https://www.threads.net/@<handle>`.
+- Scroll to load 50–100 recent threads.
+- Compare against `candidate_text` using the `repost-dedup` skill's algorithm.
+
+### Layer 2 semantic dedupe
+
+Layer 2 (`skills/repost-dedup-semantic/SKILL.md`) runs against the
+destination's last 30 threads by default. Threads has a relatively high
+post volume for chatty accounts; 30 typically covers a couple of weeks.
+Bump `pair.policy.semanticDedupeWindowSize` higher (50–100) for very
+active Threads accounts or leave at 30 for moderate-cadence ones.
+
 ## Known quirks
 
 - **Threads-of-threads.** A "thread" can contain multiple posts. For source

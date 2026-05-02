@@ -103,15 +103,17 @@ For X / Bluesky / Threads / Facebook: see per-platform docs.
 Collect candidates UNTIL you have at least `max` non-duplicate items (after
 running step 4 dedupe), or you exhaust the platform's pagination.
 
-## Step 4 — Dedupe (full set, newest-first)
+## Step 4 — Layer 1 dedupe (full set, exact + fuzzy-string match)
 
 Same algorithm as `repost-run` step 4 (see `skills/repost-dedup/SKILL.md`),
-applied to the full collected set:
+applied to the full collected set. **Layer 1** = cheap string ops over local
+history + the destination scrape.
 
 1. **Local dedupe.** Drop any item whose `sourceItemId` is in `posted.jsonl`.
 2. **Destination dedupe.** Scrape ~50–100 recent destination posts ONCE at the
-   start of the run, not per-candidate. Fuzzy-match each remaining candidate
-   against the scraped destination posts.
+   start of the run, not per-candidate. **Keep this scrape in your reasoning**
+   — Layer 2 (step 5.5, per loop iteration) reuses it. Fuzzy-match each
+   remaining candidate against the scraped destination posts.
 
 ## Step 5 — Newest-first ordering
 
@@ -120,21 +122,61 @@ Sort the surviving candidates by `publishedAt` DESCENDING. Take the first
 backfill is interrupted mid-way, the destination ends up with a contiguous
 recent history rather than a gap-bounded historical block.
 
+## Step 5.5 — Layer 2 dedupe (semantic similarity, per candidate)
+
+Use the `repost-dedup-semantic` skill. This is **Layer 2** — your own
+semantic judgment over each candidate vs. the destination scrape from step
+4. Catches paraphrased duplicates that Layer 1 cannot.
+
+> Ethan voice 6106 (2026-05-01): *"It should make sure the agent actually
+> semantically looks and processes the content of the message and checks the
+> target destination... if there's something already similar, it shouldn't
+> post a duplicate. That'll be embarrassing."*
+
+Run Layer 2 **per candidate, immediately before publish** (i.e. inside the
+publish loop in step 6, BEFORE step 6.4's compose flow). Doing it here
+rather than as a single bulk pass means each candidate is checked against
+the freshest destination state — earlier publishes in this same loop are
+themselves Layer-2 inputs for later candidates.
+
+1. Check `pair.policy.semanticDedupeEnabled` (default `true`). If `false`,
+   skip Layer 2 entirely — the user explicitly opted out.
+2. Take the most-recent `pair.policy.semanticDedupeWindowSize` (default 30)
+   destination posts. **Refresh the scrape between iterations** so a
+   candidate at iteration N is compared against destination state including
+   anything you've published in iterations 1..N-1.
+3. Apply the worked examples in `skills/repost-dedup-semantic/SKILL.md`.
+   Lean conservative — when on the fence, skip.
+4. If **semantic-duplicate**: append `pair.publish.semantic_duplicate` audit
+   event with `{candidateExcerpt, matchedExistingUrl, matchedExistingExcerpt,
+   agentReasoning, windowSize}`, append a catch-up entry to `posted.jsonl`,
+   record in `backfill-state.json` as skipped, and continue to the next
+   candidate in the loop.
+5. If **semantic-unique**: continue to step 6.4 publish.
+
+Layer 2 is OPTIONAL but RECOMMENDED — enabled by default. Both layers must
+clear before any candidate publishes. Backfill loops are the highest-value
+place for Layer 2 because the source's historical posts often re-tread the
+same theme with slightly different wording — Layer 2 catches those.
+
 ## Step 6 — Publish loop
 
 For each candidate in order:
 
 1. Tell the user what we're about to publish (`#<n>/<max>`: text preview + source URL).
 2. If `pair.mode === "approval-required"`: ask the user to approve. Skip on no.
-3. If dry-run (no `--allow-publish`): just record the candidate in the audit
+3. **Run Layer 2 semantic dedupe** (step 5.5 above) on this candidate
+   against the freshest destination scrape. If it returns
+   `semantic-duplicate`, log audit + skip + continue to next iteration.
+4. If dry-run (no `--allow-publish`): just record the candidate in the audit
    log as `pair.backfill.would_publish` and continue to the next.
-4. If publishing:
+5. If publishing:
    - Run the URL expansion + length check from `repost-run` steps 6–7.
    - Drive the destination compose flow from `repost-run` step 8.
    - On success: append to `posted.jsonl` (step 9 of `repost-run`), update
      `backfill-state.json`, append `pair.backfill.published` audit.
    - **Telegram-confirm Ethan immediately** (step 10 of `repost-run`).
-5. **Sleep** `intervalMinutes * 60` seconds before the next candidate (use
+6. **Sleep** `intervalMinutes * 60` seconds before the next candidate (use
    `sleep` via Bash). This is mandatory — destinations rate-limit aggressively
    on rapid-fire posts.
 
@@ -221,7 +263,8 @@ one per successful publish (step 6), plus an optional final-summary ping.
 ## See also
 
 - `skills/repost-run/SKILL.md` — single-post version.
-- `skills/repost-dedup/SKILL.md` — dedupe algorithm.
+- `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
+- `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).
 - `skills/repost-url-expand/SKILL.md` — URL expansion.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
 - `skills/repost-learnings/SKILL.md` — pair-level institutional-memory file.

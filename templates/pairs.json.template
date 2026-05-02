@@ -27,7 +27,9 @@
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip"
+        "overlengthStrategy": "skip",
+        "semanticDedupeEnabled": true,
+        "semanticDedupeWindowSize": 30
       },
       "createdAt": "2026-05-01T12:00:00Z",
       "updatedAt": "2026-05-01T12:00:00Z"
