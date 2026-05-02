@@ -15,6 +15,12 @@ claude-in-chrome), and `plugin:telegram:telegram`. The skills under
 slash commands under `commands/*.md` are thin wrappers that load the matching
 skill.
 
+The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
+every run — pagination caps, DOM changes, rate-limit signatures, and
+account-specific gotchas accumulate across cron ticks instead of being
+rediscovered from scratch each time. Read `skills/repost-learnings/SKILL.md`
+for the full lifecycle + good/bad-entry guidance.
+
 ## The non-negotiable rule
 
 > **Telegram-confirm every successful publish — non-negotiable.** Every
@@ -103,7 +109,10 @@ If the user just installed the plugin and runs `/pair list`:
 If the user runs `/repost-run <id>`:
 
 1. Read `skills/repost-run/SKILL.md` and follow it step by step.
-2. Telegram-confirm at the end. Non-negotiable.
+2. Step 1.5 — read `~/.repost-with-agent/pairs/<id>/learnings.md` for prior
+   quirks before scraping.
+3. Telegram-confirm at the end. Non-negotiable.
+4. Final step — append any newly-discovered quirks to `learnings.md`.
 
 If the cron job spawned you fresh with `/repost-run all`:
 

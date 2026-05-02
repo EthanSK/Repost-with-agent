@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.0.0)
+# AGENTS.md — Repost-with-agent (v4.1.0)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.0.0 in one paragraph
+## v4.1.0 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -64,6 +64,7 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 | `repost-dedup` | Reference for fuzzy-match algorithm |
 | `repost-url-expand` | Reference for shortener resolution |
 | `repost-notify` | The Telegram-confirm payload + non-negotiable rule |
+| `repost-learnings` | Per-pair institutional-memory file lifecycle (read at start of every run, appended at the end) |
 
 ## Slash commands
 

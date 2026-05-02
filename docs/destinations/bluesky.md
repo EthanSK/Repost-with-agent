@@ -4,6 +4,15 @@ Per-platform DOM hints for the running agent. Read this BEFORE you start a
 `repost-run` / `repost-backfill` step that touches Bluesky (either as source
 or destination).
 
+> **These hints are STARTING points.** The pair-level
+> `~/.repost-with-agent/pairs/<id>/learnings.md` may extend or override
+> anything here as the agent discovers quirks specific to Ethan's account
+> or a recent Bluesky UI change (PDS-specific behavior, the React Native
+> Web composer moving, etc.). Always read the pair's `learnings.md` before
+> applying these defaults — the per-pair file wins on conflict, since it
+> reflects the most recent observed behavior. See
+> `skills/repost-learnings/SKILL.md`.
+
 ## Auth
 
 - Login: the browser MCP profile must already have a logged-in `bsky.app`

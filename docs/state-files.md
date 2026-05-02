@@ -162,11 +162,55 @@ Append-only NDJSON. Each line is one audit event. Schema:
 
 ## `pairs/<id>/learnings.md`
 
-Free-form Markdown. Maintained by the running agent across runs to remember
-platform quirks ("LinkedIn's recent-activity feed pagination caps at ~100
-posts", "Bluesky logs you out after 30 days of inactivity", etc.). The
-`repost-pair-show` skill prints this verbatim. The `repost-run` skill reads it
-into context at the start of each run.
+Per-pair institutional-memory file. Free-form Markdown that the running
+agent reads at the start of every run + appends to at the end of every run.
+The point: the agent doesn't have to re-figure platform quirks from scratch
+on each cron tick — quirks accumulate here over time. (Ethan voice 6029,
+2026-05-01.)
+
+### Format
+
+```markdown
+# <pair-id> learnings
+
+## YYYY-MM-DD HH:MM — <one-line summary>
+
+<2–5 sentences of detail. What you saw, why it matters, what to do about it
+next time. Be specific about DOM selectors, URLs, or pagination behavior.>
+
+## YYYY-MM-DD HH:MM — <next entry>
+
+<body>
+
+## YYYY-MM-DD HH:MM — <obsoleted entry> [obsoleted YYYY-MM-DD]
+
+<original body — left intact, never deleted>
+```
+
+- Top-of-file H1: `# <pair-id> learnings`.
+- Each entry is an `##` heading with timestamp + summary, followed by 2-5
+  sentences of detail.
+- Append-only via `>>` in Bash. The only allowed edit to a historical entry
+  is a targeted `Edit` that adds ` [obsoleted YYYY-MM-DD]` to the heading
+  when a fresh observation contradicts it.
+- See `templates/learnings.md.template` for the placeholder stub used on
+  first run.
+
+### Lifecycle
+
+1. **Start of every run** (`repost-run`, `repost-backfill`, the cron-spawned
+   subagent): read the file, treat as up-front context.
+2. **During execution**: track quirks in reasoning, don't append mid-run.
+3. **End of run**: append any newly-discovered quirks with a timestamped
+   `##` heading.
+4. **Stale-learning pruning**: contradictions are appended (not edited);
+   older entries get an `[obsoleted YYYY-MM-DD]` suffix on their heading.
+
+### Surfaced by
+
+- `repost-pair-show` — last 5 entries under "Recent learnings".
+- `repost-history` — last 3 entries when `--with-learnings` is passed.
+- Full skill spec: `skills/repost-learnings/SKILL.md`.
 
 ## `pairs/<id>/backfill-state.json`
 
@@ -197,5 +241,8 @@ clean completion. Schema:
 - `templates/pairs.json.template` — example v4 pair config.
 - `templates/posted.jsonl.template` — example posted history shape.
 - `templates/audit.jsonl.template` — example audit event sequence.
+- `templates/learnings.md.template` — placeholder shape for new pairs.
+- `skills/repost-learnings/SKILL.md` — full spec for the learnings.md
+  lifecycle + signal-vs-noise rules.
 - `docs/architecture.md` — why this state shape, why no daemon.
 - `docs/migration-v3-to-v4.md` — how the v3 → v4 schema migration works.

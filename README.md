@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.0.0)
+# Repost-with-agent (v4.1.0)
 
 A skill-only Claude Code / OpenClaw plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
@@ -27,6 +27,12 @@ That's it. The agent does everything else.
 This plugin is a folder of Markdown skills + slash commands; the running agent
 reads them and executes the procedure using its native tools. The plugin
 itself runs zero code at runtime.
+
+The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
+every run — pagination caps, DOM changes, rate-limit signatures, and
+account-specific gotchas accumulate across cron ticks instead of being
+rediscovered from scratch each time. (See
+[`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
 
 (See [`docs/architecture.md`](docs/architecture.md) for the long version.)
 
@@ -111,6 +117,8 @@ MUST also fire a Telegram confirmation.
 - `skills/repost-dedup/` — fuzzy-match algorithm reference.
 - `skills/repost-url-expand/` — shortener resolution.
 - `skills/repost-notify/` — Telegram payload spec + non-negotiable rule.
+- `skills/repost-learnings/` — per-pair institutional-memory file (read at
+  start of every run, appended at the end of every run).
 
 ## State files
 
@@ -119,7 +127,10 @@ All state lives at `~/.repost-with-agent/`:
 - `pairs.json` — array of pair configs (schemaVersion 4).
 - `pairs/<id>/posted.jsonl` — append-only history of successful publishes.
 - `pairs/<id>/audit.jsonl` — append-only audit events.
-- `pairs/<id>/learnings.md` — free-form notes for the agent.
+- `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
+  this at the start of every run and appends new quirks at the end. Quirks
+  accumulate across cron ticks so the agent doesn't re-figure pagination
+  caps / DOM changes / rate-limit signatures from scratch each time.
 - `pairs/<id>/backfill-state.json` — transient resume state for backfills.
 - `pairs/<id>/logs/cron.log` — stdout+stderr from the launchd / cron tick.
 

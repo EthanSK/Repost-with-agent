@@ -1,10 +1,10 @@
-# CLAUDE.md — Repost-with-agent (v4.0.0)
+# CLAUDE.md — Repost-with-agent (v4.1.0)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.0.0 architecture in one paragraph
+## v4.1.0 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -57,7 +57,10 @@ Edit, Write tools.
 - `pairs/<id>/posted.jsonl` — append-only NDJSON history. Append via `>>` in
   Bash. NEVER rewrite existing lines.
 - `pairs/<id>/audit.jsonl` — append-only NDJSON audit events.
-- `pairs/<id>/learnings.md` — free-form notes for you across runs.
+- `pairs/<id>/learnings.md` — per-pair institutional memory. Read at the
+  start of every run, appended at the end. Quirks accumulate across cron
+  ticks so you don't re-figure them each time. Full lifecycle:
+  `skills/repost-learnings/SKILL.md`.
 - `pairs/<id>/backfill-state.json` — transient backfill resume state.
 - `pairs/<id>/logs/cron.log` — stdout+stderr from the launchd / cron tick.
 
