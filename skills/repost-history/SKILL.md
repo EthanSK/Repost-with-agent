@@ -29,6 +29,27 @@ Tail the per-pair `posted.jsonl` and show recent entries.
      Text:   "Yesterday I shipped v3.0.0 of Repost-with-agent — instructions + JSON state, no more SDKs..."
    ```
 
+## Optional: include a learnings tail
+
+If the user asks for `--with-learnings` (or similar) on top of the history
+tail, also read `~/.repost-with-agent/pairs/<id>/learnings.md` and print the
+last 3 `## …` entries under a `=== Recent learnings (last 3) ===` heading
+below the post history. This is handy when the user is reviewing a sequence
+of posts and wants the institutional context that informed them.
+
+If `learnings.md` is empty or only contains the placeholder stub, print
+`(no learnings recorded yet)`. See `skills/repost-learnings/SKILL.md` for
+the file format.
+
+By default (no `--with-learnings`), this skill is a pure history tail and
+doesn't touch `learnings.md`.
+
+## See also
+
+- `skills/repost-pair-show/SKILL.md` — full pair inspection (config + history
+  + audit + learnings).
+- `skills/repost-learnings/SKILL.md` — format of the learnings.md file.
+
 ## Telegram
 
 Read-only. No Telegram on this skill.

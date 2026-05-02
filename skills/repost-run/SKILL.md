@@ -38,6 +38,28 @@ substitute curl/Playwright/etc.
    (default 1), `policy.overlengthStrategy` (default `"skip"`),
    `policy.blockOnUncertainDuplicate` (default true).
 
+## Step 1.5 — Read pair learnings (institutional memory)
+
+Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it exists. Treat the
+file as up-front context — it accumulates platform quirks, account-specific
+DOM changes, pagination caps, and rate-limit signatures the agent has
+discovered on prior runs. Examples of what you might find:
+
+- "Bluesky's compose button moved from the top-right `+` to a sidebar 'New
+  post' button on mobile-narrow viewports."
+- "X's profile-page recent-posts now require scrolling 4× before old posts
+  appear."
+- "LinkedIn's `lnkd.in/` shortener sometimes redirects to a login wall —
+  fall back to `canonicalUrl` in that case."
+
+Apply the relevant quirks BEFORE you start scraping or composing. If the
+file doesn't exist or contains only the placeholder stub, proceed without
+prior context — and seed the file as you discover quirks during this run.
+
+Track newly-discovered quirks in your reasoning (don't append mid-run; batch
+the writes at the **Final step** below to avoid corrupting the file on a
+crash). Full rules: `skills/repost-learnings/SKILL.md`.
+
 ## Step 2 — Decide what we're allowed to do
 
 - If `mode === "preview-only"`: do steps 3–5 (scrape + show draft) but STOP
@@ -207,6 +229,27 @@ Print to the user (in the agent transcript, NOT Telegram):
   Telegram:    delivered
 ```
 
+## Final step — Append discovered quirks to learnings.md
+
+Before exiting, flush any quirks you tracked during this run to
+`~/.repost-with-agent/pairs/<id>/learnings.md`. Use `>>` via Bash —
+append-only. Each entry:
+
+```
+## YYYY-MM-DD HH:MM — <one-line summary>
+
+<2–5 sentences: what you saw, why it matters, what to do next time.>
+```
+
+If a fresh observation contradicts an older entry, do NOT delete the older
+one. Use `Edit` to add ` [obsoleted YYYY-MM-DD]` to the older heading, then
+append a new entry at the bottom that mentions which prior entry it
+supersedes.
+
+If nothing weird happened — write nothing. The file is for deltas, not
+heartbeats. See `skills/repost-learnings/SKILL.md` for the full
+"signal vs noise" rules + good/bad entry examples.
+
 ## Cron / launchd context
 
 When invoked from a fresh subagent spawned by the cron job:
@@ -236,6 +279,7 @@ which category:
 - `skills/repost-dedup/SKILL.md` — dedupe algorithm details.
 - `skills/repost-url-expand/SKILL.md` — URL expansion details.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
+- `skills/repost-learnings/SKILL.md` — pair-level institutional-memory file.
 - `skills/repost-backfill/SKILL.md` — multi-post historical walks.
 - `docs/destinations/<platform>.md` — per-platform DOM hints.
 - `docs/state-files.md` — formal state-file schemas.

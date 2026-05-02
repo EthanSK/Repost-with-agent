@@ -21,7 +21,18 @@ recent audit events, and free-form learnings.
 5. **Tail** the last 20 entries of `~/.repost-with-agent/pairs/<id>/audit.jsonl`
    via `tail -20` (Bash). Include only `event` + `ts` + a short reason.
 6. **Read** `~/.repost-with-agent/pairs/<id>/learnings.md` (if exists, may be
-   empty) and include verbatim under a "Learnings" heading.
+   empty).
+   - Print the **last 5** `## …` entries verbatim under a "Recent learnings"
+     heading (newest at the bottom — the file is append-only so the last 5
+     `##` headings ARE the most recent). Use a small `awk` / `tail` pipe to
+     extract them; one practical approach is to `grep -n '^## '
+     learnings.md | tail -5` to find the line numbers of the last 5 headings,
+     then `sed -n '<first>,$p'` from the earliest of those.
+   - If the file is empty or only contains the placeholder stub, print
+     `(no learnings recorded yet)` instead.
+   - If the user asks for the full file (`--full-learnings` or similar),
+     dump the entire file verbatim under "All learnings" instead of the
+     last-5 tail.
 
 ## Output format
 
@@ -46,9 +57,23 @@ recent audit events, and free-form learnings.
   2026-04-30T22:53:09Z  pair.publish.url_expanded  https://lnkd.in/abc → https://example.com/article
   ...
 
-=== Learnings ===
-  <contents of learnings.md or "(empty)">
+=== Recent learnings (last 5) ===
+  ## 2026-05-12 14:22 — LinkedIn recent-activity pagination cap dropped to ~60
+  <body>
+
+  ## 2026-05-09 09:14 — X composer textarea stopped auto-focusing
+  <body>
+
+  ...
 ```
+
+If `--full-learnings` was passed, replace the last-5 tail with the full
+file contents under `=== All learnings ===`.
+
+## See also
+
+- `skills/repost-learnings/SKILL.md` — format + lifecycle of the
+  learnings.md file this skill surfaces.
 
 ## Telegram
 

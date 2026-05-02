@@ -145,8 +145,34 @@ The scheduled subagent runs `repost-run`, which already enforces this rule.
 Don't add a separate ping for the cron tick itself — that would be noise. Just
 the per-publish ping.
 
+## Cron-spawned subagents read + write learnings.md
+
+Every cron / launchd tick spawns a fresh, ephemeral Claude Code or OpenClaw
+subagent that loads this plugin and runs `/repost-run <pair-id>`. That
+subagent ALSO follows the learnings-file lifecycle:
+
+- **Step 1.5 of `repost-run`**: the subagent reads
+  `~/.repost-with-agent/pairs/<id>/learnings.md` before scraping, so it
+  inherits every quirk discovered by prior ticks.
+- **Final step of `repost-run`**: the subagent appends any newly-discovered
+  quirks to the same file before exiting.
+
+Over time the file becomes the primary mechanism by which the cron pipeline
+gets smarter at running this specific pair. There is no shared in-memory
+state between ticks — `learnings.md` is the only continuity.
+
+When you install the scheduler entry, ensure
+`~/.repost-with-agent/pairs/<id>/learnings.md` exists (create the placeholder
+stub from `templates/learnings.md.template` if missing). The cron-spawned
+subagent will populate it organically from there.
+
+See `skills/repost-learnings/SKILL.md` for the full lifecycle + signal-vs-noise
+rules.
+
 ## See also
 
 - `skills/repost-run/SKILL.md` — what each cron tick actually does.
+- `skills/repost-learnings/SKILL.md` — the per-pair institutional-memory file
+  cron-spawned subagents read + write.
 - `commands/setup-cron.md` — slash command wrapper.
 - `docs/state-files.md` — pair config + state schemas.

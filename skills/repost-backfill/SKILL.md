@@ -30,6 +30,24 @@ Same as `repost-run`: Read, Edit, Write, Bash, browser MCP,
    - `--allow-publish` (boolean — default false). Without this flag, do a dry-run preview of every candidate but DON'T publish. With this flag, actually publish.
 4. Verify `pair.mode !== "preview-only"` if `--allow-publish` is set. If `preview-only`, refuse and tell the user to flip the pair to `approval-required` or `live-approved` first.
 
+## Step 1.5 — Read pair learnings (institutional memory)
+
+Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it exists. Backfill is
+the highest-volume publish path on this plugin, so prior learnings about
+this pair's pagination caps, rate-limit signatures, destination-dedupe
+quirks, and per-account DOM oddities are especially valuable here. Apply the
+relevant quirks BEFORE you start the source pagination walk.
+
+Track newly-discovered quirks in your reasoning as the loop runs — for
+example, "between item 7 and item 8 the destination's rate-limit modal
+appeared after a 4-min gap", or "scrolling past the 60th source item
+shows a 'You're caught up' footer instead of more posts on this account".
+Don't append to learnings.md mid-loop; batch the writes at the **Final
+step** below so a mid-loop crash doesn't corrupt the file with a
+half-written entry.
+
+Full rules + good/bad entry examples: `skills/repost-learnings/SKILL.md`.
+
 ## Step 2 — Resume state file
 
 Backfill is interruptible. Keep an idempotent state file at
@@ -121,6 +139,37 @@ The per-publish Telegram pings already happened during step 6. The summary
 itself can ALSO go to Telegram if the run was longer than ~5 minutes — Ethan
 likes a wrap-up.
 
+## Step 9 — Flush discovered quirks to learnings.md
+
+Before exiting, append any quirks you tracked during the loop to
+`~/.repost-with-agent/pairs/<id>/learnings.md`. Use `>>` via Bash —
+append-only. Each entry:
+
+```
+## YYYY-MM-DD HH:MM — <one-line summary>
+
+<2–5 sentences: what you saw, why it matters, what to do next time.>
+```
+
+Backfill is unusually rich source of learnings — each loop iteration touches
+the source + destination DOM, exercises the dedupe path, and stresses the
+rate-limit envelope. Examples worth saving:
+
+- "Destination rate-limit modal appears after the 4th publish in a 30-min
+  window for this account; bumping `intervalMinutes` to 12 cleared it."
+- "Source pagination on this LinkedIn account caps at ~60 posts (not 100);
+  set realistic `--max` going forward."
+- "Between item 7 and item 8, the destination scrape returned an empty
+  feed for 90s before recovering — likely a cache flush."
+
+If a fresh observation contradicts an older entry, do NOT delete the older
+one. Use `Edit` to add ` [obsoleted YYYY-MM-DD]` to the older heading, then
+append a new entry that mentions which prior entry it supersedes.
+
+If the loop was uneventful and matched all prior expectations — write
+nothing. The file is for deltas, not heartbeats. See
+`skills/repost-learnings/SKILL.md` for full "signal vs noise" rules.
+
 ## Telegram-confirm every successful publish — non-negotiable
 
 > Every successful post from this plugin MUST trigger a Telegram message to
@@ -136,4 +185,5 @@ one per successful publish (step 6), plus an optional final-summary ping.
 - `skills/repost-dedup/SKILL.md` — dedupe algorithm.
 - `skills/repost-url-expand/SKILL.md` — URL expansion.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
+- `skills/repost-learnings/SKILL.md` — pair-level institutional-memory file.
 - `docs/destinations/<platform>.md` — per-platform DOM + pagination hints.
