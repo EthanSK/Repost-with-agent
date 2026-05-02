@@ -1,19 +1,45 @@
+/**
+ * Backfill mode — v3.0.0 platform-agnostic, agent-driven.
+ *
+ * Walks back through the source platform's history (multiple pages) via the
+ * agent's `fetch-source` task, cross-checks both local `posted.jsonl` and
+ * the destination platform itself (via the agent's `check-destination`
+ * task), and publishes anything missing on a staggered schedule.
+ *
+ * Ordering change in v3 (Ethan voice 6021, 2026-05-01): backfill now orders
+ * candidates **newest-first**. v2 ordered oldest-first; the rationale flipped
+ * because Ethan wanted recent-old posts to land first when re-bootstrapping a
+ * destination account, since they're more likely to still be relevant.
+ *
+ * The loop, the resume state file, and the audit-event taxonomy match v2 so
+ * existing tooling and dashboards continue to work.
+ */
+
 import * as fs from "fs";
 import * as path from "path";
 import {
-  DestinationAdapter,
-  DestinationLookupResult,
-  PublishResult,
-} from "../adapters/destination.js";
-import { SourceAdapter } from "../adapters/source.js";
+  CheckDestinationResult,
+  FetchSourceResult,
+  PostToDestinationResult,
+  isErrorResult,
+  newCorrelationId,
+} from "./agent-task-contract.js";
+import { RunAgentTaskOptions, runAgentTask } from "./agent-runner.js";
 import { contentHash, summarizeText } from "./dedupe.js";
 import { notifyPublishSuccess } from "./notify.js";
+import {
+  buildDraftForItem,
+  sourceItemFromAgent,
+  DEFAULT_PLATFORM_MAX_LENGTH,
+} from "./orchestrator.js";
 import {
   appendAuditEvent,
   appendPostedHistory,
   ensurePairDirs,
   loadPostedHistory,
   nowIso,
+  resolveDestinationPlatform,
+  resolveSourcePlatform,
 } from "./runtime.js";
 import { truncate } from "./truncate.js";
 import {
@@ -29,27 +55,12 @@ export type OverlengthStrategy = "skip" | "truncate";
 /** Default policy when the user doesn't pass `--overlength-strategy`. */
 export const DEFAULT_OVERLENGTH_STRATEGY: OverlengthStrategy = "skip";
 
-/**
- * Backfill mode: walk back through the source's history (multiple pages),
- * cross-check both local `posted.jsonl` and the destination platform itself
- * for already-posted items, and publish anything missing on a staggered
- * schedule.
- *
- * Default policy: 2 pages, 20 max publishes, 10-minute interval between
- * posts, oldest-first ordering. Re-running the same backfill against the
- * same pair is idempotent — items already in `posted.jsonl` are skipped, and
- * a `backfill-state.json` file in the pair dir records progress.
- *
- * Live progress is emitted both to stdout (one line per state transition,
- * tail-friendly) and to `audit.jsonl` (structured `pair.backfill.*` events).
- */
-
 export interface BackfillOptions {
   /** Maximum number of items to publish in this run. Default: 20. */
   max?: number;
   /** Number of source pages to fetch. Default: 2. */
   pages?: number;
-  /** Page size hint passed to the source adapter. Default: 10. */
+  /** Page size hint passed to the source skill. Default: 10. */
   pageSize?: number;
   /** Interval between successive publishes, in minutes. Default: 10. */
   intervalMinutes?: number;
@@ -60,39 +71,32 @@ export interface BackfillOptions {
    * loop. Useful for dry-runs from CI / agent scripts.
    */
   dryRun?: boolean;
-  /**
-   * Override clock used for scheduling (testing only).
-   */
+  /** Override clock used for scheduling (testing only). */
   now?: () => Date;
-  /**
-   * Override the per-tick wait. Defaults to a real `setTimeout`. Tests inject
-   * a no-op.
-   */
+  /** Override the per-tick wait. Defaults to a real `setTimeout`. */
   sleep?: (ms: number) => Promise<void>;
-  /**
-   * Override stdout writer (testing only). Default writes to process.stdout.
-   */
+  /** Override stdout writer (testing only). Default writes to process.stdout. */
   writeLine?: (line: string) => void;
   /**
-   * Override the destination-dedupe lookup (testing only). When omitted, the
-   * destination adapter's `findExistingPost()` is used (or "skipped" if the
-   * adapter doesn't implement it).
+   * Test/inline override for the agent runner. When omitted, tasks go through
+   * the inbox path.
    */
-  lookupOverride?: (
-    draft: DraftPost,
-    pair: PairRecord
-  ) => Promise<DestinationLookupResult>;
+  agent?: RunAgentTaskOptions;
   /**
    * Behavior when a draft exceeds the destination's `maxLength`:
    *  - "skip" (default): drop the candidate at plan time with audit event
    *    `pair.backfill.skipped_overlength`. The publish loop never sees it.
    *  - "truncate": call `truncate(draft, maxLength)` to smart-shorten the
-   *    draft at sentence/word boundary + ellipsis. The truncated draft is
-   *    used for the actual publish, and the success audit event records
-   *    `truncated: true`.
+   *    draft at sentence/word boundary + ellipsis.
    * Adapters that don't declare `maxLength` are unaffected by this option.
    */
   overlengthStrategy?: OverlengthStrategy;
+  /**
+   * Override the destination char cap. When omitted, falls back to
+   * `DEFAULT_PLATFORM_MAX_LENGTH[destPlatform]`. Pass `null` to disable
+   * cap enforcement entirely (e.g. for a verified / Premium account).
+   */
+  destinationMaxLength?: number | null;
 }
 
 export interface BackfillCandidatePlan {
@@ -101,31 +105,13 @@ export interface BackfillCandidatePlan {
   canonicalUrl?: string | null;
   page: number;
   publishedAtSource?: string;
-  /** Length of the draft text the destination adapter produced (post-format). */
   draftChars: number;
   draftPreview: string;
   scheduledAt: string;
-  /**
-   * Plan-time verdict. Items decided as `skip-local` or `skip-too-long` are
-   * filtered out of the publish loop. `truncate` items will be shortened
-   * before publish; `publish` is the unchanged path.
-   */
   decisionAtPlan: "publish" | "skip-local" | "skip-too-long" | "truncate";
   reason?: string;
-  /**
-   * Set when `decisionAtPlan === "skip-too-long"` or `"truncate"`. Records the
-   * destination's max-length cap so audit consumers can compare against
-   * draftChars without re-loading the adapter.
-   */
   destinationMaxLength?: number;
-  /**
-   * When the strategy is "truncate" and the draft was actually shortened, this
-   * holds the truncated text that will be passed to `destination.publish()`.
-   * Captured here at plan time so dry-run output reflects the same final text
-   * the live publish would use.
-   */
   truncatedDraftText?: string;
-  /** Length of the truncated text, when truncation was applied. */
   truncatedDraftChars?: number;
 }
 
@@ -146,22 +132,10 @@ export interface BackfillPlan {
   >;
   totalConsidered: number;
   skippedLocal: number;
-  /**
-   * How many candidates were filtered out at plan time because their draft
-   * exceeded `destination.maxLength` and the strategy was `skip`. Only set
-   * when the destination declares a `maxLength`.
-   */
   skippedOverlength: number;
-  /**
-   * How many candidates will have their draft truncated before publish.
-   * Only set when the destination declares a `maxLength` and strategy is
-   * `truncate`.
-   */
   truncatedCount: number;
-  /** Destination character cap (echoed for audit clarity). Undefined when the adapter doesn't declare one. */
   destinationMaxLength?: number;
   candidates: BackfillCandidatePlan[];
-  /** Total items already in posted.jsonl when planning was done. */
   postedHistoryCount: number;
   destinationLookupSupported: boolean;
 }
@@ -189,12 +163,9 @@ export interface BackfillItemResult {
   startedAt?: string;
   finishedAt?: string;
   durationMs?: number;
-  destinationLookup?: DestinationLookupResult;
-  /** True when the draft was truncated before publish. */
+  destinationLookup?: CheckDestinationResult;
   truncated?: boolean;
-  /** Original draft length (pre-truncation), when `truncated` is true. */
   originalDraftChars?: number;
-  /** Final draft length actually sent to the destination. */
   finalDraftChars?: number;
 }
 
@@ -235,9 +206,7 @@ const BACKFILL_PUBLISH_END = "pair.backfill.publish.end";
 const BACKFILL_SKIP_LOCAL = "pair.backfill.skip.local";
 const BACKFILL_SKIP_DESTINATION = "pair.backfill.skip.destination";
 const BACKFILL_SKIP_ALREADY = "pair.backfill.skip.already-in-run";
-/** Draft exceeded `destination.maxLength` and strategy was `skip`. */
 const BACKFILL_SKIPPED_OVERLENGTH = "pair.backfill.skipped_overlength";
-/** Draft was truncated at plan time to fit within `destination.maxLength`. */
 const BACKFILL_TRUNCATED = "pair.backfill.truncated";
 const BACKFILL_PLAN = "pair.backfill.plan";
 const BACKFILL_START = "pair.backfill.start";
@@ -327,27 +296,49 @@ export interface FetchedPage {
   items: SourceItem[];
 }
 
+/**
+ * Fetch all requested pages from the source via the agent.
+ */
 export async function fetchAllPages(
   pair: PairRecord,
-  source: SourceAdapter,
   pages: number,
-  pageSize: number
+  pageSize: number,
+  agent?: RunAgentTaskOptions
 ): Promise<FetchedPage[]> {
   const out: FetchedPage[] = [];
   let cursor: string | undefined;
+  const sourcePlatform = resolveSourcePlatform(pair);
   for (let page = 1; page <= pages; page += 1) {
-    if (source.fetchPage) {
-      const result = await source.fetchPage(pair, { page, pageSize, cursor });
-      out.push({ page, items: result.items });
-      cursor = result.nextCursor;
-      if (!result.hasMore && page < pages) {
-        // Source said no more — stop early.
-        break;
-      }
-    } else {
-      // Adapter doesn't support pagination — single fallback fetch.
-      const items = await source.fetchCandidates(pair);
-      out.push({ page: 1, items });
+    const task = {
+      kind: "fetch-source" as const,
+      platform: sourcePlatform,
+      source_url: pair.source.url || pair.source.profileUrl || "",
+      max_items: pageSize,
+      page,
+      cursor,
+      correlation_id: newCorrelationId(`fetch-${pair.id}-p${page}`),
+      pair_id: pair.id,
+    };
+    const result = await runAgentTask(task, agent);
+    if (isErrorResult(result)) {
+      // Bail; the caller decides what to do with `out`.
+      throw new Error(
+        `Source fetch (page ${page}) failed: ${result.error}` +
+          (result.category ? ` [${result.category}]` : "")
+      );
+    }
+    if (result.kind !== "fetch-source-result") {
+      throw new Error(
+        `Source fetch (page ${page}) returned wrong result kind: ${result.kind}`
+      );
+    }
+    const fetchResult = result as FetchSourceResult;
+    out.push({
+      page,
+      items: fetchResult.items.map(sourceItemFromAgent),
+    });
+    cursor = fetchResult.nextCursor;
+    if (!fetchResult.hasMore && page < pages) {
       break;
     }
   }
@@ -355,12 +346,13 @@ export async function fetchAllPages(
 }
 
 /**
- * Order items oldest-first based on `publishedAt` when present, falling back
- * to the original (newest-first) source ordering reversed. Stable across
- * ties.
+ * v3.0.0: order **newest-first** based on `publishedAt` when present, falling
+ * back to original source order. Stable across ties.
+ *
+ * (v2 ordered oldest-first; flipped per Ethan voice 6021 — recent-old posts
+ * are more relevant to a destination account being re-bootstrapped.)
  */
-export function orderOldestFirst<T extends { publishedAt?: string }>(items: T[]): T[] {
-  // Capture the original index so ties stay deterministic.
+export function orderNewestFirst<T extends { publishedAt?: string }>(items: T[]): T[] {
   const indexed = items.map((value, index) => ({ value, index }));
   indexed.sort((a, b) => {
     const aTime = a.value.publishedAt ? Date.parse(a.value.publishedAt) : NaN;
@@ -368,27 +360,21 @@ export function orderOldestFirst<T extends { publishedAt?: string }>(items: T[])
     const aValid = Number.isFinite(aTime);
     const bValid = Number.isFinite(bTime);
     if (aValid && bValid) {
-      if (aTime !== bTime) return aTime - bTime;
+      if (aTime !== bTime) return bTime - aTime; // descending = newest first
       return a.index - b.index;
     }
     if (aValid) return -1;
     if (bValid) return 1;
-    // Neither has a publishedAt — use REVERSE original order (newest-first
-    // becomes oldest-first).
-    return b.index - a.index;
+    // Neither has publishedAt — use ORIGINAL order (sources typically return
+    // newest first already).
+    return a.index - b.index;
   });
   return indexed.map((entry) => entry.value);
 }
 
 /**
  * Build the publish plan from fetched pages + posted history. Pure function;
- * used both by the live runner and by tests to verify ordering / pagination /
- * cap / overlength behavior.
- *
- * Optional `draftFor(item)` lets the caller pre-compute the destination draft
- * for each item so plan-time overlength decisions reflect the actual draft
- * text the publish path would produce. When omitted, plan-time treats
- * `item.text.length` as the draft length (legacy behavior).
+ * used both by the live runner and by tests.
  */
 export function buildBackfillPlan(args: {
   pair: PairRecord;
@@ -399,8 +385,8 @@ export function buildBackfillPlan(args: {
   generatedAt?: Date;
   /** Look up the destination draft text for an item (already previewed). */
   draftTextFor?: (item: SourceItem) => string | undefined;
-  /** Destination's hard char limit, when the adapter declares one. */
-  destinationMaxLength?: number;
+  /** Destination's hard char limit. Pass null to disable. */
+  destinationMaxLength?: number | null;
 }): BackfillPlan {
   const max = Math.max(1, args.options.max ?? 20);
   const pageCount = Math.max(1, args.options.pages ?? 2);
@@ -410,10 +396,11 @@ export function buildBackfillPlan(args: {
   const overlengthStrategy: OverlengthStrategy =
     args.options.overlengthStrategy ?? DEFAULT_OVERLENGTH_STRATEGY;
   const generatedAt = args.generatedAt ?? new Date();
-  const maxLen = args.destinationMaxLength;
+  const maxLen = args.destinationMaxLength === null
+    ? undefined
+    : args.destinationMaxLength;
 
-  // Tag each item with its page and dedupe across pages (same canonical URL
-  // can appear on consecutive pages if LinkedIn re-renders).
+  // Tag each item with its page and dedupe across pages.
   const seen = new Set<string>();
   const tagged: Array<{ item: SourceItem; page: number }> = [];
   for (const page of args.pages) {
@@ -425,7 +412,7 @@ export function buildBackfillPlan(args: {
     }
   }
 
-  const ordered = orderOldestFirst(
+  const ordered = orderNewestFirst(
     tagged.map((entry) => ({ ...entry.item, _page: entry.page }))
   );
 
@@ -446,13 +433,9 @@ export function buildBackfillPlan(args: {
       generatedAt.getTime() + publishCount * intervalMinutes * 60 * 1000
     ).toISOString();
 
-    // Resolve draft text. If the caller pre-previewed, use that — it includes
-    // formatter output (e.g. trailing canonical URL appended by `formatForX`).
-    // Otherwise fall back to source text length.
     const draftText = args.draftTextFor?.(enriched) ?? enriched.text;
     const draftChars = draftText.length;
 
-    // Overlength evaluation — only meaningful when destination declared a cap.
     let decisionAtPlan: BackfillCandidatePlan["decisionAtPlan"] = "publish";
     let truncatedDraftText: string | undefined;
     let truncatedDraftChars: number | undefined;
@@ -492,8 +475,6 @@ export function buildBackfillPlan(args: {
       truncatedDraftText,
       truncatedDraftChars,
     });
-    // Skipped-overlength items don't consume the publish budget — they're
-    // dropped from the publish loop entirely. Truncated items DO consume it.
     if (decisionAtPlan !== "skip-too-long") {
       publishCount += 1;
     }
@@ -524,13 +505,10 @@ export function buildBackfillPlan(args: {
 
 /**
  * Top-level backfill runner. Produces a plan, optionally publishes each
- * eligible item with destination-dedupe + interval-based pacing, and emits
- * structured audit events.
+ * eligible item with destination-dedupe + interval-based pacing.
  */
 export async function runBackfill(
   pair: PairRecord,
-  source: SourceAdapter,
-  destination: DestinationAdapter,
   options: BackfillOptions = {}
 ): Promise<BackfillResult> {
   ensurePairDirs(pair.id);
@@ -546,9 +524,14 @@ export async function runBackfill(
   const allowPublish = Boolean(options.allowPublish) && !dryRun;
   const overlengthStrategy: OverlengthStrategy =
     options.overlengthStrategy ?? DEFAULT_OVERLENGTH_STRATEGY;
-  const destinationLookupSupported = Boolean(
-    options.lookupOverride || destination.findExistingPost
-  );
+  const destPlatform = resolveDestinationPlatform(pair);
+  const destinationMaxLength =
+    options.destinationMaxLength === null
+      ? null
+      : options.destinationMaxLength ?? DEFAULT_PLATFORM_MAX_LENGTH[destPlatform];
+  // For agent-driven dedupe, we ALWAYS support it (the agent can scrape its
+  // own destination). The skill is responsible for actually doing the work.
+  const destinationLookupSupported = true;
 
   const baseEvent: Omit<AuditEvent, "event" | "details"> = {
     at: startedAt,
@@ -567,17 +550,20 @@ export async function runBackfill(
       dryRun,
       destinationLookupSupported,
       overlengthStrategy,
-      destinationMaxLength: destination.maxLength,
+      destinationMaxLength,
+      destPlatform,
+      sourcePlatform: resolveSourcePlatform(pair),
+      ordering: "newest-first",
     },
   });
   writeLine(
-    `[backfill] start pair=${pair.id} max=${max} pages=${pages} interval=${intervalMinutes}m dryRun=${dryRun} allowPublish=${allowPublish} overlength=${overlengthStrategy}`
+    `[backfill] start pair=${pair.id} max=${max} pages=${pages} interval=${intervalMinutes}m dryRun=${dryRun} allowPublish=${allowPublish} overlength=${overlengthStrategy} order=newest-first`
   );
 
   // Fetch source pages.
   let fetched: FetchedPage[];
   try {
-    fetched = await fetchAllPages(pair, source, pages, pageSize);
+    fetched = await fetchAllPages(pair, pages, pageSize, options.agent);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     appendAuditEvent({
@@ -594,10 +580,8 @@ export async function runBackfill(
     `[backfill] fetched ${totalFetched} item(s) across ${fetched.length} page(s) (page sizes: ${fetched.map((p) => p.items.length).join(", ")})`
   );
 
-  // Pre-preview every fetched item so plan-time overlength evaluation
-  // reflects the destination's actual draft (formatter output, appended
-  // canonical URL, etc.). We key the cache by the same key buildBackfillPlan
-  // uses for cross-page dedupe.
+  // Pre-build drafts for plan-time overlength evaluation. The agent's
+  // `post-to-destination` task at publish time will use the same shape.
   const draftCache = new Map<string, DraftPost>();
   const itemKey = (item: SourceItem): string =>
     item.sourceItemId || item.canonicalUrl || contentHash(item.text);
@@ -606,15 +590,14 @@ export async function runBackfill(
       const key = itemKey(item);
       if (draftCache.has(key)) continue;
       try {
-        const draft = await destination.preview(item, pair);
+        const draft = await buildDraftForItem(item, pair, {
+          agent: options.agent,
+        });
         draftCache.set(key, draft);
       } catch (err) {
-        // Preview failure shouldn't kill the whole backfill — fall back to
-        // source text for plan-time decisions and let the publish loop surface
-        // the real error if/when we get to that item.
         const message = err instanceof Error ? err.message : String(err);
         writeLine(
-          `[backfill] preview error for ${item.canonicalUrl || "(no-url)"}: ${message}`
+          `[backfill] draft build error for ${item.canonicalUrl || "(no-url)"}: ${message}`
         );
       }
     }
@@ -636,7 +619,7 @@ export async function runBackfill(
     destinationLookupSupported,
     generatedAt: options.now ? options.now() : new Date(),
     draftTextFor: (item) => draftCache.get(itemKey(item))?.text,
-    destinationMaxLength: destination.maxLength,
+    destinationMaxLength,
   });
 
   appendAuditEvent({
@@ -653,11 +636,11 @@ export async function runBackfill(
       destinationLookupSupported,
       overlengthStrategy,
       destinationMaxLength: plan.destinationMaxLength,
+      ordering: "newest-first",
     },
   });
 
-  // Plan-time overlength events — emitted whether dry-run or live so the
-  // audit log records the decision regardless of whether we actually publish.
+  // Plan-time overlength events.
   for (const candidate of plan.candidates) {
     if (
       candidate.decisionAtPlan === "skip-too-long" &&
@@ -712,7 +695,6 @@ export async function runBackfill(
     );
   }
 
-  // If pure dry-run, return now.
   const items: BackfillItemResult[] = [];
   const totals = {
     considered: plan.candidates.length,
@@ -782,8 +764,7 @@ export async function runBackfill(
     };
   }
 
-  // Live publish path. Load (or initialize) the resume state file so that
-  // re-running this backfill picks up where it left off.
+  // Live publish path. Resume state file.
   let state = loadBackfillState(pair.id);
   if (!state) {
     state = {
@@ -798,15 +779,8 @@ export async function runBackfill(
     saveBackfillState(state);
   }
 
-  const lookup = options.lookupOverride
-    ? options.lookupOverride
-    : destination.findExistingPost
-      ? destination.findExistingPost.bind(destination)
-      : null;
-
   for (const candidate of plan.candidates) {
-    // Plan-time skip-too-long candidates never enter the publish loop —
-    // record the outcome and move on.
+    // Plan-time skip-too-long candidates.
     if (candidate.decisionAtPlan === "skip-too-long") {
       const result: BackfillItemResult = {
         index: candidate.index,
@@ -824,17 +798,12 @@ export async function runBackfill(
       continue;
     }
 
-    const item = await rehydrateItem(pair, source, candidate, fetched);
+    const item = await rehydrateItem(candidate, fetched);
     if (!item) {
-      // Should not happen — defensive.
       continue;
     }
-    let draft = await destination.preview(item, pair);
+    let draft = await buildDraftForItem(item, pair, { agent: options.agent });
 
-    // If plan said "truncate", apply the saved truncated text to the live
-    // draft. We re-run truncate() against the freshly-previewed draft (rather
-    // than blindly trusting the cached text) so any race-state changes (e.g.
-    // adapter formatter version) propagate.
     let didTruncate = false;
     let originalDraftChars: number | undefined;
     if (
@@ -874,7 +843,7 @@ export async function runBackfill(
       continue;
     }
 
-    // Re-check local dedupe (covers concurrent posts via other code paths).
+    // Re-check local dedupe.
     const freshPosted = loadPostedHistory(pair.id);
     const localCheck = hasLocalMatch(item, freshPosted);
     if (localCheck.match) {
@@ -900,62 +869,75 @@ export async function runBackfill(
       continue;
     }
 
-    // Destination dedupe.
-    let destinationLookup: DestinationLookupResult | undefined;
-    if (lookup) {
-      try {
-        destinationLookup = await lookup(draft, pair);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        destinationLookup = {
-          exists: false,
-          reason: `lookup-error: ${message}`,
-        };
-      }
-      if (destinationLookup.exists) {
-        totals.skippedDestination += 1;
-        const result: BackfillItemResult = {
-          index: candidate.index,
-          sourceItemId: item.sourceItemId,
-          canonicalUrl: item.canonicalUrl,
-          decision: "skip-destination",
-          reason:
-            destinationLookup.reason || "Destination already has equivalent post.",
-          destinationUrl: destinationLookup.url,
-          destinationId: destinationLookup.id,
-          scheduledAt: candidate.scheduledAt,
-          destinationLookup,
-        };
-        appendAuditEvent({
-          ...baseEvent,
-          at: nowIso(),
-          event: BACKFILL_SKIP_DESTINATION,
-          details: { ...result } as Record<string, unknown>,
-        });
-        writeLine(
-          `[backfill] #${candidate.index + 1} skip (destination) ${destinationLookup.url || destinationLookup.id || destinationLookup.reason}`
-        );
-        // Also append to posted.jsonl so future runs short-circuit on local
-        // dedupe and don't burn an X API call.
-        appendPostedHistory(pair.id, {
-          sourceItemId: item.sourceItemId,
-          canonicalUrl: item.canonicalUrl,
-          contentHash: contentHash(item.text),
-          destinationType: destination.type,
-          destinationId: destinationLookup.id,
-          postedAt:
-            destinationLookup.postedAt || nowIso(),
-          summary: summarizeText(item.text, 240),
-          importedFrom: `backfill-destination-dedupe`,
-        });
-        items.push(result);
-        continue;
-      }
+    // Destination-side dedupe via the agent's check-destination task.
+    const checkTask = {
+      kind: "check-destination" as const,
+      platform: destPlatform,
+      destination_account: pair.destination.accountHint || pair.destination.pageHint || "",
+      candidate_text: draft.text,
+      correlation_id: newCorrelationId(`check-${pair.id}-${candidate.index}`),
+      pair_id: pair.id,
+    };
+    const checkResult = await runAgentTask(checkTask, options.agent);
+    let destinationLookup: CheckDestinationResult | undefined;
+    if (isErrorResult(checkResult)) {
+      destinationLookup = {
+        kind: "check-destination-result",
+        correlation_id: checkTask.correlation_id,
+        exists: false,
+        reason: `lookup-error: ${checkResult.error}`,
+      };
+    } else if (checkResult.kind === "check-destination-result") {
+      destinationLookup = checkResult as CheckDestinationResult;
+    } else {
+      destinationLookup = {
+        kind: "check-destination-result",
+        correlation_id: checkTask.correlation_id,
+        exists: false,
+        reason: `lookup-error: agent returned wrong result kind ${checkResult.kind}`,
+      };
     }
 
-    // Wait until the scheduled time before publishing. We only wait when the
-    // scheduledAt is in the future (so resume-after-kill doesn't eat the
-    // remaining window of all skipped items).
+    if (destinationLookup.exists) {
+      totals.skippedDestination += 1;
+      const result: BackfillItemResult = {
+        index: candidate.index,
+        sourceItemId: item.sourceItemId,
+        canonicalUrl: item.canonicalUrl,
+        decision: "skip-destination",
+        reason:
+          destinationLookup.reason || "Destination already has equivalent post.",
+        destinationUrl: destinationLookup.url,
+        destinationId: destinationLookup.posted_id,
+        scheduledAt: candidate.scheduledAt,
+        destinationLookup,
+      };
+      appendAuditEvent({
+        ...baseEvent,
+        at: nowIso(),
+        event: BACKFILL_SKIP_DESTINATION,
+        details: { ...result } as Record<string, unknown>,
+      });
+      writeLine(
+        `[backfill] #${candidate.index + 1} skip (destination) ${destinationLookup.url || destinationLookup.posted_id || destinationLookup.reason}`
+      );
+      // Append to posted.jsonl so future runs short-circuit on local dedupe.
+      appendPostedHistory(pair.id, {
+        sourceItemId: item.sourceItemId,
+        canonicalUrl: item.canonicalUrl,
+        contentHash: contentHash(item.text),
+        destinationType: destPlatform,
+        destinationId: destinationLookup.posted_id,
+        destinationUrl: destinationLookup.url,
+        postedAt: destinationLookup.postedAt || nowIso(),
+        summary: summarizeText(item.text, 240),
+        importedFrom: `backfill-destination-dedupe`,
+      });
+      items.push(result);
+      continue;
+    }
+
+    // Wait until the scheduled time before publishing.
     const scheduledMs = Date.parse(candidate.scheduledAt);
     const nowFn = options.now ?? (() => new Date());
     const waitMs = Math.max(0, scheduledMs - nowFn().getTime());
@@ -972,7 +954,7 @@ export async function runBackfill(
       await sleep(waitMs);
     }
 
-    // Publish.
+    // Publish via agent.
     const startedItemAt = nowIso();
     appendAuditEvent({
       ...baseEvent,
@@ -983,28 +965,86 @@ export async function runBackfill(
         sourceItemId: item.sourceItemId,
         canonicalUrl: item.canonicalUrl,
         chars: draft.text.length,
+        destPlatform,
       },
     });
     writeLine(
       `[backfill] #${candidate.index + 1} publish.start ${item.canonicalUrl || "(no-url)"} chars=${draft.text.length}`
     );
 
-    if (!destination.publish) {
+    // Audit URL expansions for this draft.
+    const urlExpansions = (draft.metadata?.urlExpansions || []) as Array<{
+      shortenedUrl: string;
+      expandedUrl: string;
+      hopCount: number;
+    }>;
+    for (const expansion of urlExpansions) {
+      appendAuditEvent({
+        ...baseEvent,
+        at: nowIso(),
+        event: "pair.publish.url_expanded",
+        details: { ...expansion, destPlatform, backfillIndex: candidate.index },
+      });
+    }
+
+    const postTask = {
+      kind: "post-to-destination" as const,
+      platform: destPlatform,
+      destination_account: pair.destination.accountHint || pair.destination.pageHint || "",
+      draft_text: draft.text,
+      source_url: item.canonicalUrl ?? undefined,
+      correlation_id: newCorrelationId(`post-${pair.id}-${candidate.index}`),
+      pair_id: pair.id,
+    };
+    const postResult = await runAgentTask(postTask, options.agent);
+
+    const finishedItemAt = nowIso();
+    if (isErrorResult(postResult)) {
+      const isAuth =
+        postResult.category === "needs-login" ||
+        postResult.category === "needs-config";
+      const result: BackfillItemResult = {
+        index: candidate.index,
+        sourceItemId: item.sourceItemId,
+        canonicalUrl: item.canonicalUrl,
+        decision: isAuth ? "auth-failed" : "publish-failed",
+        reason: postResult.error,
+        scheduledAt: candidate.scheduledAt,
+        startedAt: startedItemAt,
+        finishedAt: finishedItemAt,
+        durationMs: Date.parse(finishedItemAt) - Date.parse(startedItemAt),
+      };
+      totals.failed += 1;
+      writeLine(
+        `[backfill] #${candidate.index + 1} publish.end ${isAuth ? "AUTH-FAILED" : "FAILED"} ${result.reason}`
+      );
+      appendAuditEvent({
+        ...baseEvent,
+        at: finishedItemAt,
+        event: BACKFILL_PUBLISH_END,
+        details: { ...result } as Record<string, unknown>,
+      });
+      items.push(result);
+      // Auth failure halts the rest of the backfill.
+      if (isAuth) break;
+      continue;
+    }
+
+    if (postResult.kind !== "post-to-destination-result") {
       const result: BackfillItemResult = {
         index: candidate.index,
         sourceItemId: item.sourceItemId,
         canonicalUrl: item.canonicalUrl,
         decision: "publish-failed",
-        reason: `Destination adapter ${destination.type} has no publish() implementation.`,
+        reason: `Agent returned wrong result kind for post: ${postResult.kind}`,
         scheduledAt: candidate.scheduledAt,
         startedAt: startedItemAt,
-        finishedAt: nowIso(),
+        finishedAt: finishedItemAt,
       };
       totals.failed += 1;
-      writeLine(`[backfill] #${candidate.index + 1} publish.end FAILED ${result.reason}`);
       appendAuditEvent({
         ...baseEvent,
-        at: result.finishedAt!,
+        at: finishedItemAt,
         event: BACKFILL_PUBLISH_END,
         details: { ...result } as Record<string, unknown>,
       });
@@ -1012,179 +1052,113 @@ export async function runBackfill(
       continue;
     }
 
-    // Refresh destination auth health right before posting.
-    const auth = await destination.test(pair);
-    if (!auth.ok) {
-      const result: BackfillItemResult = {
-        index: candidate.index,
-        sourceItemId: item.sourceItemId,
-        canonicalUrl: item.canonicalUrl,
-        decision: "auth-failed",
-        reason: auth.message,
-        scheduledAt: candidate.scheduledAt,
-        startedAt: startedItemAt,
-        finishedAt: nowIso(),
-      };
-      totals.failed += 1;
-      writeLine(`[backfill] #${candidate.index + 1} publish.end AUTH-FAILED ${auth.message}`);
+    const post = postResult as PostToDestinationResult;
+    const result: BackfillItemResult = {
+      index: candidate.index,
+      sourceItemId: item.sourceItemId,
+      canonicalUrl: item.canonicalUrl,
+      decision: "published",
+      destinationUrl: post.posted_url,
+      destinationId: post.posted_id,
+      scheduledAt: candidate.scheduledAt,
+      startedAt: startedItemAt,
+      finishedAt: finishedItemAt,
+      durationMs: Date.parse(finishedItemAt) - Date.parse(startedItemAt),
+      truncated: didTruncate || undefined,
+      originalDraftChars: didTruncate ? originalDraftChars : undefined,
+      finalDraftChars: draft.text.length,
+    };
+    totals.published += 1;
+    appendPostedHistory(pair.id, {
+      sourceItemId: item.sourceItemId,
+      canonicalUrl: item.canonicalUrl,
+      contentHash: contentHash(item.text),
+      destinationType: destPlatform,
+      destinationId: post.posted_id,
+      destinationUrl: post.posted_url,
+      postedAt: finishedItemAt,
+      summary: summarizeText(item.text, 240),
+      importedFrom: "backfill",
+    });
+    if (item.sourceItemId) state.publishedSourceItemIds.push(item.sourceItemId);
+    if (item.canonicalUrl) state.publishedCanonicalUrls.push(item.canonicalUrl);
+    state.publishedContentHashes.push(contentHash(item.text));
+    state.lastIndex = candidate.index;
+    state.updatedAt = finishedItemAt;
+    saveBackfillState(state);
+
+    appendAuditEvent({
+      ...baseEvent,
+      at: finishedItemAt,
+      event: BACKFILL_PUBLISH_END,
+      details: { ...result } as Record<string, unknown>,
+    });
+    writeLine(
+      `[backfill] #${candidate.index + 1} publish.end OK ${post.posted_url}`
+    );
+
+    // Telegram-on-publish guarantee.
+    const notifyOutcome = await notifyPublishSuccess({
+      pairId: pair.id,
+      pairName: pair.name,
+      sourceUrl: item.canonicalUrl ?? undefined,
+      destinationUrl: post.posted_url,
+      destinationType: destPlatform,
+      destinationId: post.posted_id,
+      content: draft.text,
+      trigger: "backfill",
+    });
+    if (notifyOutcome.delivered) {
       appendAuditEvent({
         ...baseEvent,
-        at: result.finishedAt!,
-        event: BACKFILL_PUBLISH_END,
-        details: { ...result } as Record<string, unknown>,
+        at: nowIso(),
+        event: "notify.publish.success",
+        details: {
+          channel: "telegram",
+          configSource: notifyOutcome.source,
+          bytes: notifyOutcome.body.length,
+          backfillIndex: candidate.index,
+        },
       });
-      items.push(result);
-      // Auth failure halts the rest of the backfill — bail out so we don't
-      // hammer the destination with N more failed calls.
-      break;
-    }
-
-    let publishResult: PublishResult;
-    try {
-      publishResult = await destination.publish(item, draft, pair);
-    } catch (err) {
-      publishResult = {
-        success: false,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-
-    const finishedItemAt = nowIso();
-    if (publishResult.success && publishResult.destinationId) {
-      const result: BackfillItemResult = {
-        index: candidate.index,
-        sourceItemId: item.sourceItemId,
-        canonicalUrl: item.canonicalUrl,
-        decision: "published",
-        destinationUrl: publishResult.destinationUrl,
-        destinationId: publishResult.destinationId,
-        scheduledAt: candidate.scheduledAt,
-        startedAt: startedItemAt,
-        finishedAt: finishedItemAt,
-        durationMs: Date.parse(finishedItemAt) - Date.parse(startedItemAt),
-        truncated: didTruncate || undefined,
-        originalDraftChars: didTruncate ? originalDraftChars : undefined,
-        finalDraftChars: draft.text.length,
-      };
-      totals.published += 1;
-      // Persist to posted.jsonl.
-      appendPostedHistory(pair.id, {
-        sourceItemId: item.sourceItemId,
-        canonicalUrl: item.canonicalUrl,
-        contentHash: contentHash(item.text),
-        destinationType: destination.type,
-        destinationId: publishResult.destinationId,
-        postedAt: finishedItemAt,
-        summary: summarizeText(item.text, 240),
-        importedFrom: "backfill",
-      });
-      // Persist resume state.
-      if (item.sourceItemId) state.publishedSourceItemIds.push(item.sourceItemId);
-      if (item.canonicalUrl) state.publishedCanonicalUrls.push(item.canonicalUrl);
-      state.publishedContentHashes.push(contentHash(item.text));
-      state.lastIndex = candidate.index;
-      state.updatedAt = finishedItemAt;
-      saveBackfillState(state);
-
+    } else if (notifyOutcome.attempted) {
       appendAuditEvent({
         ...baseEvent,
-        at: finishedItemAt,
-        event: BACKFILL_PUBLISH_END,
-        details: { ...result } as Record<string, unknown>,
+        at: nowIso(),
+        event: "notify.publish.failure",
+        details: {
+          channel: "telegram",
+          configSource: notifyOutcome.source,
+          error: notifyOutcome.error,
+          backfillIndex: candidate.index,
+        },
       });
-      writeLine(
-        `[backfill] #${candidate.index + 1} publish.end OK ${publishResult.destinationUrl}`
-      );
-
-      // Telegram-on-publish guarantee (Ethan voice 5977 + 5978, 2026-05-01).
-      // Same pattern as `publishNextForPair`: fire AFTER the destination
-      // confirms + after we've persisted posted.jsonl + state. Notify
-      // failures never roll back the publish.
-      const notifyOutcome = await notifyPublishSuccess({
-        pairId: pair.id,
-        pairName: pair.name,
-        sourceUrl: item.canonicalUrl ?? undefined,
-        destinationUrl: publishResult.destinationUrl,
-        destinationType: destination.type,
-        destinationId: publishResult.destinationId,
-        content: draft.text,
-        trigger: "backfill",
+      appendAuditEvent({
+        ...baseEvent,
+        at: nowIso(),
+        event: "pair.publish.notify_failed",
+        details: {
+          channel: "telegram",
+          error: notifyOutcome.error,
+          trigger: "backfill",
+          backfillIndex: candidate.index,
+        },
       });
-      if (notifyOutcome.delivered) {
-        appendAuditEvent({
-          ...baseEvent,
-          at: nowIso(),
-          event: "notify.publish.success",
-          details: {
-            channel: "telegram",
-            configSource: notifyOutcome.source,
-            bytes: notifyOutcome.body.length,
-            backfillIndex: candidate.index,
-          },
-        });
-      } else if (notifyOutcome.attempted) {
-        appendAuditEvent({
-          ...baseEvent,
-          at: nowIso(),
-          event: "notify.publish.failure",
-          details: {
-            channel: "telegram",
-            configSource: notifyOutcome.source,
-            error: notifyOutcome.error,
-            backfillIndex: candidate.index,
-          },
-        });
-        appendAuditEvent({
-          ...baseEvent,
-          at: nowIso(),
-          event: "pair.publish.notify_failed",
-          details: {
-            channel: "telegram",
-            error: notifyOutcome.error,
-            trigger: "backfill",
-            backfillIndex: candidate.index,
-          },
-        });
-      } else {
-        appendAuditEvent({
-          ...baseEvent,
-          at: nowIso(),
-          event: "pair.publish.notify_skipped_unconfigured",
-          details: {
-            trigger: "backfill",
-            backfillIndex: candidate.index,
-            hint:
-              "Run `repost-with-agent notify configure --bot-token <T> --chat-id <C>` " +
-              "or set REPOST_TELEGRAM_BOT_TOKEN + REPOST_TELEGRAM_CHAT_ID.",
-          },
-        });
-      }
-
-      items.push(result);
     } else {
-      const result: BackfillItemResult = {
-        index: candidate.index,
-        sourceItemId: item.sourceItemId,
-        canonicalUrl: item.canonicalUrl,
-        decision: "publish-failed",
-        reason: publishResult.error || "Unknown publish failure.",
-        scheduledAt: candidate.scheduledAt,
-        startedAt: startedItemAt,
-        finishedAt: finishedItemAt,
-        durationMs: Date.parse(finishedItemAt) - Date.parse(startedItemAt),
-      };
-      totals.failed += 1;
       appendAuditEvent({
         ...baseEvent,
-        at: finishedItemAt,
-        event: BACKFILL_PUBLISH_END,
-        details: { ...result } as Record<string, unknown>,
+        at: nowIso(),
+        event: "pair.publish.notify_skipped_unconfigured",
+        details: {
+          trigger: "backfill",
+          backfillIndex: candidate.index,
+          hint:
+            "Run `repost-with-agent notify configure --bot-token <T> --chat-id <C>` " +
+            "or set REPOST_TELEGRAM_BOT_TOKEN + REPOST_TELEGRAM_CHAT_ID.",
+        },
       });
-      writeLine(
-        `[backfill] #${candidate.index + 1} publish.end FAILED ${result.reason}`
-      );
-      items.push(result);
     }
+
+    items.push(result);
   }
 
   const finishedAt = nowIso();
@@ -1199,7 +1173,6 @@ export async function runBackfill(
     `[backfill] complete published=${totals.published} skippedLocal=${totals.skippedLocal} skippedDestination=${totals.skippedDestination} skippedAlready=${totals.skippedAlreadyInRun} failed=${totals.failed} duration=${durationMs}ms`
   );
 
-  // Clear backfill-state if we published the entire plan and didn't fail.
   if (
     totals.published + totals.skippedLocal + totals.skippedDestination +
       totals.skippedAlreadyInRun >=
@@ -1222,13 +1195,7 @@ export async function runBackfill(
   };
 }
 
-/**
- * Re-locate a SourceItem from the fetched pages by canonicalUrl/sourceItemId.
- * Needed because the plan only carries the lightweight projection.
- */
 async function rehydrateItem(
-  _pair: PairRecord,
-  _source: SourceAdapter,
   candidate: BackfillCandidatePlan,
   pages: FetchedPage[]
 ): Promise<SourceItem | null> {

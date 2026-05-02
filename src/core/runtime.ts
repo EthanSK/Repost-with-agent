@@ -34,6 +34,10 @@ export function getPairsFilePath(): string {
   return path.join(getAppDataDir(), "pairs.json");
 }
 
+export function getPairsBackupPath(suffix: string): string {
+  return path.join(getAppDataDir(), `pairs.json.${suffix}.bak`);
+}
+
 export function getPairPaths(pairId: string): PairPaths {
   const rootDir = path.join(getAppDataDir(), "pairs", pairId);
   return {
@@ -67,21 +71,99 @@ export function slugifyPairId(value: string): string {
     .slice(0, 64);
 }
 
+/**
+ * v2 → v3 pair migration. v2 pairs only carried `endpoint.type` (the adapter
+ * id); v3 pairs add `endpoint.platform` (free-form label). This shim
+ * recognizes the small set of v2 adapter ids actually shipped and copies
+ * them into a v3 platform label without losing any other field.
+ */
+const V2_TYPE_TO_V3_PLATFORM: Record<string, string> = {
+  "linkedin-profile-activity": "linkedin",
+  "x-account": "x",
+  "x-post": "x",
+  "facebook-page": "facebook",
+  "bluesky-account": "bluesky",
+  "threads-account": "threads",
+};
+
+function migrateV2Pair(raw: PairRecord): PairRecord {
+  const next: PairRecord = {
+    ...raw,
+    source: { ...raw.source },
+    destination: { ...raw.destination },
+    schedule: { ...raw.schedule },
+    policy: { ...raw.policy },
+    dedupe: { ...raw.dedupe },
+  };
+  if (!next.source.platform && next.source.type) {
+    next.source.platform =
+      V2_TYPE_TO_V3_PLATFORM[next.source.type] || next.source.type;
+  }
+  if (!next.destination.platform && next.destination.type) {
+    next.destination.platform =
+      V2_TYPE_TO_V3_PLATFORM[next.destination.type] || next.destination.type;
+  }
+  if (!next.runMode) {
+    // v2 pairs only had the listen path; preserve that semantics by default.
+    next.runMode = "listen-for-future";
+  }
+  if (next.schemaVersion === undefined) {
+    next.schemaVersion = 3;
+  }
+  return next;
+}
+
+/**
+ * Detect whether a pairs.json file looks v2-shaped (no `platform` fields).
+ */
+function isV2Shape(pairs: PairRecord[]): boolean {
+  return pairs.some(
+    (p) =>
+      (!p.source.platform && p.source.type) ||
+      (!p.destination.platform && p.destination.type) ||
+      p.schemaVersion === undefined
+  );
+}
+
 export function loadPairsStore(): PairsStoreFile {
   ensureAppDirs();
   const filePath = getPairsFilePath();
   if (!fs.existsSync(filePath)) {
     return { version: STORE_VERSION, pairs: [] };
   }
+  let parsed: PairsStoreFile;
   try {
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as PairsStoreFile;
-    if (!Array.isArray(parsed.pairs)) {
-      return { version: STORE_VERSION, pairs: [] };
-    }
-    return parsed;
+    parsed = JSON.parse(fs.readFileSync(filePath, "utf-8")) as PairsStoreFile;
   } catch {
     return { version: STORE_VERSION, pairs: [] };
   }
+  if (!Array.isArray(parsed.pairs)) {
+    return { version: STORE_VERSION, pairs: [] };
+  }
+
+  // One-shot v2 → v3 migration on read. Back up the original shape once
+  // before rewriting.
+  if (isV2Shape(parsed.pairs)) {
+    const backupPath = getPairsBackupPath("v2");
+    if (!fs.existsSync(backupPath)) {
+      try {
+        fs.copyFileSync(filePath, backupPath);
+      } catch {
+        // best-effort; if the copy fails we still proceed (we never delete the
+        // original — savePairsStore writes the migrated form).
+      }
+    }
+    const migrated = parsed.pairs.map(migrateV2Pair);
+    const next: PairsStoreFile = { version: STORE_VERSION, pairs: migrated };
+    try {
+      savePairsStore(next);
+    } catch {
+      // best-effort
+    }
+    return next;
+  }
+
+  return parsed;
 }
 
 export function savePairsStore(store: PairsStoreFile): void {
@@ -165,6 +247,7 @@ export function writeDefaultLearnings(pairId: string): void {
         "",
         "- Loaded before each preview/run.",
         "- Record duplicate patterns, formatting preferences, and platform-specific cautions here.",
+        "- The agent reads this file at task-execution time to refine its browser-driven behavior.",
         "",
       ].join("\n"),
       "utf-8"
@@ -176,24 +259,12 @@ export function getEnvironmentSummary(): string {
   return `${APP_NAME} runtime at ${getAppDataDir()} (legacy: ${LEGACY_DATA_DIR}, home: ${os.homedir()})`;
 }
 
-export function getLegacyTrackerPath(): string {
-  return path.join(LEGACY_DATA_DIR, "posted.md");
-}
-
-export function getLegacyFacebookTrackerPath(): string {
-  return path.join(LEGACY_DATA_DIR, "posted-facebook.json");
-}
-
-export function getLegacyXTokensPath(): string {
-  return path.join(LEGACY_DATA_DIR, "x-tokens.json");
-}
-
 export function resolveScheduleTimezone(value?: string): string {
   return value || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-export function defaultPairName(sourceType: string, destinationType: string): string {
-  return `${sourceType} to ${destinationType}`;
+export function defaultPairName(sourcePlatform: string, destinationPlatform: string): string {
+  return `${sourcePlatform} to ${destinationPlatform}`;
 }
 
 export function nowIso(): string {
@@ -206,4 +277,16 @@ export function repoLocalPath(...parts: string[]): string {
 
 export function defaultAppDataDirForDocs(): string {
   return DEFAULT_DATA_DIR;
+}
+
+/**
+ * Resolve `pair.source.platform` falling back to the legacy `type` field for
+ * v2-migrated pairs that haven't been re-saved.
+ */
+export function resolveSourcePlatform(pair: PairRecord): string {
+  return pair.source.platform || pair.source.type || "unknown";
+}
+
+export function resolveDestinationPlatform(pair: PairRecord): string {
+  return pair.destination.platform || pair.destination.type || "unknown";
 }

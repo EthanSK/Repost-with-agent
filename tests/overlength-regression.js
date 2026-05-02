@@ -1,7 +1,7 @@
 // Regression tests for `pair backfill --overlength-strategy {skip,truncate}`.
-// Exercises the plan-time filter + the publish-time truncate flag end-to-end
-// through runBackfill with a fully mocked source/destination. Run via
-// `npm test`.
+// v3.0.0: exercises the plan-time filter + the publish-time truncate flag
+// end-to-end through runBackfill with a fully mocked agent task handler.
+// Run via `npm test`.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -21,8 +21,9 @@ const pair = {
   name: "Test Overlength Pair",
   enabled: true,
   mode: "live-approved",
-  source: { type: "mock-source", url: "https://example.test/profile" },
-  destination: { type: "mock-destination", accountHint: "@mock" },
+  runMode: "backfill",
+  source: { platform: "mock-source", url: "https://example.test/profile" },
+  destination: { platform: "mock-destination", accountHint: "@mock" },
   schedule: { kind: "manual", tz: "UTC" },
   policy: {
     requirePreviewBeforeFirstLiveRun: true,
@@ -34,6 +35,7 @@ const pair = {
   dedupe: { strategy: "source-id-url-content-hash" },
   createdAt: "2026-05-01T00:00:00.000Z",
   updatedAt: "2026-05-01T00:00:00.000Z",
+  schemaVersion: 3,
 };
 ensurePairDirs(pair.id);
 
@@ -42,35 +44,42 @@ function makeItem(idx, opts = {}) {
     sourceItemId: opts.sourceItemId ?? `item-${idx}`,
     canonicalUrl: opts.canonicalUrl ?? `https://example.test/post/${idx}`,
     text: opts.text ?? `mock-${idx}-body`,
-    metadata: { adapter: "mock-source" },
   };
 }
 
-function buildMockDestination({ maxLength, capturePublished } = {}) {
-  return {
-    type: "mock-destination",
-    maxLength,
-    async test() {
-      return { ok: true, status: "ok", message: "ok" };
-    },
-    async preview(item) {
-      // Pass-through preview: draft text equals item.text. Tests control
-      // length by setting item.text directly.
+function makeAgentHandler({ items, capturePublished }) {
+  return async function handler(task) {
+    if (task.kind === "fetch-source") {
       return {
-        destinationType: "mock-destination",
-        text: item.text,
-        warnings: [],
+        kind: "fetch-source-result",
+        correlation_id: task.correlation_id,
+        items,
       };
-    },
-    async publish(item, draft) {
-      const id = `mock-${item.sourceItemId}`;
-      capturePublished?.push({ id, text: draft.text });
+    }
+    if (task.kind === "check-destination") {
       return {
-        success: true,
-        destinationId: id,
-        destinationUrl: `https://mock/${id}`,
+        kind: "check-destination-result",
+        correlation_id: task.correlation_id,
+        exists: false,
+        reason: "no match",
       };
-    },
+    }
+    if (task.kind === "post-to-destination") {
+      const id = `mock-${task.correlation_id}`;
+      capturePublished?.push({
+        id,
+        text: task.draft_text,
+        correlation_id: task.correlation_id,
+      });
+      return {
+        kind: "post-to-destination-result",
+        correlation_id: task.correlation_id,
+        posted_url: `https://mock/${id}`,
+        posted_id: id,
+        posted_at: "2026-05-02T12:00:00.000Z",
+      };
+    }
+    throw new Error(`Unhandled task kind: ${task.kind}`);
   };
 }
 
@@ -83,16 +92,10 @@ async function skipStrategyTest() {
     makeItem(2, { text: "x".repeat(400) }), // way over 280
     makeItem(3, { text: "another short post" }),
   ];
-  const source = {
-    type: "mock-source",
-    async test() { return { ok: true, status: "ok", message: "ok" }; },
-    async fetchCandidates() { return items; },
-    async fetchPage() { return { items, hasMore: false }; },
-  };
-  const destination = buildMockDestination({ maxLength: 280 });
+  const handler = makeAgentHandler({ items });
 
   const lines = [];
-  const result = await runBackfill(fixturePair, source, destination, {
+  const result = await runBackfill(fixturePair, {
     max: 5,
     pages: 1,
     intervalMinutes: 0,
@@ -102,29 +105,27 @@ async function skipStrategyTest() {
     sleep: async () => {},
     writeLine: (line) => lines.push(line),
     now: () => new Date("2026-05-02T12:00:00.000Z"),
+    agent: { handler },
+    destinationMaxLength: 280,
   });
 
   assert.equal(result.plan.skippedOverlength, 1, "expected 1 overlength skip");
   assert.equal(result.plan.truncatedCount, 0, "no truncations under skip strategy");
-  // Plan candidates: item-1, item-2 (skip-too-long), item-3.
-  // The skip-too-long item is INCLUDED in plan.candidates with that decision
-  // so audit traces its ID, but doesn't enter the publish loop.
   const skipped = result.plan.candidates.find(
     (c) => c.decisionAtPlan === "skip-too-long"
   );
   assert.ok(skipped, "expected one candidate with decisionAtPlan=skip-too-long");
   assert.equal(skipped.sourceItemId, "item-2");
-  assert.equal(skipped.draftChars, 400);
+  // Draft length includes the canonical URL appended at draft build time.
+  assert.ok(skipped.draftChars >= 400);
   assert.equal(skipped.destinationMaxLength, 280);
 
-  // Audit event must be emitted.
   const audit = loadAuditHistory(fixturePair.id);
   const overlengthEvents = audit.filter(
     (e) => e.event === "pair.backfill.skipped_overlength"
   );
   assert.equal(overlengthEvents.length, 1, "expected 1 skipped_overlength audit event");
   assert.equal(overlengthEvents[0].details.sourceItemId, "item-2");
-  assert.equal(overlengthEvents[0].details.draftChars, 400);
   assert.equal(overlengthEvents[0].details.destinationMaxLength, 280);
   assert.equal(overlengthEvents[0].details.strategy, "skip");
 }
@@ -142,19 +143,10 @@ async function truncateStrategyTest() {
     makeItem(1, { text: "tiny" }),
     makeItem(2, { text: longText }),
   ];
-  const source = {
-    type: "mock-source",
-    async test() { return { ok: true, status: "ok", message: "ok" }; },
-    async fetchCandidates() { return items; },
-    async fetchPage() { return { items, hasMore: false }; },
-  };
   const published = [];
-  const destination = buildMockDestination({
-    maxLength: 280,
-    capturePublished: published,
-  });
+  const handler = makeAgentHandler({ items, capturePublished: published });
 
-  const result = await runBackfill(fixturePair, source, destination, {
+  const result = await runBackfill(fixturePair, {
     max: 5,
     pages: 1,
     intervalMinutes: 0,
@@ -164,28 +156,28 @@ async function truncateStrategyTest() {
     sleep: async () => {},
     writeLine: () => {},
     now: () => new Date("2026-05-02T12:00:00.000Z"),
+    agent: { handler },
+    destinationMaxLength: 280,
   });
 
   assert.equal(result.plan.skippedOverlength, 0);
   assert.equal(result.plan.truncatedCount, 1);
-  // Both items should publish.
   assert.equal(result.totals.published, 2);
   assert.equal(result.totals.truncated, 1);
 
-  // Verify the truncated post is actually within the cap when published.
-  const longPublished = published.find((p) => p.id === "mock-item-2");
+  // Find the published items by matching against the draft text body.
+  const longPublished = published.find((p) => p.text.includes("First sentence is fine"));
   assert.ok(longPublished);
   assert.ok(
     longPublished.text.length <= 280,
     `published text length ${longPublished.text.length} exceeds cap 280`
   );
   assert.ok(longPublished.text.endsWith("…"), "truncated post should end with ellipsis");
-  // Tiny item should NOT have been truncated.
-  const tinyPublished = published.find((p) => p.id === "mock-item-1");
-  assert.equal(tinyPublished.text, "tiny");
+  const tinyPublished = published.find((p) => p.text.startsWith("tiny"));
+  // The draft path prepends the canonical URL since `tiny` text doesn't contain
+  // the URL — so the published draft is "tiny\n\n<url>".
+  assert.ok(tinyPublished, "tiny item must have been published");
 
-  // Audit: pair.backfill.truncated emitted at plan time, and published.end
-  // result has truncated:true.
   const audit = loadAuditHistory(fixturePair.id);
   const truncatedEvents = audit.filter(
     (e) => e.event === "pair.backfill.truncated"
@@ -203,7 +195,6 @@ async function truncateStrategyTest() {
   const truncatedPublish = publishEnds.find((e) => e.details.sourceItemId === "item-2");
   assert.equal(truncatedPublish.details.truncated, true, "publish.end must record truncated:true");
   const tinyPublish = publishEnds.find((e) => e.details.sourceItemId === "item-1");
-  // For non-truncated, the audit should either have truncated absent or undefined.
   assert.ok(
     tinyPublish.details.truncated === undefined ||
       tinyPublish.details.truncated === false,
@@ -211,22 +202,16 @@ async function truncateStrategyTest() {
   );
 }
 
-// ---------- 3. No maxLength on destination → strategy is a no-op ----------
+// ---------- 3. No maxLength → strategy is a no-op ----------
 async function noMaxLengthTest() {
   const fixturePair = { ...pair, id: "test-overlength-nomax" };
   ensurePairDirs(fixturePair.id);
   const items = [
     makeItem(1, { text: "x".repeat(1000) }),
   ];
-  const source = {
-    type: "mock-source",
-    async test() { return { ok: true, status: "ok", message: "ok" }; },
-    async fetchCandidates() { return items; },
-    async fetchPage() { return { items, hasMore: false }; },
-  };
-  const destination = buildMockDestination({}); // no maxLength
+  const handler = makeAgentHandler({ items });
 
-  const result = await runBackfill(fixturePair, source, destination, {
+  const result = await runBackfill(fixturePair, {
     max: 5,
     pages: 1,
     intervalMinutes: 0,
@@ -236,9 +221,10 @@ async function noMaxLengthTest() {
     sleep: async () => {},
     writeLine: () => {},
     now: () => new Date("2026-05-02T12:00:00.000Z"),
+    agent: { handler },
+    destinationMaxLength: null, // explicit disable
   });
 
-  // No maxLength → nothing is overlength regardless of size.
   assert.equal(result.plan.skippedOverlength, 0);
   assert.equal(result.plan.truncatedCount, 0);
   assert.equal(result.plan.candidates.length, 1);
@@ -264,7 +250,7 @@ async function noMaxLengthTest() {
       allowPublish: false,
       overlengthStrategy: "skip",
     },
-    destinationLookupSupported: false,
+    destinationLookupSupported: true,
     generatedAt: new Date("2026-05-02T00:00:00.000Z"),
     destinationMaxLength: 280,
   });
@@ -291,7 +277,7 @@ async function noMaxLengthTest() {
       allowPublish: false,
       overlengthStrategy: "truncate",
     },
-    destinationLookupSupported: false,
+    destinationLookupSupported: true,
     generatedAt: new Date("2026-05-02T00:00:00.000Z"),
     destinationMaxLength: 100,
   });

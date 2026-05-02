@@ -1,81 +1,36 @@
-import * as dotenv from "dotenv";
-import * as path from "path";
-import * as fs from "fs";
-import * as os from "os";
+/**
+ * Minimal config layer for v3.0.0.
+ *
+ * The v3 architecture has **no** API SDKs and **no** Playwright. The agent
+ * (Claude Code / OpenClaw) drives the user's logged-in browser via its own
+ * browser MCP (chrome-devtools-mcp, claude-in-chrome, OpenClaw's built-in
+ * browser tool, etc.). This module therefore only exposes:
+ *
+ *   - APP_NAME / data-dir resolution
+ *   - The agent-task inbox path (where the CLI hands tasks to the agent and
+ *     reads results back)
+ *
+ * Anything platform-specific (LinkedIn URL, X auth, etc.) is now stored in
+ * the per-pair config inside `pairs.json`. The agent reads it from there at
+ * task-execution time.
+ */
 
-dotenv.config();
+import * as path from "path";
+import * as os from "os";
 
 export const APP_NAME = "repost-with-agent";
 export const LEGACY_APP_NAME = "linkedin-to-x";
 export const DEFAULT_DATA_DIR = path.join(os.homedir(), `.${APP_NAME}`);
+/** Kept for v2 → v3 migration only. New code MUST NOT depend on this. */
 export const LEGACY_DATA_DIR = path.join(os.homedir(), `.${LEGACY_APP_NAME}`);
-export const DEFAULT_PLAYWRIGHT_PROFILE_DIR = path.join(
-  os.homedir(),
-  ".claude",
-  "playwright-profile"
-);
 
-export interface XCredentials {
-  apiKey: string;
-  apiSecret: string;
-  accessToken: string;
-  accessTokenSecret: string;
-}
-
-export interface XOAuth2Tokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt?: number;
-}
-
-export interface FacebookCredentials {
-  pageId: string;
-  accessToken: string;
-}
-
-export interface Config {
-  x: XCredentials;
-  xOAuth2?: XOAuth2Tokens;
-  xClientId?: string;
-  xClientSecret?: string;
-  linkedin: {
-    profileUrl: string;
-  };
-  facebook?: FacebookCredentials;
-  facebookEnabled: boolean;
-  playwrightProfileDir: string;
-  dataDir: string;
-  trackerFilePath: string;
-}
-
-export interface LinkedInScrapeConfig {
-  linkedin: {
-    profileUrl: string;
-  };
-  playwrightProfileDir: string;
-}
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    console.error(`Missing required environment variable: ${name}`);
-    console.error(`Copy .env.example to .env and fill in your credentials.`);
-    process.exit(1);
-  }
-  return value;
-}
-
-function ensureDir(dirPath: string): void {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-}
-
+/**
+ * Resolve the runtime data dir. Override priority:
+ *   1. REPOST_DATA_DIR
+ *   2. REPOST_WITH_AGENT_DATA_DIR (legacy long form)
+ *   3. ~/.repost-with-agent
+ */
 export function getRuntimeDataDir(): string {
-  // Accept both the short and long env var names so users have one consistent
-  // override regardless of which surface they read first (scripts use
-  // REPOST_DATA_DIR; the long form REPOST_WITH_AGENT_DATA_DIR was the original
-  // internal name and is kept for backward compat).
   return (
     process.env.REPOST_DATA_DIR ||
     process.env.REPOST_WITH_AGENT_DATA_DIR ||
@@ -87,83 +42,16 @@ export function getLegacyDataDir(): string {
   return LEGACY_DATA_DIR;
 }
 
-function getTokensPath(): string {
-  return path.join(getRuntimeDataDir(), "x-tokens.json");
-}
-
-export function getLegacyTokensPath(): string {
-  return path.join(getLegacyDataDir(), "x-tokens.json");
-}
-
-export function loadOAuth2Tokens(): XOAuth2Tokens | null {
-  for (const tokensPath of [getTokensPath(), getLegacyTokensPath()]) {
-    if (!fs.existsSync(tokensPath)) continue;
-    try {
-      return JSON.parse(fs.readFileSync(tokensPath, "utf-8"));
-    } catch {
-      continue;
-    }
-  }
-  return null;
-}
-
-export function saveOAuth2Tokens(tokens: XOAuth2Tokens): void {
-  const tokensPath = getTokensPath();
-  const dir = path.dirname(tokensPath);
-  ensureDir(dir);
-  fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2), "utf-8");
-}
-
-export function loadLinkedInScrapeConfig(profileUrl?: string): LinkedInScrapeConfig {
-  return {
-    linkedin: {
-      profileUrl: profileUrl || requireEnv("LINKEDIN_PROFILE_URL"),
-    },
-    playwrightProfileDir:
-      process.env.PLAYWRIGHT_PROFILE_DIR || DEFAULT_PLAYWRIGHT_PROFILE_DIR,
-  };
-}
-
-export function loadXCredentials(): XCredentials {
-  return {
-    apiKey: requireEnv("X_API_KEY"),
-    apiSecret: requireEnv("X_API_SECRET"),
-    accessToken: requireEnv("X_ACCESS_TOKEN"),
-    accessTokenSecret: requireEnv("X_ACCESS_TOKEN_SECRET"),
-  };
-}
-
-export function loadLegacySyncConfig(): Config {
-  const dataDir = process.env.LINKEDIN_TO_X_DATA_DIR || getLegacyDataDir();
-  ensureDir(dataDir);
-
-  const facebookEnabled = process.env.FACEBOOK_ENABLED === "true";
-  let facebook: FacebookCredentials | undefined;
-
-  if (facebookEnabled) {
-    const fbPageId = process.env.FB_PAGE_ID;
-    const fbAccessToken = process.env.FB_ACCESS_TOKEN;
-    if (!fbPageId || !fbAccessToken) {
-      console.error(
-        "FACEBOOK_ENABLED is true but FB_PAGE_ID or FB_ACCESS_TOKEN is missing."
-      );
-      console.error("Set these in your .env file or disable Facebook posting.");
-      process.exit(1);
-    }
-    facebook = { pageId: fbPageId, accessToken: fbAccessToken };
-  }
-
-  return {
-    x: loadXCredentials(),
-    xOAuth2: loadOAuth2Tokens() ?? undefined,
-    xClientId: process.env.X_CLIENT_ID,
-    xClientSecret: process.env.X_CLIENT_SECRET,
-    ...loadLinkedInScrapeConfig(),
-    facebook,
-    facebookEnabled,
-    playwrightProfileDir:
-      process.env.PLAYWRIGHT_PROFILE_DIR || DEFAULT_PLAYWRIGHT_PROFILE_DIR,
-    dataDir,
-    trackerFilePath: path.join(dataDir, "posted.md"),
-  };
+/**
+ * Where the CLI writes agent tasks (and where the agent's result-writer
+ * deposits outcomes). One file per correlation id.
+ *
+ *   inbox/<correlation_id>.task.json   → CLI -> agent
+ *   inbox/<correlation_id>.result.json → agent -> CLI
+ *
+ * Subdirectories under the data dir keep tasks scoped per pair so an agent
+ * driving multiple pairs in parallel doesn't see cross-pair tasks.
+ */
+export function getAgentTasksDir(): string {
+  return path.join(getRuntimeDataDir(), "agent-tasks");
 }

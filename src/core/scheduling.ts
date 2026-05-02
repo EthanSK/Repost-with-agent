@@ -1,49 +1,52 @@
+/**
+ * Scheduling helpers — v3.0.0.
+ *
+ * The CLI doesn't run a scheduler. The host (OpenClaw cron / launchd /
+ * system cron) invokes `repost-with-agent pair scheduled-run <id>` at the
+ * configured cadence. This module provides:
+ *
+ *   - `runScheduled()`: deterministic per-tick runner. Loads the pair,
+ *     enforces min-delay policy, runs preview-only by default (or live
+ *     publish via the agent when `--allow-publish` is set AND the pair is
+ *     `live-approved`), emits structured `pair.scheduled.*` audit events.
+ *
+ *   - `renderLaunchdPlist()` / `renderCrontabLine()` / `renderOpenClawCronCommand()`:
+ *     pure functions producing host-installable scheduling artifacts.
+ *
+ *   - `installLaunchdPlist()` / `uninstallLaunchdPlist()`: idempotent
+ *     filesystem helpers that wire / unwire a launchd job.
+ *
+ * The `listen-for-future` run-mode (Ethan voice 6021) is exactly this path —
+ * the host scheduler tails the source profile via `pair scheduled-run`, and
+ * the agent posts new content as it appears.
+ */
+
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { DestinationAdapter, PublishResult } from "../adapters/destination.js";
-import { SourceAdapter } from "../adapters/source.js";
-import { previewPair, publishNextForPair } from "./orchestrator.js";
+import { previewPair, publishNextForPair, PublishResult } from "./orchestrator.js";
+import { RunAgentTaskOptions } from "./agent-runner.js";
 import {
   appendAuditEvent,
   ensurePairDirs,
   getAppDataDir,
   loadAuditHistory,
   nowIso,
+  resolveDestinationPlatform,
+  resolveSourcePlatform,
 } from "./runtime.js";
 import { AuditEvent, PairRecord } from "./types.js";
 
-/**
- * Scheduling helpers. Repost-with-agent itself does not run a scheduler — it
- * delegates to OpenClaw cron / launchd / system cron. This module supplies:
- *
- *   - `runScheduled()`: a deterministic per-tick runner the host scheduler
- *     should invoke (`repost-with-agent pair scheduled-run <id>`). Loads the
- *     pair, enforces min-delay policy, runs preview-only by default (or live
- *     publish when explicitly enabled), and emits structured `pair.scheduled.*`
- *     audit events so we can prove a tick ran.
- *
- *   - `renderLaunchdPlist()` / `renderCrontabLine()` / `renderOpenClawCronCommand()`:
- *     pure functions producing host-installable scheduling artifacts for an
- *     existing pair without writing anything.
- *
- *   - `installLaunchdPlist()` / `uninstallLaunchdPlist()`: idempotent
- *     filesystem helpers that wire / unwire a launchd job.
- */
-
 export interface ScheduledRunOptions {
   /**
-   * If true and the pair mode is `live-approved`, attempt to publish the top
-   * candidate. Defaults to false — scheduled ticks are preview-only by default
-   * regardless of the pair mode, because unattended publishing is a footgun
-   * and the README/docs explicitly tell users to keep `pair post --approve`
-   * human-triggered.
+   * Attempt to publish the top candidate when (a) this is true, (b)
+   * pair.mode === "live-approved", (c) min-delay window is open.
    */
   allowPublish?: boolean;
-  /**
-   * Override the wall clock used for min-delay enforcement (testing only).
-   */
+  /** Override clock used for min-delay enforcement (testing only). */
   now?: Date;
+  /** Test/inline override: in-process agent task handler. */
+  agent?: RunAgentTaskOptions;
 }
 
 export type ScheduledRunOutcome =
@@ -56,6 +59,7 @@ export type ScheduledRunOutcome =
   | "needs-approval"
   | "auth-failed"
   | "publish-failed"
+  | "overlength-blocked"
   | "published";
 
 export interface ScheduledRunResult {
@@ -110,17 +114,8 @@ export function isMinDelayWindowOpen(
   };
 }
 
-/**
- * Deterministic scheduled-tick entry point. The host scheduler should invoke
- * `repost-with-agent pair scheduled-run <pair-id>` at its configured cadence.
- * Always runs preview; only publishes when (a) `allowPublish: true`,
- * (b) pair mode is `live-approved`, (c) min-delay window is open, (d) the
- * usual orchestrator gates pass.
- */
 export async function runScheduled(
   pair: PairRecord,
-  sourceAdapter: SourceAdapter,
-  destinationAdapter: DestinationAdapter,
   options: ScheduledRunOptions = {}
 ): Promise<ScheduledRunResult> {
   ensurePairDirs(pair.id);
@@ -130,7 +125,7 @@ export async function runScheduled(
   const destinationTarget =
     pair.destination.accountHint ||
     pair.destination.pageHint ||
-    pair.destination.type;
+    resolveDestinationPlatform(pair);
   const baseEvent: Omit<AuditEvent, "event" | "details"> = {
     at: startedAt,
     pairId: pair.id,
@@ -145,6 +140,9 @@ export async function runScheduled(
       allowPublish: Boolean(options.allowPublish),
       sourceUrl,
       destinationTarget,
+      sourcePlatform: resolveSourcePlatform(pair),
+      destPlatform: resolveDestinationPlatform(pair),
+      runMode: pair.runMode || "listen-for-future",
     },
   });
 
@@ -195,7 +193,6 @@ export async function runScheduled(
     const wantsPublish = Boolean(options.allowPublish);
 
     if (wantsPublish) {
-      // Min-delay gate before we even fetch.
       const lastPublishAt = findLastPublishAt(pair.id);
       const window = isMinDelayWindowOpen(
         pair,
@@ -209,8 +206,7 @@ export async function runScheduled(
       }
 
       if (pair.mode !== "live-approved") {
-        // Refuse unattended publishing on anything but live-approved.
-        const preview = await previewPair(pair, sourceAdapter, destinationAdapter);
+        const preview = await previewPair(pair, { agent: options.agent });
         const top = preview.items[0];
         return finalize("blocked-mode", {
           reason: `Pair mode is ${pair.mode}; scheduled publish requires live-approved + --allow-publish. Ran preview-only.`,
@@ -225,12 +221,12 @@ export async function runScheduled(
         });
       }
 
-      const outcome = await publishNextForPair(
-        pair,
-        sourceAdapter,
-        destinationAdapter,
-        { approve: true, allowUncertain: false, trigger: "scheduled-run" }
-      );
+      const outcome = await publishNextForPair(pair, {
+        approve: true,
+        allowUncertain: false,
+        trigger: "scheduled-run",
+        agent: options.agent,
+      });
 
       const top = outcome.preview;
       const candidateCount = top ? 1 : 0;
@@ -250,6 +246,7 @@ export async function runScheduled(
         "no-candidate": "no-candidate",
         "auth-failed": "auth-failed",
         "publish-failed": "publish-failed",
+        "overlength-blocked": "overlength-blocked",
       };
       const mapped = map[outcome.status] || "publish-failed";
 
@@ -261,8 +258,8 @@ export async function runScheduled(
       });
     }
 
-    // Preview-only path (default for scheduled ticks).
-    const preview = await previewPair(pair, sourceAdapter, destinationAdapter);
+    // Preview-only path.
+    const preview = await previewPair(pair, { agent: options.agent });
     const top = preview.items[0];
     if (!top) {
       return finalize("no-candidate", {
@@ -321,7 +318,6 @@ export interface ScheduleRenderInputs {
 }
 
 export function defaultRepoDir(): string {
-  // Walk up from this file to find the repo root (parent of dist/ or src/).
   const here = path.dirname(__filename);
   const candidate = path.resolve(here, "..", "..");
   return candidate;
@@ -418,11 +414,8 @@ function renderLaunchdCalendarBlock(pair: PairRecord): string {
         .join("\n");
       return `    <key>StartCalendarInterval</key>\n    <dict>\n${inner}\n    </dict>`;
     }
-    // Cron unsupported by launchd's StartCalendarInterval; fall through to
-    // an hourly fallback the user can hand-tweak.
     return `    <!-- cron expression "${escapeXml(pair.schedule.expression)}" could not be auto-translated to launchd. -->\n    <!-- Edit StartCalendarInterval below by hand or use a different scheduler. -->\n    <key>StartCalendarInterval</key>\n    <dict>\n        <key>Minute</key>\n        <integer>0</integer>\n    </dict>`;
   }
-  // Manual: do not auto-fire on load.
   return `    <!-- schedule.kind=${pair.schedule.kind}; no calendar interval emitted. -->`;
 }
 
@@ -534,8 +527,6 @@ export function installLaunchdPlist(
   if (!options.load) {
     return { plistPath, installed: true, loaded: false };
   }
-  // Don't shell out from inside the library; let callers run launchctl. We
-  // just return the path so the CLI can print the load command.
   return { plistPath, installed: true, loaded: false };
 }
 

@@ -1,15 +1,6 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
-import { linkedInSourceAdapter } from "./adapters/sources/linkedin.js";
-import { xDestinationAdapter } from "./adapters/destinations/x.js";
-import { startOAuth2Flow } from "./x-client.js";
-import { loadTracker } from "./tracker.js";
-import {
-  getLegacyTrackerPath,
-  loadPostedHistory,
-} from "./core/runtime.js";
-import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.js";
 import { previewPair, publishNextForPair } from "./core/orchestrator.js";
 import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
 import {
@@ -28,22 +19,22 @@ import {
 } from "./core/scheduling.js";
 import {
   appendAuditEvent,
-  appendPostedHistory,
   defaultPairName,
   getEnvironmentSummary,
   getPairById,
   getPairPaths,
   loadAuditHistory,
   loadPairsStore,
+  loadPostedHistory,
   nowIso,
   resolveScheduleTimezone,
   slugifyPairId,
   upsertPair,
   writeDefaultLearnings,
 } from "./core/runtime.js";
-import { PairMode, PairRecord, PairScheduleKind } from "./core/types.js";
-import { contentHash, summarizeText } from "./core/dedupe.js";
-import { APP_NAME, getLegacyDataDir, getLegacyTokensPath } from "./config.js";
+import { PairMode, PairRecord, PairRunMode, PairScheduleKind } from "./core/types.js";
+import { summarizeText } from "./core/dedupe.js";
+import { APP_NAME } from "./config.js";
 import {
   buildPublishMessage,
   getNotifyConfigPath,
@@ -51,11 +42,12 @@ import {
   sendTelegramMessage,
   writeNotifyConfig,
 } from "./core/notify.js";
+import { expandUrl, expandUrlsInText } from "./core/url-expander.js";
 
-const VERSION = "2.6.0";
+const VERSION = "3.0.0";
 
-const SOURCE_ADAPTERS = new Map([[linkedInSourceAdapter.type, linkedInSourceAdapter]]);
-const DESTINATION_ADAPTERS = new Map([[xDestinationAdapter.type, xDestinationAdapter]]);
+/** Platform labels we ship recognized defaults for. Free-form on input. */
+const SUPPORTED_PLATFORMS = ["linkedin", "x", "bluesky", "threads", "facebook"] as const;
 
 function requirePair(pairId: string): PairRecord {
   const pair = getPairById(pairId);
@@ -79,6 +71,15 @@ function parsePairMode(value?: string): PairMode {
   process.exit(1);
 }
 
+function parseRunMode(value?: string): PairRunMode {
+  const mode = value || "listen-for-future";
+  if (mode === "listen-for-future" || mode === "backfill") {
+    return mode;
+  }
+  console.error(`Invalid run-mode: ${mode}. Expected listen-for-future or backfill.`);
+  process.exit(1);
+}
+
 function parseScheduleKind(value?: string): PairScheduleKind {
   const kind = value || "manual";
   if (["manual", "cron", "every"].includes(kind)) {
@@ -98,14 +99,24 @@ function parsePositiveInteger(value: string | undefined, label: string): number 
   return parsed;
 }
 
-async function createPair(opts: {
+function parseOverlengthStrategy(value?: string): OverlengthStrategy {
+  const v = (value || DEFAULT_OVERLENGTH_STRATEGY).toLowerCase();
+  if (v !== "skip" && v !== "truncate") {
+    console.error(`Invalid --overlength-strategy: ${value}. Expected 'skip' or 'truncate'.`);
+    process.exit(1);
+  }
+  return v as OverlengthStrategy;
+}
+
+interface CreatePairOptions {
   id?: string;
   name?: string;
-  sourceType: string;
+  sourcePlatform: string;
   sourceUrl?: string;
-  destinationType: string;
+  destinationPlatform: string;
   destinationAccount?: string;
   mode?: string;
+  runMode?: string;
   enabled?: boolean;
   scheduleKind?: string;
   scheduleExpression?: string;
@@ -113,11 +124,13 @@ async function createPair(opts: {
   timezone?: string;
   authRefSource?: string;
   authRefDestination?: string;
-}): Promise<void> {
+}
+
+async function createPair(opts: CreatePairOptions): Promise<void> {
   const idBase =
     opts.id ||
     opts.name ||
-    `${opts.sourceType}-${opts.destinationType}`;
+    `${opts.sourcePlatform}-to-${opts.destinationPlatform}`;
   const pairId = slugifyPairId(idBase);
   const existing = getPairById(pairId);
   if (existing) {
@@ -127,21 +140,23 @@ async function createPair(opts: {
 
   const now = nowIso();
   const mode = parsePairMode(opts.mode);
+  const runMode = parseRunMode(opts.runMode);
   const scheduleKind = parseScheduleKind(opts.scheduleKind);
   const everyMinutes = parsePositiveInteger(opts.everyMinutes, "every-minutes");
   const pair: PairRecord = {
     id: pairId,
-    name: opts.name || defaultPairName(opts.sourceType, opts.destinationType),
+    name: opts.name || defaultPairName(opts.sourcePlatform, opts.destinationPlatform),
     enabled: Boolean(opts.enabled),
     mode,
+    runMode,
     source: {
-      type: opts.sourceType,
+      platform: opts.sourcePlatform,
       url: opts.sourceUrl,
       profileUrl: opts.sourceUrl,
       authRef: opts.authRefSource,
     },
     destination: {
-      type: opts.destinationType,
+      platform: opts.destinationPlatform,
       accountHint: opts.destinationAccount,
       authRef: opts.authRefDestination,
     },
@@ -157,6 +172,7 @@ async function createPair(opts: {
     },
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 3,
   };
 
   upsertPair(pair);
@@ -166,9 +182,10 @@ async function createPair(opts: {
     event: "pair.created",
     pairId: pair.id,
     details: {
-      sourceType: pair.source.type,
-      destinationType: pair.destination.type,
+      sourcePlatform: pair.source.platform,
+      destinationPlatform: pair.destination.platform,
       mode: pair.mode,
+      runMode: pair.runMode,
       enabled: pair.enabled,
       schedule: pair.schedule.kind,
     },
@@ -181,21 +198,9 @@ async function createPair(opts: {
 
 async function previewPairCommand(pairId: string): Promise<void> {
   const pair = requirePair(pairId);
-  const sourceAdapter = SOURCE_ADAPTERS.get(pair.source.type);
-  const destinationAdapter = DESTINATION_ADAPTERS.get(pair.destination.type);
-
-  if (!sourceAdapter) {
-    console.error(`No source adapter registered for ${pair.source.type}`);
-    process.exit(1);
-  }
-  if (!destinationAdapter) {
-    console.error(`No destination adapter registered for ${pair.destination.type}`);
-    process.exit(1);
-  }
-
-  const result = await previewPair(pair, sourceAdapter, destinationAdapter);
+  const result = await previewPair(pair);
   console.log(`Pair: ${pair.id} (${pair.name})`);
-  console.log(`Mode: ${pair.mode}`);
+  console.log(`Mode: ${pair.mode} | RunMode: ${pair.runMode || "listen-for-future"}`);
   console.log(`Source auth: ${result.auth.source}`);
   console.log(`Destination auth: ${result.auth.destination}`);
   console.log(`Learnings loaded: ${result.learnings.trim() ? "yes" : "no"}`);
@@ -216,30 +221,22 @@ async function previewPairCommand(pairId: string): Promise<void> {
     if (entry.draft.warnings.length > 0) {
       console.log(`   Warnings: ${entry.draft.warnings.join(" | ")}`);
     }
-    console.log();
   });
 }
 
 async function postPairCommand(
   pairId: string,
-  opts: { approve: boolean; allowUncertain: boolean }
+  opts: { approve: boolean; allowUncertain: boolean; overlengthStrategy?: string }
 ): Promise<void> {
   const pair = requirePair(pairId);
-  const sourceAdapter = SOURCE_ADAPTERS.get(pair.source.type);
-  const destinationAdapter = DESTINATION_ADAPTERS.get(pair.destination.type);
+  const overlengthStrategy = opts.overlengthStrategy
+    ? parseOverlengthStrategy(opts.overlengthStrategy)
+    : undefined;
 
-  if (!sourceAdapter) {
-    console.error(`No source adapter registered for ${pair.source.type}`);
-    process.exit(1);
-  }
-  if (!destinationAdapter) {
-    console.error(`No destination adapter registered for ${pair.destination.type}`);
-    process.exit(1);
-  }
-
-  const outcome = await publishNextForPair(pair, sourceAdapter, destinationAdapter, {
+  const outcome = await publishNextForPair(pair, {
     approve: opts.approve,
     allowUncertain: opts.allowUncertain,
+    overlengthStrategy,
   });
 
   console.log(`Pair: ${pair.id} (${pair.name})`);
@@ -286,7 +283,9 @@ function printHistory(pairId: string): void {
   console.log(`Posted entries: ${posted.length}`);
   for (const entry of posted.slice(-10)) {
     console.log(`- [${entry.postedAt}] ${entry.summary}`);
-    if (entry.destinationId) {
+    if (entry.destinationUrl) {
+      console.log(`  destinationUrl=${entry.destinationUrl}`);
+    } else if (entry.destinationId) {
       console.log(`  destinationId=${entry.destinationId}`);
     }
     if (entry.importedFrom) {
@@ -301,126 +300,36 @@ function printHistory(pairId: string): void {
   }
 }
 
-function importLegacyTracker(pairId: string): number {
-  const trackerPath = getLegacyTrackerPath();
-  const entries = loadTracker(trackerPath);
-  for (const entry of entries) {
-    appendPostedHistory(pairId, {
-      contentHash: contentHash(entry.linkedinSnippet),
-      destinationType: "x-account",
-      destinationId: entry.xPostId,
-      postedAt: entry.datePostedToX,
-      summary: entry.linkedinSnippet,
-      importedFrom: trackerPath,
-    });
-  }
-  return entries.length;
-}
-
-async function migrateLegacyPair(opts: {
-  id?: string;
-  name?: string;
-  sourceUrl?: string;
-  destinationAccount?: string;
-}): Promise<void> {
-  const pairId = slugifyPairId(opts.id || "linkedin-to-x");
-  const existing = getPairById(pairId);
-  if (existing) {
-    console.error(`Pair already exists: ${pairId}`);
-    process.exit(1);
-  }
-
-  const now = nowIso();
-  const pair: PairRecord = {
-    id: pairId,
-    name: opts.name || "Legacy LinkedIn to X",
-    enabled: false,
-    mode: "preview-only",
-    source: {
-      type: "linkedin-profile-activity",
-      url: opts.sourceUrl || process.env.LINKEDIN_PROFILE_URL,
-      profileUrl: opts.sourceUrl || process.env.LINKEDIN_PROFILE_URL,
-      authRef: "browser:playwright:linkedin",
-    },
-    destination: {
-      type: "x-account",
-      accountHint: opts.destinationAccount,
-      authRef: "oauth:x",
-    },
-    schedule: {
-      kind: "manual",
-      tz: resolveScheduleTimezone(undefined),
-    },
-    policy: { ...DEFAULT_POLICY },
-    dedupe: {
-      strategy: "source-id-url-content-hash",
-    },
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  upsertPair(pair);
-  writeDefaultLearnings(pair.id);
-  const importedCount = importLegacyTracker(pair.id);
-  appendAuditEvent({
-    at: now,
-    event: "pair.migrated.linkedin-to-x",
-    pairId: pair.id,
-    details: {
-      importedCount,
-      legacyDataDir: getLegacyDataDir(),
-      legacyTokensPath: getLegacyTokensPath(),
-      duplicateReference: "https://x.com/i/status/2036422890271215716",
-      fixCommit: "9d37108",
-    },
-  });
-
-  console.log(`Migrated legacy pair to ${pair.id}`);
-  console.log(`Imported ${importedCount} legacy tracker entries from ${getLegacyTrackerPath()}`);
-  console.log("Legacy files were left untouched.");
-}
-
 const program = new Command();
 
 program
   .name(APP_NAME)
-  .description("Generic source-to-destination reposting with pair-based, preview-first workflows")
+  .description(
+    "Agent-driven, browser-based reposting. The CLI is a thin orchestrator over JSON state; " +
+      "the agent (Claude Code / OpenClaw) drives the user's logged-in browser via its own browser MCP."
+  )
   .version(VERSION);
-
-program
-  .command("auth")
-  .description("Authorize an X account via OAuth 2.0 PKCE")
-  .action(async () => {
-    const clientId = process.env.X_CLIENT_ID;
-    const clientSecret = process.env.X_CLIENT_SECRET;
-
-    if (!clientId || !clientSecret) {
-      console.error("Missing X_CLIENT_ID or X_CLIENT_SECRET in environment.");
-      process.exit(1);
-    }
-
-    await startOAuth2Flow(clientId, clientSecret);
-  });
 
 const pair = program.command("pair").description("Manage saved repost source-to-destination pairs");
 
 pair
   .command("create")
-  .description("Create a saved pair using flags")
-  .requiredOption("--source-type <type>", "Source adapter type, e.g. linkedin-profile-activity")
-  .requiredOption("--destination-type <type>", "Destination adapter type, e.g. x-account")
+  .description("Create a saved pair using flags. Platform names are free-form labels (e.g. linkedin, x, bluesky, threads, facebook).")
+  .requiredOption("--source-platform <platform>", `Source platform label (e.g. ${SUPPORTED_PLATFORMS.join(", ")})`)
+  .requiredOption("--destination-platform <platform>", `Destination platform label (e.g. ${SUPPORTED_PLATFORMS.join(", ")})`)
   .option("--id <id>", "Pair id")
   .option("--name <name>", "Human-friendly pair name")
   .option("--source-url <url>", "Source profile/feed URL")
   .option("--destination-account <account>", "Destination account hint, e.g. @example")
   .option("--mode <mode>", "preview-only | approval-required | live-approved")
+  .option("--run-mode <mode>", "listen-for-future (default) | backfill")
   .option("--enabled", "Enable the pair immediately")
   .option("--schedule-kind <kind>", "manual | cron | every", "manual")
   .option("--schedule-expression <expr>", "Cron expression")
   .option("--every-minutes <minutes>", "Every N minutes")
   .option("--timezone <tz>", "Schedule timezone")
-  .option("--auth-ref-source <ref>", "Source auth reference")
-  .option("--auth-ref-destination <ref>", "Destination auth reference")
+  .option("--auth-ref-source <ref>", "Source auth reference (free-form label)")
+  .option("--auth-ref-destination <ref>", "Destination auth reference (free-form label)")
   .action(createPair);
 
 pair
@@ -435,8 +344,10 @@ pair
     }
 
     for (const entry of store.pairs) {
+      const sp = entry.source.platform || entry.source.type || "?";
+      const dp = entry.destination.platform || entry.destination.type || "?";
       console.log(
-        `${entry.id} | ${entry.enabled ? "enabled" : "disabled"} | ${entry.mode} | ${entry.source.type} -> ${entry.destination.type}`
+        `${entry.id} | ${entry.enabled ? "enabled" : "disabled"} | ${entry.mode} | ${entry.runMode || "listen-for-future"} | ${sp} -> ${dp}`
       );
     }
   });
@@ -470,17 +381,22 @@ pair
     "--allow-uncertain",
     "Allow publishing even when dedupe returns 'uncertain' (summary-only match)."
   )
+  .option(
+    "--overlength-strategy <strategy>",
+    "Behavior when the draft exceeds destination max-length: 'skip' (default; refuses) or 'truncate' (smart-shorten)."
+  )
   .action(async (id, opts) => {
     await postPairCommand(id, {
       approve: Boolean(opts.approve),
       allowUncertain: Boolean(opts.allowUncertain),
+      overlengthStrategy: opts.overlengthStrategy,
     });
   });
 
 pair
   .command("backfill")
   .description(
-    "Walk back through source history, dedupe against both posted.jsonl and the destination platform, and publish missing items on a staggered schedule. " +
+    "Walk back through source history (newest-first), dedupe against both posted.jsonl and the destination platform, and publish missing items on a staggered schedule. " +
       "Default: 2 pages, max 20 publishes, 10 min between posts, dry-run unless --allow-publish is passed."
   )
   .argument("<id>", "Pair id")
@@ -511,21 +427,6 @@ pair
       }
     ) => {
       const pairRecord = requirePair(id);
-      const sourceAdapter = SOURCE_ADAPTERS.get(pairRecord.source.type);
-      const destinationAdapter = DESTINATION_ADAPTERS.get(
-        pairRecord.destination.type
-      );
-      if (!sourceAdapter) {
-        console.error(`No source adapter registered for ${pairRecord.source.type}`);
-        process.exit(1);
-      }
-      if (!destinationAdapter) {
-        console.error(
-          `No destination adapter registered for ${pairRecord.destination.type}`
-        );
-        process.exit(1);
-      }
-
       const allowPublish = Boolean(opts.allowPublish);
       const dryRun = Boolean(opts.dryRun) || !allowPublish;
 
@@ -539,30 +440,18 @@ pair
         process.exit(1);
       }
 
-      const rawStrategy = (opts.overlengthStrategy || DEFAULT_OVERLENGTH_STRATEGY).toLowerCase();
-      if (rawStrategy !== "skip" && rawStrategy !== "truncate") {
-        console.error(
-          `Invalid --overlength-strategy: ${opts.overlengthStrategy}. Expected 'skip' or 'truncate'.`
-        );
-        process.exit(1);
-      }
-      const overlengthStrategy = rawStrategy as OverlengthStrategy;
+      const overlengthStrategy = parseOverlengthStrategy(opts.overlengthStrategy);
 
-      const result = await runBackfill(
-        pairRecord,
-        sourceAdapter,
-        destinationAdapter,
-        {
-          max: parsePositiveInteger(opts.max, "max"),
-          pages: parsePositiveInteger(opts.pages, "pages"),
-          pageSize: parsePositiveInteger(opts.pageSize, "page-size"),
-          intervalMinutes:
-            parsePositiveInteger(opts.intervalMinutes, "interval-minutes") ?? 10,
-          dryRun,
-          allowPublish,
-          overlengthStrategy,
-        }
-      );
+      const result = await runBackfill(pairRecord, {
+        max: parsePositiveInteger(opts.max, "max"),
+        pages: parsePositiveInteger(opts.pages, "pages"),
+        pageSize: parsePositiveInteger(opts.pageSize, "page-size"),
+        intervalMinutes:
+          parsePositiveInteger(opts.intervalMinutes, "interval-minutes") ?? 10,
+        dryRun,
+        allowPublish,
+        overlengthStrategy,
+      });
 
       if (opts.json) {
         process.stdout.write(JSON.stringify(result, null, 2) + "\n");
@@ -592,7 +481,8 @@ pair
   .command("scheduled-run")
   .description(
     "Deterministic scheduled-tick runner. Host scheduler (OpenClaw cron / launchd / cron) should invoke this. " +
-      "Always runs preview; only publishes when --allow-publish is passed AND the pair mode is live-approved."
+      "Always runs preview; only publishes when --allow-publish is passed AND the pair mode is live-approved. " +
+      "This is the entry point for `runMode=listen-for-future` pairs."
   )
   .argument("<id>", "Pair id")
   .option(
@@ -602,17 +492,7 @@ pair
   .option("--json", "Emit a single JSON object on stdout (for host announce delivery).")
   .action(async (id: string, opts: { allowPublish?: boolean; json?: boolean }) => {
     const pairRecord = requirePair(id);
-    const sourceAdapter = SOURCE_ADAPTERS.get(pairRecord.source.type);
-    const destinationAdapter = DESTINATION_ADAPTERS.get(pairRecord.destination.type);
-    if (!sourceAdapter) {
-      console.error(`No source adapter registered for ${pairRecord.source.type}`);
-      process.exit(1);
-    }
-    if (!destinationAdapter) {
-      console.error(`No destination adapter registered for ${pairRecord.destination.type}`);
-      process.exit(1);
-    }
-    const result = await runScheduled(pairRecord, sourceAdapter, destinationAdapter, {
+    const result = await runScheduled(pairRecord, {
       allowPublish: Boolean(opts.allowPublish),
     });
     if (opts.json) {
@@ -721,9 +601,10 @@ pair
 
 pair
   .command("edit")
-  .description("Patch fields on a saved pair (mode, enabled, schedule, policy, accounts).")
+  .description("Patch fields on a saved pair (mode, run-mode, enabled, schedule, policy, accounts).")
   .argument("<id>", "Pair id")
   .option("--mode <mode>", "preview-only | approval-required | live-approved")
+  .option("--run-mode <mode>", "listen-for-future | backfill")
   .option("--enable", "Set enabled=true")
   .option("--disable", "Set enabled=false")
   .option("--schedule-kind <kind>", "manual | cron | every")
@@ -733,7 +614,9 @@ pair
   .option("--max-items-per-run <n>", "policy.maxItemsPerRun")
   .option("--min-delay-minutes <n>", "policy.minDelayBetweenPostsMinutes")
   .option("--source-url <url>", "Update source url/profile url")
+  .option("--source-platform <platform>", "Update source platform label")
   .option("--destination-account <acct>", "Update destination accountHint")
+  .option("--destination-platform <platform>", "Update destination platform label")
   .action((id: string, opts: Record<string, unknown>) => {
     const existing = requirePair(id);
     const next: PairRecord = {
@@ -747,6 +630,9 @@ pair
 
     if (typeof opts.mode === "string") {
       next.mode = parsePairMode(opts.mode as string);
+    }
+    if (typeof opts.runMode === "string") {
+      next.runMode = parseRunMode(opts.runMode as string);
     }
     if (opts.enable === true) next.enabled = true;
     if (opts.disable === true) next.enabled = false;
@@ -783,11 +669,18 @@ pair
       next.source.url = opts.sourceUrl as string;
       next.source.profileUrl = opts.sourceUrl as string;
     }
+    if (typeof opts.sourcePlatform === "string") {
+      next.source.platform = opts.sourcePlatform as string;
+    }
     if (typeof opts.destinationAccount === "string") {
       next.destination.accountHint = opts.destinationAccount as string;
     }
+    if (typeof opts.destinationPlatform === "string") {
+      next.destination.platform = opts.destinationPlatform as string;
+    }
 
     next.updatedAt = nowIso();
+    next.schemaVersion = 3;
     upsertPair(next);
     appendAuditEvent({
       at: next.updatedAt,
@@ -795,6 +688,7 @@ pair
       pairId: next.id,
       details: {
         mode: next.mode,
+        runMode: next.runMode,
         enabled: next.enabled,
         schedule: next.schedule,
       },
@@ -906,34 +800,26 @@ notify
     }
   });
 
-const migrate = program.command("migrate").description("Migration helpers");
+// --- URL expander helper commands ---
 
-migrate
-  .command("linkedin-to-x")
-  .description("Create a pair and import legacy tracker history")
-  .option("--id <id>", "Pair id", "linkedin-to-x")
-  .option("--name <name>", "Pair name", "Legacy LinkedIn to X")
-  .option("--source-url <url>", "LinkedIn source URL")
-  .option("--destination-account <account>", "Destination X account hint")
-  .action(migrateLegacyPair);
+const urls = program.command("urls").description("URL expander helpers.");
 
-program
-  .command("sync")
-  .description("Legacy direct LinkedIn -> X/Facebook sync (deprecated)")
-  .option("--dry-run", "Show what would be posted without actually posting")
-  .option("--facebook-only", "Only post to Facebook (skip X)")
-  .option("--x-only", "Only post to X (skip Facebook even if enabled)")
-  .action(runLegacySync);
+urls
+  .command("expand")
+  .description("Expand a single URL by following redirects.")
+  .argument("<url>", "URL to expand (any 30x-following URL)")
+  .action(async (url: string) => {
+    const result = await expandUrl(url);
+    console.log(JSON.stringify(result, null, 2));
+  });
 
-program
-  .command("list")
-  .description("Legacy direct LinkedIn -> X/Facebook status (deprecated)")
-  .action(runLegacyList);
-
-program
-  .command("start")
-  .description("Legacy continuous LinkedIn -> X sync loop (deprecated)")
-  .option("--interval <minutes>", "Minutes between checks", "60")
-  .action(runLegacyStart);
+urls
+  .command("expand-text")
+  .description("Expand every URL in a block of text and emit the rewritten text + per-URL records.")
+  .argument("<text>", "Text containing one or more URLs")
+  .action(async (text: string) => {
+    const result = await expandUrlsInText(text);
+    console.log(JSON.stringify(result, null, 2));
+  });
 
 program.parse();
