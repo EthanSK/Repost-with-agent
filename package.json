@@ -1,6 +1,6 @@
 {
   "name": "repost-with-agent",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Agent-operated social/source-to-destination reposting with saved pairs and queue workspaces",
   "main": "dist/index.js",
   "bin": {
@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "npm run build && node tests/dedupe-regression.js && node tests/scheduling-regression.js && node tests/backfill-regression.js && node tests/notify-regression.js",
+    "test": "npm run build && node tests/dedupe-regression.js && node tests/scheduling-regression.js && node tests/backfill-regression.js && node tests/notify-regression.js && node tests/truncate-regression.js && node tests/overlength-regression.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "sync": "tsx src/index.ts sync",

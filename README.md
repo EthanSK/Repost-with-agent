@@ -266,14 +266,27 @@ npx repost-with-agent pair show <id>
 npx repost-with-agent pair preview <id>
 npx repost-with-agent pair history <id>
 npx repost-with-agent pair post <id> --approve [--allow-uncertain]
-npx repost-with-agent pair backfill <id> --max 20 --pages 2 --interval-minutes 10
+npx repost-with-agent pair backfill <id> --max 20 --pages 2 --interval-minutes 10 \
+    [--overlength-strategy skip|truncate]
                                            # plan-only by default; pass
                                            # --allow-publish to live-publish a
                                            # backfill batch (requires
                                            # mode=live-approved). Cross-state
                                            # dedupe against both posted.jsonl
-                                           # AND destination history. See
-                                           # docs/WORKFLOW.md "Backfill mode".
+                                           # AND destination history.
+                                           # --overlength-strategy controls
+                                           # what happens when a draft exceeds
+                                           # the destination's char cap (X=280):
+                                           #   skip (default; drops the
+                                           #     candidate at plan time, audit
+                                           #     event pair.backfill.skipped_overlength)
+                                           #   truncate (smart-shorten at
+                                           #     sentence/word boundary +
+                                           #     ellipsis, audit event
+                                           #     pair.backfill.truncated +
+                                           #     truncated:true on publish.end)
+                                           # See docs/WORKFLOW.md "Backfill
+                                           # mode".
 ```
 
 ## X auth

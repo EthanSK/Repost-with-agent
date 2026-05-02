@@ -29,6 +29,16 @@ export function normalizeForDestinationMatch(text: string): string {
 
 export const xDestinationAdapter: DestinationAdapter = {
   type: "x-account",
+  // X (classic) hard limit. Drafts longer than this trigger the
+  // `--overlength-strategy` policy in `pair backfill` / publish paths
+  // (skip-too-long by default, or smart-truncate when the user opts in).
+  // Note: when X Premium credentials are present, x-client.postTweet()
+  // will already split longer drafts into a thread up to X_PREMIUM_LIMIT.
+  // We keep maxLength at the classic 280 because the orchestrator-level
+  // truncate strategy is conservative and intended for the NON-Premium
+  // path; users who want long drafts published as threads can leave the
+  // strategy at "skip" and rely on x-client's threading logic.
+  maxLength: X_CLASSIC_LIMIT,
   async test(_pair: PairRecord) {
     const hasOAuth1 =
       Boolean(process.env.X_API_KEY) &&

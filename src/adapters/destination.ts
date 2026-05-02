@@ -27,6 +27,15 @@ export interface DestinationLookupResult {
 
 export interface DestinationAdapter {
   type: string;
+  /**
+   * Hard character limit enforced by the destination platform for a single
+   * post. When set, backfill / publish paths use this in combination with
+   * `--overlength-strategy` to either skip or truncate drafts that exceed it.
+   * Adapters that don't have a meaningful per-post char limit (or that handle
+   * threading internally — e.g. X Premium splitting longer drafts into a
+   * thread) MAY omit this.
+   */
+  maxLength?: number;
   test(pair: PairRecord): Promise<AuthHealth>;
   preview(item: SourceItem, pair: PairRecord): Promise<DraftPost>;
   /**

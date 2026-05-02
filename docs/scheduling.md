@@ -176,6 +176,8 @@ The scheduled message tells the agent to call `repost-with-agent pair scheduled-
 
 Per-tick `scheduled-run` only ever considers the *latest* candidate for a pair (`maxItemsPerRun: 1` by default). To walk back through history and publish anything that's missing, use `pair backfill` instead — see [WORKFLOW.md → Backfill](WORKFLOW.md#backfill-mode-walk-back-through-history). Backfill performs cross-state dedupe (local `posted.jsonl` AND destination lookup), paginates the source, and stages publishes at a configurable interval. It is a one-shot foreground process, not a scheduled tick.
 
+`pair backfill` also accepts `--overlength-strategy {skip|truncate}` (default `skip`): drafts that exceed the destination's `maxLength` (X = 280 chars) are either dropped at plan time (with a `pair.backfill.skipped_overlength` audit event) or smart-shortened at sentence/word boundary + ellipsis (with `pair.backfill.truncated` + `truncated: true` on the resulting `pair.backfill.publish.end`).
+
 ## Why a deterministic CLI command instead of natural-language scheduled prompts?
 
 Natural-language scheduled prompts ("preview the linkedin-to-x pair, then..." ) work but they're non-deterministic, hard to audit, and easy to drift. Wiring `scheduled-run` as the host scheduler's invocation:

@@ -12,7 +12,11 @@ import {
 import { runLegacyList, runLegacyStart, runLegacySync } from "./legacy-commands.js";
 import { previewPair, publishNextForPair } from "./core/orchestrator.js";
 import { DEFAULT_POLICY, normalizePolicy } from "./core/policy.js";
-import { runBackfill } from "./core/backfill.js";
+import {
+  DEFAULT_OVERLENGTH_STRATEGY,
+  OverlengthStrategy,
+  runBackfill,
+} from "./core/backfill.js";
 import {
   installLaunchdPlist,
   renderCrontabLine,
@@ -48,7 +52,7 @@ import {
   writeNotifyConfig,
 } from "./core/notify.js";
 
-const VERSION = "2.5.0";
+const VERSION = "2.6.0";
 
 const SOURCE_ADAPTERS = new Map([[linkedInSourceAdapter.type, linkedInSourceAdapter]]);
 const DESTINATION_ADAPTERS = new Map([[xDestinationAdapter.type, xDestinationAdapter]]);
@@ -486,6 +490,11 @@ pair
   .option("--interval-minutes <n>", "Minutes between publishes", "10")
   .option("--dry-run", "Produce the plan but do not publish")
   .option("--allow-publish", "Permit live publishing. Requires pair.mode=live-approved.")
+  .option(
+    "--overlength-strategy <strategy>",
+    "Behavior when a draft exceeds destination.maxLength: 'skip' (default; safer — drops the candidate at plan time) or 'truncate' (smart-shorten at sentence/word boundary + ellipsis).",
+    DEFAULT_OVERLENGTH_STRATEGY
+  )
   .option("--json", "Emit a single JSON object on stdout when finished.")
   .action(
     async (
@@ -497,6 +506,7 @@ pair
         intervalMinutes?: string;
         dryRun?: boolean;
         allowPublish?: boolean;
+        overlengthStrategy?: string;
         json?: boolean;
       }
     ) => {
@@ -529,6 +539,15 @@ pair
         process.exit(1);
       }
 
+      const rawStrategy = (opts.overlengthStrategy || DEFAULT_OVERLENGTH_STRATEGY).toLowerCase();
+      if (rawStrategy !== "skip" && rawStrategy !== "truncate") {
+        console.error(
+          `Invalid --overlength-strategy: ${opts.overlengthStrategy}. Expected 'skip' or 'truncate'.`
+        );
+        process.exit(1);
+      }
+      const overlengthStrategy = rawStrategy as OverlengthStrategy;
+
       const result = await runBackfill(
         pairRecord,
         sourceAdapter,
@@ -541,6 +560,7 @@ pair
             parsePositiveInteger(opts.intervalMinutes, "interval-minutes") ?? 10,
           dryRun,
           allowPublish,
+          overlengthStrategy,
         }
       );
 
@@ -553,7 +573,7 @@ pair
         console.log(`Finished: ${result.finishedAt}`);
         console.log(`Duration: ${result.durationMs}ms`);
         console.log(
-          `Totals: considered=${result.totals.considered} published=${result.totals.published} skippedLocal=${result.totals.skippedLocal} skippedDestination=${result.totals.skippedDestination} skippedAlreadyInRun=${result.totals.skippedAlreadyInRun} failed=${result.totals.failed} dryRunSkipped=${result.totals.dryRunSkipped}`
+          `Totals: considered=${result.totals.considered} published=${result.totals.published} skippedLocal=${result.totals.skippedLocal} skippedDestination=${result.totals.skippedDestination} skippedAlreadyInRun=${result.totals.skippedAlreadyInRun} skippedOverlength=${result.totals.skippedOverlength} truncated=${result.totals.truncated} failed=${result.totals.failed} dryRunSkipped=${result.totals.dryRunSkipped}`
         );
         if (result.dryRun) {
           console.log("Mode: DRY RUN — no items were published.");

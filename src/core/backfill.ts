@@ -15,6 +15,7 @@ import {
   loadPostedHistory,
   nowIso,
 } from "./runtime.js";
+import { truncate } from "./truncate.js";
 import {
   AuditEvent,
   DraftPost,
@@ -22,6 +23,11 @@ import {
   PostedHistoryEntry,
   SourceItem,
 } from "./types.js";
+
+export type OverlengthStrategy = "skip" | "truncate";
+
+/** Default policy when the user doesn't pass `--overlength-strategy`. */
+export const DEFAULT_OVERLENGTH_STRATEGY: OverlengthStrategy = "skip";
 
 /**
  * Backfill mode: walk back through the source's history (multiple pages),
@@ -76,6 +82,17 @@ export interface BackfillOptions {
     draft: DraftPost,
     pair: PairRecord
   ) => Promise<DestinationLookupResult>;
+  /**
+   * Behavior when a draft exceeds the destination's `maxLength`:
+   *  - "skip" (default): drop the candidate at plan time with audit event
+   *    `pair.backfill.skipped_overlength`. The publish loop never sees it.
+   *  - "truncate": call `truncate(draft, maxLength)` to smart-shorten the
+   *    draft at sentence/word boundary + ellipsis. The truncated draft is
+   *    used for the actual publish, and the success audit event records
+   *    `truncated: true`.
+   * Adapters that don't declare `maxLength` are unaffected by this option.
+   */
+  overlengthStrategy?: OverlengthStrategy;
 }
 
 export interface BackfillCandidatePlan {
@@ -84,15 +101,32 @@ export interface BackfillCandidatePlan {
   canonicalUrl?: string | null;
   page: number;
   publishedAtSource?: string;
+  /** Length of the draft text the destination adapter produced (post-format). */
   draftChars: number;
   draftPreview: string;
   scheduledAt: string;
   /**
-   * Local-dedupe verdict run at planning time. Items decided as "skip-local"
-   * are filtered out of the plan and never reach the publish loop.
+   * Plan-time verdict. Items decided as `skip-local` or `skip-too-long` are
+   * filtered out of the publish loop. `truncate` items will be shortened
+   * before publish; `publish` is the unchanged path.
    */
-  decisionAtPlan: "publish" | "skip-local";
+  decisionAtPlan: "publish" | "skip-local" | "skip-too-long" | "truncate";
   reason?: string;
+  /**
+   * Set when `decisionAtPlan === "skip-too-long"` or `"truncate"`. Records the
+   * destination's max-length cap so audit consumers can compare against
+   * draftChars without re-loading the adapter.
+   */
+  destinationMaxLength?: number;
+  /**
+   * When the strategy is "truncate" and the draft was actually shortened, this
+   * holds the truncated text that will be passed to `destination.publish()`.
+   * Captured here at plan time so dry-run output reflects the same final text
+   * the live publish would use.
+   */
+  truncatedDraftText?: string;
+  /** Length of the truncated text, when truncation was applied. */
+  truncatedDraftChars?: number;
 }
 
 export interface BackfillPlan {
@@ -102,11 +136,30 @@ export interface BackfillPlan {
   options: Required<
     Pick<
       BackfillOptions,
-      "max" | "pages" | "pageSize" | "intervalMinutes" | "allowPublish"
+      | "max"
+      | "pages"
+      | "pageSize"
+      | "intervalMinutes"
+      | "allowPublish"
+      | "overlengthStrategy"
     >
   >;
   totalConsidered: number;
   skippedLocal: number;
+  /**
+   * How many candidates were filtered out at plan time because their draft
+   * exceeded `destination.maxLength` and the strategy was `skip`. Only set
+   * when the destination declares a `maxLength`.
+   */
+  skippedOverlength: number;
+  /**
+   * How many candidates will have their draft truncated before publish.
+   * Only set when the destination declares a `maxLength` and strategy is
+   * `truncate`.
+   */
+  truncatedCount: number;
+  /** Destination character cap (echoed for audit clarity). Undefined when the adapter doesn't declare one. */
+  destinationMaxLength?: number;
   candidates: BackfillCandidatePlan[];
   /** Total items already in posted.jsonl when planning was done. */
   postedHistoryCount: number;
@@ -118,6 +171,7 @@ export type BackfillItemOutcome =
   | "skip-local"
   | "skip-destination"
   | "skip-already-published-in-run"
+  | "skip-too-long"
   | "publish-failed"
   | "auth-failed"
   | "dry-run-skipped"
@@ -136,6 +190,12 @@ export interface BackfillItemResult {
   finishedAt?: string;
   durationMs?: number;
   destinationLookup?: DestinationLookupResult;
+  /** True when the draft was truncated before publish. */
+  truncated?: boolean;
+  /** Original draft length (pre-truncation), when `truncated` is true. */
+  originalDraftChars?: number;
+  /** Final draft length actually sent to the destination. */
+  finalDraftChars?: number;
 }
 
 export interface BackfillResult {
@@ -151,6 +211,8 @@ export interface BackfillResult {
     skippedLocal: number;
     skippedDestination: number;
     skippedAlreadyInRun: number;
+    skippedOverlength: number;
+    truncated: number;
     failed: number;
     dryRunSkipped: number;
   };
@@ -173,6 +235,10 @@ const BACKFILL_PUBLISH_END = "pair.backfill.publish.end";
 const BACKFILL_SKIP_LOCAL = "pair.backfill.skip.local";
 const BACKFILL_SKIP_DESTINATION = "pair.backfill.skip.destination";
 const BACKFILL_SKIP_ALREADY = "pair.backfill.skip.already-in-run";
+/** Draft exceeded `destination.maxLength` and strategy was `skip`. */
+const BACKFILL_SKIPPED_OVERLENGTH = "pair.backfill.skipped_overlength";
+/** Draft was truncated at plan time to fit within `destination.maxLength`. */
+const BACKFILL_TRUNCATED = "pair.backfill.truncated";
 const BACKFILL_PLAN = "pair.backfill.plan";
 const BACKFILL_START = "pair.backfill.start";
 const BACKFILL_COMPLETE = "pair.backfill.complete";
@@ -315,9 +381,14 @@ export function orderOldestFirst<T extends { publishedAt?: string }>(items: T[])
 }
 
 /**
- * Build the publish plan WITHOUT calling the destination. Pure function over
- * fetched pages + posted history; used both by the live runner and by tests
- * to verify ordering / pagination / cap behavior.
+ * Build the publish plan from fetched pages + posted history. Pure function;
+ * used both by the live runner and by tests to verify ordering / pagination /
+ * cap / overlength behavior.
+ *
+ * Optional `draftFor(item)` lets the caller pre-compute the destination draft
+ * for each item so plan-time overlength decisions reflect the actual draft
+ * text the publish path would produce. When omitted, plan-time treats
+ * `item.text.length` as the draft length (legacy behavior).
  */
 export function buildBackfillPlan(args: {
   pair: PairRecord;
@@ -326,13 +397,20 @@ export function buildBackfillPlan(args: {
   options: BackfillOptions;
   destinationLookupSupported: boolean;
   generatedAt?: Date;
+  /** Look up the destination draft text for an item (already previewed). */
+  draftTextFor?: (item: SourceItem) => string | undefined;
+  /** Destination's hard char limit, when the adapter declares one. */
+  destinationMaxLength?: number;
 }): BackfillPlan {
   const max = Math.max(1, args.options.max ?? 20);
   const pageCount = Math.max(1, args.options.pages ?? 2);
   const pageSize = Math.max(1, args.options.pageSize ?? 10);
   const intervalMinutes = Math.max(0, args.options.intervalMinutes ?? 10);
   const allowPublish = Boolean(args.options.allowPublish);
+  const overlengthStrategy: OverlengthStrategy =
+    args.options.overlengthStrategy ?? DEFAULT_OVERLENGTH_STRATEGY;
   const generatedAt = args.generatedAt ?? new Date();
+  const maxLen = args.destinationMaxLength;
 
   // Tag each item with its page and dedupe across pages (same canonical URL
   // can appear on consecutive pages if LinkedIn re-renders).
@@ -353,6 +431,8 @@ export function buildBackfillPlan(args: {
 
   const candidates: BackfillCandidatePlan[] = [];
   let skippedLocal = 0;
+  let skippedOverlength = 0;
+  let truncatedCount = 0;
   let publishCount = 0;
   for (let i = 0; i < ordered.length; i += 1) {
     if (publishCount >= max) break;
@@ -365,18 +445,58 @@ export function buildBackfillPlan(args: {
     const scheduledAt = new Date(
       generatedAt.getTime() + publishCount * intervalMinutes * 60 * 1000
     ).toISOString();
+
+    // Resolve draft text. If the caller pre-previewed, use that — it includes
+    // formatter output (e.g. trailing canonical URL appended by `formatForX`).
+    // Otherwise fall back to source text length.
+    const draftText = args.draftTextFor?.(enriched) ?? enriched.text;
+    const draftChars = draftText.length;
+
+    // Overlength evaluation — only meaningful when destination declared a cap.
+    let decisionAtPlan: BackfillCandidatePlan["decisionAtPlan"] = "publish";
+    let truncatedDraftText: string | undefined;
+    let truncatedDraftChars: number | undefined;
+    let reason: string | undefined;
+    if (typeof maxLen === "number" && draftChars > maxLen) {
+      if (overlengthStrategy === "skip") {
+        decisionAtPlan = "skip-too-long";
+        reason = `Draft (${draftChars} chars) exceeds destination max-length (${maxLen}); strategy=skip.`;
+        skippedOverlength += 1;
+      } else {
+        const result = truncate(draftText, maxLen);
+        if (result.truncated) {
+          decisionAtPlan = "truncate";
+          truncatedDraftText = result.text;
+          truncatedDraftChars = result.text.length;
+          truncatedCount += 1;
+          reason = `Draft (${draftChars} chars) truncated to ${truncatedDraftChars} chars to fit destination max-length (${maxLen}).`;
+        }
+      }
+    }
+
     candidates.push({
       index: candidates.length,
       sourceItemId: enriched.sourceItemId,
       canonicalUrl: enriched.canonicalUrl ?? null,
       page: enriched._page,
       publishedAtSource: enriched.publishedAt,
-      draftChars: enriched.text.length,
-      draftPreview: summarizeText(enriched.text, 160),
+      draftChars,
+      draftPreview: summarizeText(draftText, 160),
       scheduledAt,
-      decisionAtPlan: "publish",
+      decisionAtPlan,
+      reason,
+      destinationMaxLength:
+        decisionAtPlan === "skip-too-long" || decisionAtPlan === "truncate"
+          ? maxLen
+          : undefined,
+      truncatedDraftText,
+      truncatedDraftChars,
     });
-    publishCount += 1;
+    // Skipped-overlength items don't consume the publish budget — they're
+    // dropped from the publish loop entirely. Truncated items DO consume it.
+    if (decisionAtPlan !== "skip-too-long") {
+      publishCount += 1;
+    }
   }
 
   return {
@@ -389,9 +509,13 @@ export function buildBackfillPlan(args: {
       pageSize,
       intervalMinutes,
       allowPublish,
+      overlengthStrategy,
     },
     totalConsidered: tagged.length,
     skippedLocal,
+    skippedOverlength,
+    truncatedCount,
+    destinationMaxLength: maxLen,
     candidates,
     postedHistoryCount: args.posted.length,
     destinationLookupSupported: args.destinationLookupSupported,
@@ -420,6 +544,8 @@ export async function runBackfill(
   const intervalMinutes = Math.max(0, options.intervalMinutes ?? 10);
   const dryRun = Boolean(options.dryRun);
   const allowPublish = Boolean(options.allowPublish) && !dryRun;
+  const overlengthStrategy: OverlengthStrategy =
+    options.overlengthStrategy ?? DEFAULT_OVERLENGTH_STRATEGY;
   const destinationLookupSupported = Boolean(
     options.lookupOverride || destination.findExistingPost
   );
@@ -440,10 +566,12 @@ export async function runBackfill(
       allowPublish,
       dryRun,
       destinationLookupSupported,
+      overlengthStrategy,
+      destinationMaxLength: destination.maxLength,
     },
   });
   writeLine(
-    `[backfill] start pair=${pair.id} max=${max} pages=${pages} interval=${intervalMinutes}m dryRun=${dryRun} allowPublish=${allowPublish}`
+    `[backfill] start pair=${pair.id} max=${max} pages=${pages} interval=${intervalMinutes}m dryRun=${dryRun} allowPublish=${allowPublish} overlength=${overlengthStrategy}`
   );
 
   // Fetch source pages.
@@ -466,14 +594,49 @@ export async function runBackfill(
     `[backfill] fetched ${totalFetched} item(s) across ${fetched.length} page(s) (page sizes: ${fetched.map((p) => p.items.length).join(", ")})`
   );
 
+  // Pre-preview every fetched item so plan-time overlength evaluation
+  // reflects the destination's actual draft (formatter output, appended
+  // canonical URL, etc.). We key the cache by the same key buildBackfillPlan
+  // uses for cross-page dedupe.
+  const draftCache = new Map<string, DraftPost>();
+  const itemKey = (item: SourceItem): string =>
+    item.sourceItemId || item.canonicalUrl || contentHash(item.text);
+  for (const page of fetched) {
+    for (const item of page.items) {
+      const key = itemKey(item);
+      if (draftCache.has(key)) continue;
+      try {
+        const draft = await destination.preview(item, pair);
+        draftCache.set(key, draft);
+      } catch (err) {
+        // Preview failure shouldn't kill the whole backfill — fall back to
+        // source text for plan-time decisions and let the publish loop surface
+        // the real error if/when we get to that item.
+        const message = err instanceof Error ? err.message : String(err);
+        writeLine(
+          `[backfill] preview error for ${item.canonicalUrl || "(no-url)"}: ${message}`
+        );
+      }
+    }
+  }
+
   const posted = loadPostedHistory(pair.id);
   const plan = buildBackfillPlan({
     pair,
     pages: fetched,
     posted,
-    options: { max, pages, pageSize, intervalMinutes, allowPublish },
+    options: {
+      max,
+      pages,
+      pageSize,
+      intervalMinutes,
+      allowPublish,
+      overlengthStrategy,
+    },
     destinationLookupSupported,
     generatedAt: options.now ? options.now() : new Date(),
+    draftTextFor: (item) => draftCache.get(itemKey(item))?.text,
+    destinationMaxLength: destination.maxLength,
   });
 
   appendAuditEvent({
@@ -484,17 +647,68 @@ export async function runBackfill(
       candidateCount: plan.candidates.length,
       totalConsidered: plan.totalConsidered,
       skippedLocal: plan.skippedLocal,
+      skippedOverlength: plan.skippedOverlength,
+      truncatedCount: plan.truncatedCount,
       postedHistoryCount: plan.postedHistoryCount,
       destinationLookupSupported,
+      overlengthStrategy,
+      destinationMaxLength: plan.destinationMaxLength,
     },
   });
 
+  // Plan-time overlength events — emitted whether dry-run or live so the
+  // audit log records the decision regardless of whether we actually publish.
+  for (const candidate of plan.candidates) {
+    if (
+      candidate.decisionAtPlan === "skip-too-long" &&
+      candidate.destinationMaxLength !== undefined
+    ) {
+      appendAuditEvent({
+        ...baseEvent,
+        at: plan.generatedAt,
+        event: BACKFILL_SKIPPED_OVERLENGTH,
+        details: {
+          pairId: pair.id,
+          sourceItemId: candidate.sourceItemId,
+          canonicalUrl: candidate.canonicalUrl,
+          draftChars: candidate.draftChars,
+          destinationMaxLength: candidate.destinationMaxLength,
+          strategy: overlengthStrategy,
+        },
+      });
+    } else if (
+      candidate.decisionAtPlan === "truncate" &&
+      candidate.destinationMaxLength !== undefined
+    ) {
+      appendAuditEvent({
+        ...baseEvent,
+        at: plan.generatedAt,
+        event: BACKFILL_TRUNCATED,
+        details: {
+          pairId: pair.id,
+          sourceItemId: candidate.sourceItemId,
+          canonicalUrl: candidate.canonicalUrl,
+          originalDraftChars: candidate.draftChars,
+          truncatedDraftChars: candidate.truncatedDraftChars,
+          destinationMaxLength: candidate.destinationMaxLength,
+          strategy: overlengthStrategy,
+        },
+      });
+    }
+  }
+
   writeLine(
-    `[backfill] plan: ${plan.candidates.length} candidate(s) to publish, ${plan.skippedLocal} skipped by local dedupe, posted history has ${plan.postedHistoryCount} entr${plan.postedHistoryCount === 1 ? "y" : "ies"}`
+    `[backfill] plan: ${plan.candidates.length} candidate(s) (publish=${plan.candidates.filter((c) => c.decisionAtPlan === "publish" || c.decisionAtPlan === "truncate").length} truncated=${plan.truncatedCount} skip-too-long=${plan.skippedOverlength}), ${plan.skippedLocal} skipped by local dedupe, posted history has ${plan.postedHistoryCount} entr${plan.postedHistoryCount === 1 ? "y" : "ies"}`
   );
   for (const candidate of plan.candidates) {
+    const tag =
+      candidate.decisionAtPlan === "skip-too-long"
+        ? " [skip-too-long]"
+        : candidate.decisionAtPlan === "truncate"
+          ? ` [truncated→${candidate.truncatedDraftChars}]`
+          : "";
     writeLine(
-      `[backfill]   #${candidate.index + 1} page=${candidate.page} scheduledAt=${candidate.scheduledAt} chars=${candidate.draftChars} ${candidate.canonicalUrl || "(no-url)"}`
+      `[backfill]   #${candidate.index + 1} page=${candidate.page} scheduledAt=${candidate.scheduledAt} chars=${candidate.draftChars}${tag} ${candidate.canonicalUrl || "(no-url)"}`
     );
   }
 
@@ -506,12 +720,27 @@ export async function runBackfill(
     skippedLocal: plan.skippedLocal,
     skippedDestination: 0,
     skippedAlreadyInRun: 0,
+    skippedOverlength: plan.skippedOverlength,
+    truncated: 0,
     failed: 0,
     dryRunSkipped: 0,
   };
 
   if (dryRun || !allowPublish) {
     for (const candidate of plan.candidates) {
+      if (candidate.decisionAtPlan === "skip-too-long") {
+        items.push({
+          index: candidate.index,
+          sourceItemId: candidate.sourceItemId,
+          canonicalUrl: candidate.canonicalUrl,
+          decision: "skip-too-long",
+          reason: candidate.reason,
+          scheduledAt: candidate.scheduledAt,
+          originalDraftChars: candidate.draftChars,
+        });
+        continue;
+      }
+      const truncated = candidate.decisionAtPlan === "truncate";
       items.push({
         index: candidate.index,
         sourceItemId: candidate.sourceItemId,
@@ -521,7 +750,13 @@ export async function runBackfill(
           ? "dry-run mode — plan only"
           : "allowPublish=false — plan only",
         scheduledAt: candidate.scheduledAt,
+        truncated: truncated || undefined,
+        originalDraftChars: truncated ? candidate.draftChars : undefined,
+        finalDraftChars: truncated
+          ? candidate.truncatedDraftChars
+          : candidate.draftChars,
       });
+      if (truncated) totals.truncated += 1;
       totals.dryRunSkipped += 1;
     }
     const finishedAt = nowIso();
@@ -532,7 +767,7 @@ export async function runBackfill(
       details: { ...totals, dryRun, allowPublish, durationMs: Date.now() - startWall },
     });
     writeLine(
-      `[backfill] complete (dry-run) considered=${totals.considered} dryRunSkipped=${totals.dryRunSkipped}`
+      `[backfill] complete (dry-run) considered=${totals.considered} dryRunSkipped=${totals.dryRunSkipped} skippedOverlength=${totals.skippedOverlength} truncated=${totals.truncated}`
     );
     return {
       pairId: pair.id,
@@ -570,12 +805,50 @@ export async function runBackfill(
       : null;
 
   for (const candidate of plan.candidates) {
+    // Plan-time skip-too-long candidates never enter the publish loop —
+    // record the outcome and move on.
+    if (candidate.decisionAtPlan === "skip-too-long") {
+      const result: BackfillItemResult = {
+        index: candidate.index,
+        sourceItemId: candidate.sourceItemId,
+        canonicalUrl: candidate.canonicalUrl,
+        decision: "skip-too-long",
+        reason: candidate.reason,
+        scheduledAt: candidate.scheduledAt,
+        originalDraftChars: candidate.draftChars,
+      };
+      writeLine(
+        `[backfill] #${candidate.index + 1} skip (too-long) ${candidate.canonicalUrl || "(no-url)"} chars=${candidate.draftChars} max=${candidate.destinationMaxLength}`
+      );
+      items.push(result);
+      continue;
+    }
+
     const item = await rehydrateItem(pair, source, candidate, fetched);
     if (!item) {
       // Should not happen — defensive.
       continue;
     }
-    const draft = await destination.preview(item, pair);
+    let draft = await destination.preview(item, pair);
+
+    // If plan said "truncate", apply the saved truncated text to the live
+    // draft. We re-run truncate() against the freshly-previewed draft (rather
+    // than blindly trusting the cached text) so any race-state changes (e.g.
+    // adapter formatter version) propagate.
+    let didTruncate = false;
+    let originalDraftChars: number | undefined;
+    if (
+      candidate.decisionAtPlan === "truncate" &&
+      candidate.destinationMaxLength !== undefined
+    ) {
+      originalDraftChars = draft.text.length;
+      const result = truncate(draft.text, candidate.destinationMaxLength);
+      if (result.truncated) {
+        draft = { ...draft, text: result.text };
+        didTruncate = true;
+        totals.truncated += 1;
+      }
+    }
 
     // Resume guard.
     if (alreadyInRunState(item, draft, state)) {
@@ -789,6 +1062,9 @@ export async function runBackfill(
         startedAt: startedItemAt,
         finishedAt: finishedItemAt,
         durationMs: Date.parse(finishedItemAt) - Date.parse(startedItemAt),
+        truncated: didTruncate || undefined,
+        originalDraftChars: didTruncate ? originalDraftChars : undefined,
+        finalDraftChars: draft.text.length,
       };
       totals.published += 1;
       // Persist to posted.jsonl.
