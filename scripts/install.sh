@@ -28,11 +28,20 @@ if [[ ! -f "$PLUGIN_ROOT/.claude-plugin/marketplace.json" ]]; then
 fi
 
 # ---- pick a python interpreter for safe JSON edits --------------------------
+# `command -v` alone trusts the PATH, which on Windows / Microsoft Store can
+# point at a stub redirector that exits nonzero when actually run. So actually
+# exec the candidate to confirm it runs.
 PYBIN=""
-if command -v python3 >/dev/null 2>&1; then PYBIN=python3
-elif command -v python  >/dev/null 2>&1; then PYBIN=python
-else
+for cand in python3 python python3.13 python3.12 python3.11; do
+  if command -v "$cand" >/dev/null 2>&1 && "$cand" -c "import sys" >/dev/null 2>&1; then
+    PYBIN="$cand"
+    break
+  fi
+done
+if [ -z "$PYBIN" ]; then
   printf 'install.sh: python3 / python is required for safe JSON editing.\n' >&2
+  printf 'install.sh: tried python3 / python / python3.13 / python3.12 / python3.11 — none executed cleanly.\n' >&2
+  printf 'install.sh: on Windows, ensure a real Python is on PATH ahead of the WindowsApps Store stub.\n' >&2
   exit 1
 fi
 
