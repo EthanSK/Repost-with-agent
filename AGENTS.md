@@ -1,81 +1,106 @@
-# AGENTS.md — Repost-with-agent (v3.0.0)
+# AGENTS.md — Repost-with-agent (v4.0.0)
 
-Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini, Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a single read is enough regardless of which agent harness you're driving from.
+Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
+Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
+single read is enough regardless of which agent harness you're driving from.
 
-## v3.0.0 in one paragraph
+## v4.0.0 in one paragraph
 
-Repost-with-agent is **instructions + JSON state**, not a posting framework. The CLI is a thin orchestrator. The **agent** (you) drives the user's logged-in browser via your browser MCP (`chrome-devtools-mcp`, `claude-in-chrome`, OpenClaw's built-in browser tool) to scrape sources and submit posts. There is **no** API path and **no** Playwright in `src/`. Platform labels (`linkedin`, `x`, `bluesky`, `threads`, `facebook`) are free-form strings; you read the label from the agent-task and pick the right URL templates and DOM selectors.
+Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
+server, no platform SDK. **You** (the running agent) do all the work using
+your native toolkit (Read, Edit, Write, Bash, browser MCP,
+plugin:telegram:telegram). The skills under `skills/<name>/SKILL.md` are
+step-by-step procedures you read and execute directly. The slash commands
+under `commands/*.md` are thin wrappers that load the matching skill.
+
+Supported platforms: **LinkedIn, X, Bluesky, Threads, Facebook**. Platform
+labels are free-form strings in pair config; you read them and pick the right
+URL templates and DOM selectors at runtime via `docs/destinations/<platform>.md`.
 
 ## The non-negotiable rule — Telegram-confirm every successful publish
 
-> **Telegram-confirm every successful publish — non-negotiable.** Every successful post from this tool MUST trigger a Telegram message to Ethan confirming what was posted, the source URL, and the destination URL. The CLI does this automatically via the configured `notify.telegram` channel. If you trigger a publish through any non-CLI path you MUST also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+> **Telegram-confirm every successful publish — non-negotiable.** Every
+> successful post from this plugin MUST trigger a Telegram message to Ethan
+> confirming the source URL and the destination URL. If you trigger a publish
+> through any non-skill path you MUST also fire a Telegram confirmation.
+> Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
 
-## Code-level wiring (where notify lives)
+## Required harness toolkit
 
-- `src/core/notify.ts` — `notifyPublishSuccess()`, `sendTelegramMessage()`, `loadNotifyConfig()`, `writeNotifyConfig()`, `buildPublishMessage()`.
-- `src/core/orchestrator.ts:publishNextForPair()` — calls `notifyPublishSuccess()` after the destination confirms.
-- `src/core/backfill.ts:runBackfill()` — calls `notifyPublishSuccess()` in the publish-success branch.
-- `src/core/scheduling.ts:runScheduled()` — re-uses `publishNextForPair()`, no separate wiring.
+Your session must have:
 
-If you add a new publish path, wire `notifyPublishSuccess()` at the same boundary: AFTER the agent's `post-to-destination-result` returns success AND AFTER `posted.jsonl` / state is written. Never in parallel.
+- **Read, Edit, Write, Bash** — built-in.
+- **A browser MCP** — `chrome-devtools-mcp` (Claude Code), OpenClaw's built-in
+  browser tool, or `claude-in-chrome`.
+- **`plugin:telegram:telegram`** — for the publish-confirmation pings.
 
-## Agent-task contract — the v3 boundary
+If any is missing, the relevant skill surfaces the missing dependency and
+stops. There's no fallback.
 
-The CLI hands you typed `AgentTask` JSON; you fulfil via your browser MCP and write back typed `AgentResult` JSON. Three task kinds:
+## State files
 
-| Kind | Purpose | Result kind |
-| --- | --- | --- |
-| `fetch-source` | Scrape source profile | `fetch-source-result` |
-| `post-to-destination` | Submit a draft to the destination | `post-to-destination-result` |
-| `check-destination` | Cross-state dedupe | `check-destination-result` |
+| Path | Purpose |
+| --- | --- |
+| `~/.repost-with-agent/pairs.json` | Array of pair configs (schemaVersion 4) |
+| `~/.repost-with-agent/pairs/<id>/posted.jsonl` | Append-only NDJSON history |
+| `~/.repost-with-agent/pairs/<id>/audit.jsonl` | Append-only NDJSON audit |
+| `~/.repost-with-agent/pairs/<id>/learnings.md` | Free-form notes |
+| `~/.repost-with-agent/pairs/<id>/backfill-state.json` | Transient backfill resume |
+| `~/.repost-with-agent/pairs/<id>/logs/cron.log` | Cron / launchd tick logs |
 
-Each task has a `correlation_id`. Echo it back in your result. The CLI writes tasks to `~/.repost-with-agent/agent-tasks/<correlation_id>.task.json` and polls for the matching `<correlation_id>.result.json`. Both files are surfaced via stdout banner lines.
+Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 
-Errors: write an `{"kind": "error-result", "correlation_id": ..., "error": "...", "category": "needs-login|needs-config|rate-limit|platform-error|unknown"}`.
+## Skills
 
-Full schema: `src/core/agent-task-contract.ts`. Step-by-step instructions per task kind: `skills/repost-pair-setup/SKILL.md` + `skills/repost-run/SKILL.md`. Platform-specific DOM hints: `docs/destinations/<platform>.md`.
+| Skill | Use when |
+| --- | --- |
+| `repost-pair-setup` | User wants to create / edit a pair |
+| `repost-pair-list` | User wants a list of all pairs |
+| `repost-pair-show` | User wants full details + history for one pair |
+| `repost-run` | User runs a single pair end-to-end (single post) |
+| `repost-backfill` | User wants a multi-post historical walk |
+| `repost-listen-for-future-setup` | User wants to install scheduler |
+| `repost-history` | User wants to tail posted.jsonl |
+| `repost-dedup` | Reference for fuzzy-match algorithm |
+| `repost-url-expand` | Reference for shortener resolution |
+| `repost-notify` | The Telegram-confirm payload + non-negotiable rule |
 
-## CLI
+## Slash commands
 
-```bash
-repost-with-agent pair create --source-platform <p> --destination-platform <p> ...
-repost-with-agent pair list
-repost-with-agent pair show <id>
-repost-with-agent pair preview <id>
-repost-with-agent pair history <id>
-repost-with-agent pair post <id> --approve [--overlength-strategy truncate]
-repost-with-agent pair backfill <id> [--allow-publish] [--overlength-strategy {skip|truncate}]
-repost-with-agent pair scheduled-run <id> [--allow-publish] [--json]
-repost-with-agent pair schedule <id> [--apply launchd] [--allow-publish]
-repost-with-agent pair unschedule <id>
-repost-with-agent pair edit <id> --mode ... --run-mode ... --schedule-kind ...
-repost-with-agent notify configure --bot-token <T> --chat-id <C> [--test] [--disable]
-repost-with-agent notify status
-repost-with-agent notify test
-repost-with-agent urls expand <url>
-repost-with-agent urls expand-text "<body>"
-```
+- `/pair list|show|create|edit`
+- `/repost-run <pair-id|all>`
+- `/repost-backfill <pair-id> [--max --interval --allow-publish --resume]`
+- `/repost-setup-cron <pair-id>`
 
-Notify config sources (priority): `~/.repost-with-agent/notify.json` (mode `0600`) → `REPOST_TELEGRAM_BOT_TOKEN` + `REPOST_TELEGRAM_CHAT_ID` env vars → unconfigured (loud `WARN` + audit event on every publish).
+## Pre-flight before flipping a pair to live
 
-## Pre-flight checks before flipping a pair to live
+1. `pair.enabled === true`
+2. `pair.mode === "live-approved"` (or `"approval-required"`)
+3. `pair.runMode === "listen-for-future"` (for cron) or `"backfill"` (one-shot)
+4. User logged into source + destination platforms in browser MCP profile
+5. At least one preview run has succeeded (audit shows `pair.publish.success` or `pair.preview.success`)
+6. Telegram is configured (run `repost-notify` test once)
 
-1. `repost-with-agent notify status` returns `source: file` (or `env`).
-2. `repost-with-agent notify configure --test` (or `notify test`) lands a real Telegram message.
-3. The pair has been previewed at least once (`repost-with-agent pair preview <id>` exits clean).
-4. `pair show <id>` shows the intended `mode` (`approval-required` or `live-approved`) and `runMode`.
-5. The user is logged into both source AND destination platforms in the agent's persistent browser profile.
-
-## What to do if you see a `pair.publish.notify_skipped_unconfigured` audit event
+## What to do on a `pair.publish.notify_skipped_unconfigured` audit event
 
 1. Tell Ethan via Telegram (so the missed ping is replaced).
-2. Run `repost-with-agent notify configure` to wire it up.
-3. Note the gap in `CLAUDE.md` for future sessions.
+2. Verify `plugin:telegram:telegram` is installed + enabled.
+3. Re-run the affected publish flow once Telegram is wired up.
 
 ## Other project rules in one paragraph
 
-- New pairs default to `mode: preview-only` and `enabled: false` — intentional.
-- Live publish requires `--approve` (or `--allow-publish` for scheduled/backfill) AND a non-`preview-only` mode.
-- Dedupe is re-checked at post time; uncertain matches are refused unless `--allow-uncertain`.
-- No stealth, no CAPTCHA / 2FA bypass, no hidden posting. Browser automation only with transparent user-controlled login sessions.
-- See `docs/safety.md`, `docs/WORKFLOW.md`, `docs/scheduling.md`, `docs/architecture.md`, `docs/url-expander.md` for the long form.
+- New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
+- Live publishes need `mode: "live-approved"` (cron) or explicit per-post
+  authorization (`mode: "approval-required"`).
+- Dedupe is re-checked at every publish; uncertain matches are skipped unless
+  `policy.blockOnUncertainDuplicate: false`.
+- No stealth, no CAPTCHA / 2FA bypass, no hidden posting.
+- You CANNOT log in for the user. `category: "needs-login"` on session expiry.
+- `posted.jsonl` / `audit.jsonl` are append-only.
+
+## See also
+
+- `INSTRUCTIONS.md`, `README.md`, `CLAUDE.md`
+- `docs/architecture.md`, `docs/state-files.md`, `docs/migration-v3-to-v4.md`
+- `docs/url-expander.md`, `docs/destinations/<platform>.md`
+- `skills/<name>/SKILL.md` for each skill body

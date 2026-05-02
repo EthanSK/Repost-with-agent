@@ -1,5 +1,124 @@
 # Changelog
 
+## v4.0.0 — 2026-05-01 — Skill-only plugin (second rewrite)
+
+**Major architectural change.** Repost-with-agent is now a **skill-only plugin**.
+There is **no CLI**, **no MCP server**, **no platform SDKs**, **no Playwright**.
+The plugin ships zero code that does the work — it ships instructions (skills)
+and the running agent's existing toolkit (Read, Edit, Write, Bash, browser
+MCP, plugin:telegram:telegram) does everything.
+
+(Ethan voice 6024 + 6026, 2026-05-01: "The whole point of this is a plugin we
+install into the existing agent harness... It's essentially just a skill for
+the existing harness. This isn't fucking a CLI that uses a new chat... we
+don't code anything in.")
+
+### Stripped (v3 → v4)
+
+- `src/` entirely — every TypeScript file (CLI orchestrator,
+  `agent-task-contract.ts`, `agent-runner.ts`, `orchestrator.ts`,
+  `backfill.ts`, `scheduling.ts`, `notify.ts`, `dedupe.ts`, `truncate.ts`,
+  `url-expander.ts`, `policy.ts`, `runtime.ts`, `types.ts`, `config.ts`,
+  `index.ts`).
+- `tests/` — all 8 regression suites. None of them apply to skill-driven flow.
+- `tsconfig.json`, `package-lock.json`, `node_modules/`, `dist/`, `.env.example`.
+- The `repost-with-agent` CLI binary (no more `bin` entry in `package.json`).
+- `templates/repost_with_agent_workspace/` (legacy v2/v3 workspace template).
+- `examples/`, `site/`, `.github/` workflows, `PLAN.md`.
+- `commands/preview.md` (functionality folded into `commands/run.md`).
+- `scripts/agent-bridge-handler.sh`, `scripts/init_repost_with_agent_workspace.py`,
+  `scripts/install-for-openclaw.sh` — the v3 installer rig.
+- `docs/WORKFLOW.md`, `docs/scheduling.md`, `docs/safety.md`,
+  `docs/setup-flow.md`, `docs/migration-v2-to-v3.md`, the v3 versions of
+  `docs/architecture.md`, `docs/migration.md`, `docs/url-expander.md`,
+  `docs/screenshots/`.
+- The "agent-task contract" boundary entirely — no more typed JSON tasks
+  written to `~/.repost-with-agent/agent-tasks/`. The agent reads the skill
+  and acts directly.
+
+### Added
+
+- `.claude-plugin/marketplace.json` — directory-source marketplace manifest
+  (mirrors agent-bridge's pattern).
+- 10 `skills/<name>/SKILL.md` files:
+  - `repost-pair-setup` — create / edit pairs.
+  - `repost-pair-list` — list pairs.
+  - `repost-pair-show` — inspect one pair.
+  - `repost-run` — single-post end-to-end flow.
+  - `repost-backfill` — multi-post historical walk.
+  - `repost-listen-for-future-setup` — install launchd plist / cron entry.
+  - `repost-history` — tail posted.jsonl.
+  - `repost-dedup` — fuzzy-match algorithm reference.
+  - `repost-url-expand` — shortener resolution.
+  - `repost-notify` — Telegram-confirm payload + non-negotiable rule.
+- 4 `commands/*.md` slash command wrappers: `/pair`, `/repost-run`,
+  `/repost-backfill`, `/repost-setup-cron`.
+- `scripts/install.sh` + `scripts/uninstall.sh` — idempotent JSON edits to
+  `~/.claude/settings.json` + `~/.openclaw/openclaw.json`. Backs up pre-edit
+  files. Validates post-edit JSON, restores backup on parse failure.
+- `templates/pairs.json.template`, `posted.jsonl.template`,
+  `audit.jsonl.template`.
+- `docs/state-files.md` — formal schemas + audit-event taxonomy.
+- `docs/architecture.md` — v4 architecture rationale (rewritten).
+- `docs/migration-v3-to-v4.md` — second-rewrite changelog + rollback path.
+- `docs/url-expander.md` — agent-facing reference (rewritten).
+- `INSTRUCTIONS.md` — primer for the running agent.
+
+### Changed
+
+- `package.json` — bare metadata only. No `bin`, no `main`, no `scripts`, no
+  dependencies, no devDependencies. Just name, version (4.0.0),
+  description, license, keywords, repository, homepage.
+- `.claude-plugin/plugin.json` — declares 10 skills + 4 commands. NO
+  `mcpServers` section.
+- `openclaw.plugin.json` — `runtime` block removed entirely.
+  `skills_roots` + `commands_roots` only. NO `mcp` section.
+- `pairs.json` schema — `schemaVersion` 3 → 4. Deprecated fields ignored
+  (`policy.requirePreviewBeforeFirstLiveRun`, `policy.preferOfficialApi`,
+  `dedupe.strategy`, `*.authRef`, `source.type`, `destination.type`).
+  Added: `runMode` (default `"listen-for-future"`), `schedule.everyHours`
+  (default 5), `policy.overlengthStrategy` (default `"skip"`).
+- The Telegram-on-publish notifier is now enforced by skill bodies, not by
+  a `notify.json` config file. Uses the running session's
+  `plugin:telegram:telegram` plugin directly.
+- Per-platform DOM hints in `docs/destinations/<platform>.md` rewritten as
+  direct procedural prose for the running agent (no more "post-to-destination
+  task" / "fetch-source task" vocabulary).
+- README, CLAUDE.md, AGENTS.md fully rewritten for v4 architecture.
+
+### Preserved
+
+- `~/.repost-with-agent/pairs/<id>/posted.jsonl` history — UNTOUCHED. Schema
+  identical between v3 and v4.
+- `~/.repost-with-agent/pairs/<id>/audit.jsonl` — UNTOUCHED.
+- `~/.repost-with-agent/pairs/<id>/learnings.md` — UNTOUCHED.
+- The 11 entries in the legacy `linkedin-to-x` posted.jsonl survive
+  unchanged.
+
+### Migration
+
+`scripts/install.sh` is idempotent. Running it on a fresh v4 clone:
+
+1. Backs up `~/.claude/settings.json` and `~/.openclaw/openclaw.json` to
+   `<file>.bak.<unix-ts>`.
+2. Adds repost-with-agent as a directory-source marketplace + enabled plugin.
+3. Ensures `~/.repost-with-agent/` exists with empty `pairs.json` if missing.
+4. Validates JSON post-edit; restores backup on parse failure.
+
+For v3 → v4 schema migration on `pairs.json`, see `docs/migration-v3-to-v4.md`.
+
+### Non-negotiable rule (continued from v3)
+
+> Telegram-confirm every successful publish. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01.)
+
+In v4 this is enforced in the skill bodies (`repost-notify` is the primary
+enforcement point; `repost-run` step 10 + `repost-backfill` step 6 explicitly
+invoke it). The rule is restated verbatim in README, CLAUDE.md, AGENTS.md,
+INSTRUCTIONS.md, openclaw.plugin.json, and every slash command body.
+
+---
+
 ## v3.0.0 — 2026-05-02 — Strip-and-rewrite, agent-driven
 
 **Major architectural change.** The CLI is now a thin orchestrator over JSON state; the agent (Claude Code via `chrome-devtools-mcp`, OpenClaw via its built-in browser tool) drives the user's logged-in browser to do the actual reposting. There is **no API path** and **no Playwright** in `src/`. (Ethan voice 6016 + 6018 + 6021, 2026-05-01.)
