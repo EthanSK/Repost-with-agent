@@ -1,5 +1,117 @@
 # Changelog
 
+## v4.1.0 — 2026-05-01 — Per-pair learnings.md institutional memory
+
+**Additive change.** Adds a per-pair `learnings.md` file pattern so the
+running agent builds up platform-quirk knowledge over time and doesn't
+re-figure DOM changes / pagination caps / rate-limit signatures from
+scratch on every cron tick.
+
+(Ethan voice 6029, 2026-05-01: "Have instructions so the agent keeps a
+learnings.md file that makes it easier for subsequent things to happen
+faster, like weird quirks or stuff. So it doesn't have to figure it out
+every single time from scratch. It just builds up these learning files
+over time and reads it every time it executes the cron job.")
+
+### Lifecycle
+
+For each pair `<id>`, the agent maintains
+`~/.repost-with-agent/pairs/<id>/learnings.md`:
+
+1. **Start of every run** (manual or cron): the agent reads `learnings.md`
+   if it exists. Treats it as up-front context — quirks to be aware of
+   before scraping or composing (e.g., "Bluesky's compose button moved to
+   a sidebar 'New Post' button on mobile-narrow viewports", "X's
+   profile-page recent-posts now require scrolling 4× before old posts
+   appear", "LinkedIn's `lnkd.in/` shortener sometimes redirects to a
+   login wall — fall back to canonicalUrl in that case").
+2. **During execution**: the agent tracks any encountered quirks /
+   gotchas / unexpected DOM behavior in its reasoning. It does NOT
+   append to the file mid-run (a crash mid-write would corrupt the file).
+3. **End of run**: the agent appends new findings to `learnings.md` with
+   a timestamped `## YYYY-MM-DD HH:MM — <one-line summary>` heading
+   followed by 2–5 sentences of detail. Append-only via `>>` in Bash.
+4. **Stale-learning pruning**: if a fresh observation contradicts an
+   older entry, the agent appends a NEW entry (rather than editing the
+   old one), but adds ` [obsoleted YYYY-MM-DD]` to the older entry's
+   heading via a targeted `Edit`. Don't delete history; only annotate.
+
+### Added
+
+- `skills/repost-learnings/SKILL.md` — full spec for the lifecycle,
+  signal-vs-noise rules, and good/bad-entry examples. Other skills link
+  to this one as a reference.
+- `templates/learnings.md.template` — placeholder shape for new pairs:
+
+  ```markdown
+  # <pair-id> learnings
+
+  _No learnings recorded yet — the agent will append entries as it
+  discovers quirks during runs._
+  ```
+
+### Changed
+
+- `skills/repost-run/SKILL.md` — added Step 1.5 (read `learnings.md`
+  before scraping) and a Final step (append discovered quirks before
+  exiting).
+- `skills/repost-backfill/SKILL.md` — same pattern; Step 1.5 reads, new
+  Step 9 batches the loop's discovered quirks at the end (avoids
+  mid-loop append corruption).
+- `skills/repost-listen-for-future-setup/SKILL.md` — explicit note that
+  the cron-spawned subagent inherits the learnings-file lifecycle, so
+  cron ticks accumulate institutional memory across invocations even
+  though there's no shared in-memory state between them.
+- `skills/repost-pair-show/SKILL.md` — output now includes a "Recent
+  learnings (last 5)" section. `--full-learnings` flag dumps the entire
+  file.
+- `skills/repost-history/SKILL.md` — optional `--with-learnings` flag
+  includes the last 3 learnings entries below the post-history tail.
+- `docs/state-files.md` — `learnings.md` section expanded with full
+  format spec, lifecycle, and surfaced-by table.
+- `docs/destinations/<platform>.md` (linkedin, x, bluesky, threads,
+  facebook) — each now opens with a callout that the per-platform DOM
+  hints are STARTING points; the per-pair `learnings.md` may extend or
+  override them as the agent discovers quirks specific to Ethan's
+  account or recent UI changes. Per-pair file wins on conflict.
+- `README.md`, `INSTRUCTIONS.md`, `AGENTS.md`, `CLAUDE.md` — short blurb
+  in the architecture section about the learnings-file pattern.
+- `.claude-plugin/plugin.json` — adds `skills/repost-learnings` to the
+  declared skills array. Bumps `version` to 4.1.0.
+- `openclaw.plugin.json` — bumps `version` to 4.1.0.
+- `package.json` — bumps `version` to 4.1.0.
+
+### Preserved
+
+- `pairs.json` schema — unchanged. Learnings live in their own file, not
+  embedded in pair config.
+- `posted.jsonl` schema — unchanged. No audit-shape changes.
+- `audit.jsonl` event taxonomy — unchanged. No new events for the
+  learnings-file lifecycle (it's an internal agent housekeeping pattern,
+  not a publish-pipeline state transition).
+- The non-negotiable Telegram-confirm rule.
+- All v4.0.0 skill names, slash command shapes, install paths, and
+  state-file locations.
+
+### Migration
+
+No migration required. On first run after upgrade, the agent reads
+`learnings.md`; if absent, it proceeds without prior context and seeds
+the file as it discovers quirks. The placeholder stub (from
+`templates/learnings.md.template`) can be created up-front for known
+pairs to avoid the first-run no-file path:
+
+```bash
+mkdir -p ~/.repost-with-agent/pairs/<id>
+cp templates/learnings.md.template ~/.repost-with-agent/pairs/<id>/learnings.md
+sed -i '' "s/<pair-id>/<id>/g" ~/.repost-with-agent/pairs/<id>/learnings.md
+```
+
+The existing `linkedin-to-x` pair already had a placeholder
+`learnings.md` from v3 — preserved untouched.
+
+---
+
 ## v4.0.0 — 2026-05-01 — Skill-only plugin (second rewrite)
 
 **Major architectural change.** Repost-with-agent is now a **skill-only plugin**.
