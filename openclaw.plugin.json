@@ -1,8 +1,8 @@
 {
   "id": "repost-with-agent",
   "name": "Repost-with-agent",
-  "version": "4.3.1",
-  "description": "Skill-only OpenClaw/current-harness plugin for agent-driven, browser-based reposting (v4.3.1 — no CLI, no MCP server, no shell registration script). The running agent (OpenClaw via its built-in browser, Claude Code via chrome-devtools-mcp, or another explicit browser adapter) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe (Layer 1 string-match + Layer 2 agent semantic check), expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan via the current harness's Telegram/message tool. v4.3.1 makes OpenClaw the first-class/default harness path while remaining agent-agnostic. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
+  "version": "4.4.0",
+  "description": "Skill-only OpenClaw/current-harness plugin for agent-driven, browser-based reposting (v4.4.0 — no CLI, no MCP server, no shell registration script). The running agent (OpenClaw via its built-in browser, Claude Code via chrome-devtools-mcp, or another explicit browser adapter) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe (Layer 1 string-match + Layer 2 agent semantic check), expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan via the current harness's Telegram/message tool. v4.4.0 makes OpenClaw the first-class/default harness path while remaining agent-agnostic. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

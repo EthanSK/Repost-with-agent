@@ -1,4 +1,4 @@
-# State files (v4.3.1)
+# State files (v4.4.0)
 
 All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
 touch this state directly; runtime reposting is skill-only. The running agent
@@ -8,6 +8,7 @@ the skill workflows.
 ```
 ~/.repost-with-agent/
 ├── pairs.json                          # all pair configs (schemaVersion 4)
+├── global-posted.jsonl                 # append-only cross-pair destination ledger
 ├── pairs.json.bak.<unix-ts>            # backups produced by manual migration / pair-edit
 ├── pairs.json.v3.bak                   # one-time backup of the v3 file
 └── pairs/
@@ -56,6 +57,7 @@ the skill workflows.
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
         "overlengthStrategy": "skip | truncate",
+        "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
       },
@@ -82,6 +84,11 @@ the skill workflows.
   - `truncate` — drafts are shrunk to fit the destination cap without adding a
     source-platform permalink suffix.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
+- `policy.globalDedupeEnabled` — when `true` (default), every publish-capable
+  path reads `global-posted.jsonl`, resolves a cross-pair `contentKey`, and
+  skips if the same content has already reached this destination platform/account
+  from any pair. Use this to prevent alternate routes like LinkedIn→X→Bluesky
+  and direct X→Bluesky from double-posting the same item.
 - `destination.targetType` — optional identity type for destinations where a
   login can publish as multiple identities. Defaults to `profile`; use `page`
   for Facebook pages and `group` for Facebook groups.
@@ -116,6 +123,44 @@ The migration is a one-shot transformation: change `schemaVersion` from 3 to 4,
 ensure `runMode` exists (default `"listen-for-future"`), add `schedule.everyHours`
 if missing (default 5), drop the deprecated fields. The original v3 file is
 backed up to `~/.repost-with-agent/pairs.json.v3.bak`.
+
+## `global-posted.jsonl`
+
+Append-only NDJSON. Each line is one global proof/catch-up record shared by all
+pairs. It complements each pair's local `posted.jsonl`; it does not replace it.
+The global ledger is what lets every pair check whether another pair already
+posted the same underlying content to this destination.
+
+Schema:
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate",
+  "pairId": "<pair-id>",
+  "contentKey": "<sourcePlatform:sourceItemId or canonical URL key>",
+  "sourcePlatform": "<platform>",
+  "sourceItemId": "<platform-specific source id>",
+  "canonicalSourceUrl": "<source post URL>",
+  "destinationPlatform": "<platform>",
+  "destinationAccountHint": "<configured destination account/page hint>",
+  "destinationUrl": "<published/matched destination post URL>",
+  "destinationId": "<destination platform id>",
+  "draftText": "<text posted or matched>",
+  "status": "posted | caught-up | skipped-duplicate",
+  "note": "<optional>"
+}
+```
+
+Invariants:
+
+- Append-only. NEVER rewrite existing lines.
+- `contentKey` is the cross-pair identity for the underlying content.
+- If a candidate source URL/ID matches a previous line's destination URL/ID, the
+  candidate inherits that previous line's `contentKey`. This preserves lineage
+  across hops such as LinkedIn→X→Bluesky.
+- The same `contentKey` may have one row per destination platform/account. A
+  second row for the same destination is a duplicate and should be skipped.
 
 ## `pairs/<id>/posted.jsonl`
 
@@ -166,6 +211,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.fetch.failed`                     | Source scrape failed. Includes `category` (`needs-login` etc.) + `error`. |
 | `pair.dedupe.local`                     | Local dedupe completed. Includes `duplicates`, `survivors`. |
 | `pair.dedupe.remote`                    | Destination scrape + fuzzy-match completed. Includes `duplicates`, `survivors`. |
+| `pair.dedupe.global_duplicate`          | Global ledger found the same `contentKey` already posted/caught-up for this destination by any pair. |
 | `pair.dedupe.uncertain`                 | Destination scrape failed; candidates left undecided. Includes reason. |
 | `pair.dedupe.semantic_clean`            | (Optional) Layer 2 semantic dedupe ran and cleared the candidate. Includes `candidateExcerpt`, `windowSize`, `candidatesCompared`. |
 | `pair.publish.semantic_duplicate`       | **Layer 2 semantic dedupe match — candidate skipped pre-publish.** Includes `pairId`, `sourceItemId`, `candidateExcerpt` (first 200 chars), `matchedExistingUrl`, `matchedExistingExcerpt` (first 200 chars), `agentReasoning` (1-3 sentence justification), `windowSize` (number of destination posts compared). See `skills/repost-dedup-semantic/SKILL.md`. |
@@ -183,6 +229,23 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.backfill.would_publish`           | Dry-run hit on a candidate. |
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
 | `pair.backfill.skipped_now_duplicate`   | Re-check between publishes found the candidate had been posted by another path. |
+
+### `pair.dedupe.global_duplicate` schema
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "pair.dedupe.global_duplicate",
+  "pairId": "<id>",
+  "sourceItemId": "<candidate source id>",
+  "canonicalSourceUrl": "<candidate source URL>",
+  "contentKey": "<resolved global content key>",
+  "matchedPairId": "<pair that already handled it>",
+  "matchedDestinationPlatform": "<destination platform>",
+  "matchedDestinationUrl": "<existing destination URL>",
+  "reason": "same contentKey already posted/caught-up for this destination"
+}
+```
 
 ### `pair.publish.semantic_duplicate` schema
 
@@ -310,6 +373,7 @@ clean completion. Schema:
 - `pairs.json` mode: `0644` (default umask). Contains no secrets — Telegram
   bot tokens etc. live in the current harness's Telegram/message delivery config,
   not in this plugin.
+- `global-posted.jsonl` mode: `0644`.
 - `posted.jsonl` mode: `0644`.
 - `audit.jsonl` mode: `0644`.
 - `learnings.md` mode: `0644`.
@@ -318,6 +382,7 @@ clean completion. Schema:
 
 - `templates/pairs.json.template` — example v4 pair config.
 - `templates/posted.jsonl.template` — example posted history shape.
+- `skills/repost-global-dedupe/SKILL.md` — global ledger algorithm and schema.
 - `templates/audit.jsonl.template` — example audit event sequence.
 - `templates/learnings.md.template` — placeholder shape for new pairs.
 - `skills/repost-learnings/SKILL.md` — full spec for the learnings.md

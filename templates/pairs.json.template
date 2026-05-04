@@ -28,6 +28,7 @@
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
         "overlengthStrategy": "skip",
+        "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
       },

@@ -47,7 +47,8 @@ substitute curl/Playwright/etc.
    disabled and stop.
 4. Note `mode`, `runMode`, `source`, `destination`, `policy.maxItemsPerRun`
    (default 1), `policy.overlengthStrategy` (default `"skip"`),
-   `policy.blockOnUncertainDuplicate` (default true).
+   `policy.blockOnUncertainDuplicate` (default true), and
+   `policy.globalDedupeEnabled` (default true).
 5. Note optional destination identity fields:
    - `destination.targetType` (`profile`, `page`, or `group`; default `profile`).
    - `destination.accountDisplayName` (visible account/page name to verify).
@@ -155,15 +156,24 @@ If the page shows a logged-out indicator (login modal, "sign in to continue"
 CTA), STOP and tell the user "needs-login on <platform>". Do not try to log
 in.
 
-## Step 4 — Layer 1 dedupe (local + destination, exact + fuzzy-string match)
+## Step 4 — Layer 1 dedupe (local + global + destination)
 
 Use the `repost-dedup` skill semantics. This is **Layer 1** — cheap string
-ops that catch verbatim and near-verbatim re-posts.
+ops plus the global cross-pair ledger that catch verbatim, near-verbatim, and
+already-routed reposts.
 
 1. **Local dedupe.** Read `~/.repost-with-agent/pairs/<id>/posted.jsonl`
    (line-delimited JSON, may be empty). For each candidate from step 3, drop it
    if its `sourceItemId` already appears in any line.
-2. **Destination dedupe.** Use your current-harness browser automation to navigate to
+2. **Global cross-pair dedupe.** Use `skills/repost-global-dedupe/SKILL.md`
+   unless `pair.policy.globalDedupeEnabled === false`. Read
+   `~/.repost-with-agent/global-posted.jsonl`, resolve the candidate
+   `contentKey` (including lineage inheritance from earlier destination URLs),
+   and drop it if the same `contentKey` has already been posted/caught-up for
+   this pair's destination platform/account by ANY pair. This is mandatory for
+   routes such as LinkedIn→X→Bluesky plus X→Bluesky: whichever path first
+   proves the Bluesky destination has the content wins, and the other path skips.
+3. **Destination dedupe.** Use your current-harness browser automation to navigate to
    `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. **Keep
    this scrape in your reasoning** — Layer 2 (step 4.5) reuses it. For each
    *remaining* candidate, fuzzy-match the candidate text against the scraped
@@ -172,7 +182,7 @@ ops that catch verbatim and near-verbatim re-posts.
      strip URLs (X / Bluesky rewrite URLs into shortened aliases that won't
      match the source).
    - Match: exact-normalized OR ≥80-char prefix overlap → duplicate.
-3. If `policy.blockOnUncertainDuplicate === true` and you cannot positively
+4. If `policy.blockOnUncertainDuplicate === true` and you cannot positively
    determine for any reason (page failed to load, content was paywalled,
    etc.), treat the candidate as "uncertain" and SKIP it (do not publish).
 
@@ -204,7 +214,9 @@ Catches paraphrased duplicates that Layer 1's string-match cannot
    `pair.publish.semantic_duplicate` audit event with
    `{candidateExcerpt, matchedExistingUrl, matchedExistingExcerpt,
    agentReasoning, windowSize}`, append a catch-up entry to `posted.jsonl`,
-   and drop the candidate from the publish set. (See
+   append a matching global ledger catch-up to
+   `~/.repost-with-agent/global-posted.jsonl`, and drop the candidate from the
+   publish set. (See
    `skills/repost-dedup-semantic/SKILL.md` for the full audit shape.)
 6. If you decide **semantic-unique**: proceed to step 5.
 
@@ -305,6 +317,13 @@ echo '<json-line>' >> ~/.repost-with-agent/pairs/<id>/posted.jsonl
 
 Append `pair.publish.success` to `audit.jsonl` with the `posted_url`.
 
+Append the same proof to `~/.repost-with-agent/global-posted.jsonl` using the
+`repost-global-dedupe` schema. Include `pairId`, `contentKey`, source platform
+/ id / URL, destination platform / account / URL / id, `draftText`,
+`event: "global.publish.success"`, and `status: "posted"`. This global append is
+not optional: it is how other pairs learn that this content already reached
+this destination.
+
 ## Step 10 — Confirm to the user with post links (non-negotiable)
 
 > Every successful post from this plugin MUST trigger a message to the user on
@@ -393,7 +412,8 @@ When invoked from a fresh agent/subagent spawned by the scheduler:
 - The subagent has no chat user. All interactive prompts above are skipped — it
   just runs the pair end-to-end if `mode === "live-approved"`.
 - It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool, including the source URL and destination URL.
-- It must still append to `posted.jsonl` and `audit.jsonl`.
+- It must still append to `posted.jsonl`, `audit.jsonl`, and the global
+  cross-pair ledger when a publish/catch-up proves destination state.
 - After running, the agent exits. The next scheduled tick spawns a fresh agent/subagent.
 
 ## Error categories
@@ -413,6 +433,7 @@ which category:
 ## See also
 
 - `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
+- `skills/repost-global-dedupe/SKILL.md` — global cross-pair content ledger.
 - `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).
 - `skills/repost-url-expand/SKILL.md` — URL expansion details.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.

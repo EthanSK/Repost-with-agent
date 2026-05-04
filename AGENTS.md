@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.3.1)
+# AGENTS.md — Repost-with-agent (v4.4.0)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.3.1 in one paragraph
+## v4.4.0 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -101,20 +101,19 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
 - Live publishes need `mode: "live-approved"` (scheduled ticks) or explicit per-post
   authorization (`mode: "approval-required"`).
-- **Two-layer dedupe — both must clear.** Layer 1 (`repost-dedup`) is
-  exact + fuzzy string match — cheap, catches verbatim re-posts. Layer
-  2 (`repost-dedup-semantic`, v4.3.0+) is the agent's own semantic
-  judgment over the candidate vs. the destination's most recent 30
-  posts (override via `policy.semanticDedupeWindowSize`) — catches
-  paraphrased duplicates ("same announcement, different words"). Lean
-  conservative: when on the fence, skip — Ethan would rather miss a
-  post than ship an embarrassing duplicate (Ethan voice 6106,
-  2026-05-01). Layer 2 is enabled by default; opt out per-pair via
-  `policy.semanticDedupeEnabled: false`. Uncertain matches are skipped
-  unless `policy.blockOnUncertainDuplicate: false`.
+- **Global + two-layer dedupe — everything must clear.** First run
+  `repost-global-dedupe`: read `~/.repost-with-agent/global-posted.jsonl`,
+  resolve/inherit the cross-pair `contentKey`, and skip if any pair has already
+  got that content to this destination platform/account. Then run Layer 1
+  (`repost-dedup`: local exact + remote fuzzy string match) and Layer 2
+  (`repost-dedup-semantic`, v4.3.0+: agent semantic judgment over the
+  candidate vs. the destination's recent posts). Lean conservative: when on the
+  fence, skip — Ethan would rather miss a post than ship an embarrassing
+  duplicate. Global dedupe and Layer 2 are enabled by default; opt out only via
+  explicit per-pair policy fields.
 - No stealth, no CAPTCHA / 2FA bypass, no hidden posting.
 - You CANNOT log in for the user. `category: "needs-login"` on session expiry.
-- `posted.jsonl` / `audit.jsonl` are append-only.
+- `posted.jsonl` / `audit.jsonl` / `global-posted.jsonl` are append-only.
 
 ## See also
 

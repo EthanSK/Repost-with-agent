@@ -18,7 +18,7 @@ to the matching skill based on the subcommand.
 - `/pair edit <id>` → invoke `skills/repost-pair-setup/SKILL.md` in edit
   mode (read existing pair, ask the user which fields to update, write back).
 
-## Architecture (v4.3.1)
+## Architecture (v4.4.0)
 
 This plugin ships **no code that does the work**. The slash command above is a
 thin wrapper that loads the matching skill — the running agent (OpenClaw,

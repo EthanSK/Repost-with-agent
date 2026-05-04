@@ -1,4 +1,4 @@
-# Architecture (v4.3.1 — skill-only, current-harness first)
+# Architecture (v4.4.0 — skill-only, current-harness first)
 
 ## TL;DR
 
@@ -91,7 +91,8 @@ Concretely, when `/repost-run linkedin-to-x` is invoked:
    URL.
 7. **Agent drives the destination.** Uses current-harness browser click/fill
    tools, then reads the resulting destination URL after submit.
-8. **Agent appends history.** Native Bash `echo '<json>' >> posted.jsonl`.
+8. **Agent appends history.** Native Bash `echo '<json>' >> posted.jsonl` and
+   `echo '<json>' >> global-posted.jsonl` for publish/catch-up proof.
 9. **Agent Telegram-confirms.** Uses current-harness Telegram/message delivery
    (OpenClaw `message`, Claude Code `plugin:telegram:telegram`, or equivalent).
 
@@ -168,8 +169,11 @@ the typical case) or shell out to `sed` / `awk` if the candidate set is large
 - **Source / destination login expired** → `category: "needs-login"` audit
   event; user must re-login in the current harness browser profile.
 - **Scheduled tick raced with a manual run** → both runs share `posted.jsonl`
-  (file appends are atomic in practice for sub-line writes); the second run
-  hits local dedupe and skips. No special locking needed at this scale.
+  and the global cross-pair ledger (file appends are atomic in practice for
+  sub-line writes); the second run hits local/global dedupe and skips.
+- **Alternate pair route would double-post** → the global ledger's inherited
+  `contentKey` is the guardrail; every pair checks destination-platform/account
+  rows before compose.
 
 ## See also
 

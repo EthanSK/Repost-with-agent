@@ -1,14 +1,15 @@
 ---
 name: repost-dedup
-description: Reference for the Repost-with-agent dedupe algorithm — how to fuzzy-match a candidate post against local history (posted.jsonl) and against recent destination posts to avoid double-posting. Used by repost-run, repost-backfill, and any other publish path.
-when_to_trigger: Any time you (the agent) need to decide whether a candidate post is already published, either locally (in posted.jsonl) or remotely (on the destination platform).
+description: Reference for the Repost-with-agent dedupe algorithm — how to check a candidate against per-pair history, the global cross-pair ledger, and recent destination posts to avoid double-posting. Used by repost-run, repost-backfill, and any other publish path.
+when_to_trigger: Any time you (the agent) need to decide whether a candidate post is already published locally, globally across pairs, or remotely on the destination platform.
 ---
 
 # Repost Dedup — Layer 1 (exact + fuzzy string matching)
 
 Reference algorithm for deciding whether a candidate post is a duplicate of
-something already on the destination. Two checks: local (against
-`posted.jsonl`) and remote (against the actual destination feed).
+something already on the destination. Three checks run before publish: local
+(per-pair `posted.jsonl`), global (cross-pair `global-posted.jsonl`), and
+remote (against the actual destination feed).
 
 This skill is **Layer 1** of a two-layer dedupe pipeline. It catches
 verbatim and near-verbatim re-posts via cheap string ops. **Layer 2**
@@ -19,12 +20,15 @@ agent semantic reasoning. Both layers must clear before publish — see
 ## Why two checks?
 
 - **Local** is fast and exact (`sourceItemId` lookup), but only catches posts
-  this plugin published. A post you tweeted manually before installing the
-  plugin won't appear in `posted.jsonl`.
+  this one pair recorded.
+- **Global** is fast and cross-pair. It catches the same underlying content
+  moving through different hops, for example LinkedIn→X→Bluesky racing with
+  a direct X→Bluesky pair.
 - **Remote** is slower (browser scrape) but catches manual posts, posts from
   another tool, retweets, etc.
 
-Both checks are mandatory before any publish.
+All three checks are mandatory before any publish unless the user explicitly
+disables global dedupe for a pair with `pair.policy.globalDedupeEnabled: false`.
 
 ## Layer separation — Layer 1 vs Layer 2
 
@@ -65,6 +69,28 @@ Use `jq` or grep for speed if posted.jsonl is large:
 jq -r '.sourceItemId' ~/.repost-with-agent/pairs/<id>/posted.jsonl | grep -Fxq "<candidate-id>"
 # exit 0 → duplicate, exit 1 → not duplicate
 ```
+
+## Global cross-pair dedupe
+
+Read `~/.repost-with-agent/global-posted.jsonl` (append-only NDJSON; may be
+missing). Use `skills/repost-global-dedupe/SKILL.md` to resolve a candidate
+`contentKey` and detect whether any pair has already posted/caught-up that
+content for this pair's destination platform/account.
+
+Key points:
+
+1. Default `pair.policy.globalDedupeEnabled` is `true`. Treat missing as true.
+2. Resolve `contentKey` from `<sourcePlatform>:<sourceItemId>` or canonical URL.
+3. If the candidate source is itself a destination post from another pair
+   (e.g. an X status created by LinkedIn→X), inherit that earlier line's
+   `contentKey` so the downstream pair still represents the LinkedIn-origin
+   content.
+4. If the same `contentKey` already has a global ledger line for the current
+   destination platform/account, verdict is `duplicate-global`. Skip and append
+   the audit/catch-up lines described in `repost-global-dedupe`.
+5. If no same-destination global line exists, continue to destination scrape.
+
+This check is what makes all pairs look globally instead of thinking in silos.
 
 ## Remote dedupe (destination scrape)
 
@@ -130,7 +156,10 @@ counts (≤20) you'll typically see.
 
 For each candidate, produce one of three verdicts:
 
-- `duplicate-local` — found in `posted.jsonl`. Skip.
+- `duplicate-local` — found in this pair's `posted.jsonl`. Skip.
+- `duplicate-global` — found in `global-posted.jsonl` for this destination.
+  Skip + append the global/per-pair catch-up records from
+  `skills/repost-global-dedupe/SKILL.md`.
 - `duplicate-remote` — found in the destination scrape. Skip + append a
   catch-up entry to `posted.jsonl` so we don't re-check next run:
 
@@ -146,6 +175,7 @@ For each candidate, produce one of three verdicts:
 - `skills/repost-dedup-semantic/SKILL.md` — **Layer 2** semantic dedupe (agent
   reasoning over candidate vs. recent destination posts). Runs AFTER this
   skill on Layer-1-clean candidates. Catches paraphrased duplicates.
+- `skills/repost-global-dedupe/SKILL.md` — cross-pair contentKey ledger.
 - `skills/repost-run/SKILL.md` — calls this dedupe at step 4 (Layer 1) and
   `repost-dedup-semantic` at step 4.5 (Layer 2).
 - `skills/repost-backfill/SKILL.md` — runs Layer 1 once across the full

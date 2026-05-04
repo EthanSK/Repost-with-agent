@@ -158,7 +158,11 @@ You produce one of two verdicts per candidate:
   ```
 - Append a catch-up entry to `posted.jsonl` so this `sourceItemId` is
   treated as Layer-1 done on next run (avoids re-doing Layer 2 on the same
-  candidate next tick):
+  candidate next tick). Also append a matching catch-up line to
+  `~/.repost-with-agent/global-posted.jsonl` with
+  `event: "global.publish.semantic_duplicate"`, the resolved `contentKey`, and
+  `status: "skipped-duplicate"` so every other pair learns this destination
+  already has the content:
   ```json
   {"ts":"<ts>","sourceItemId":"<id>","canonicalSourceUrl":"<src>","destinationUrl":"<matchedExistingUrl>","destinationId":"<dest id>","note":"caught-up via Layer 2 semantic dedupe"}
   ```
@@ -224,6 +228,7 @@ The publish flow now looks like:
 ```
 Step 4 — Layer 1 dedupe (skills/repost-dedup)
     ├── local — posted.jsonl exact match
+    ├── global — cross-pair contentKey ledger
     └── remote — destination fuzzy-string match
 Step 4.5 — Layer 2 semantic dedupe (THIS SKILL)
     └── agent reasoning over candidate + destination scrape
@@ -238,6 +243,7 @@ A candidate is "publishable" iff it cleared BOTH Layer 1 and Layer 2.
 ## See also
 
 - `skills/repost-dedup/SKILL.md` — Layer 1 (exact + fuzzy string match).
+- `skills/repost-global-dedupe/SKILL.md` — global cross-pair content ledger.
 - `skills/repost-run/SKILL.md` — single-post flow that calls this skill at step 4.5.
 - `skills/repost-backfill/SKILL.md` — multi-post flow that calls this skill per loop iteration.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec (only on successful publish).

@@ -46,6 +46,7 @@ the full lifecycle + good/bad-entry guidance.
 ## Where things live
 
 - **Pair configs**: `~/.repost-with-agent/pairs.json` (schemaVersion 4).
+- **Global cross-pair ledger**: `~/.repost-with-agent/global-posted.jsonl` (NDJSON, append-only).
 - **Per-pair history**: `~/.repost-with-agent/pairs/<id>/posted.jsonl` (NDJSON, append-only).
 - **Per-pair audit**: `~/.repost-with-agent/pairs/<id>/audit.jsonl` (NDJSON, append-only).
 - **Per-pair learnings**: `~/.repost-with-agent/pairs/<id>/learnings.md` (free-form Markdown prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections per entry).
@@ -64,10 +65,19 @@ the full lifecycle + good/bad-entry guidance.
 3. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
-4. **Dedupe runs in two layers, both must clear.**
+4. **Dedupe is global before it is per-pair.** Every publish-capable path must
+   read `~/.repost-with-agent/global-posted.jsonl` via
+   `skills/repost-global-dedupe/SKILL.md` before composing. Resolve a
+   cross-pair `contentKey`, inherit lineage when the current source is a post
+   created by another pair (e.g. LinkedIn→X then X→Bluesky), and skip if that
+   `contentKey` already reached this destination from any pair. Pairs must look
+   globally; per-pair files are not enough. Default enabled via
+   `policy.globalDedupeEnabled: true`.
+5. **Dedupe runs in two layers, both must clear.**
    - **Layer 1** (`skills/repost-dedup/SKILL.md`) — local exact match
-     against `posted.jsonl` plus remote fuzzy-string match against the
-     destination feed. Cheap, catches verbatim re-posts.
+     against `posted.jsonl`, global cross-pair ledger match, plus remote
+     fuzzy-string match against the destination feed. Cheap, catches verbatim
+     re-posts and already-routed cross-pair duplicates.
    - **Layer 2** (`skills/repost-dedup-semantic/SKILL.md`) — agent
      reasons over the candidate draft and the destination's most recent
      30 posts (override per-pair via `policy.semanticDedupeWindowSize`)
@@ -77,22 +87,22 @@ the full lifecycle + good/bad-entry guidance.
      opt out per-pair via `policy.semanticDedupeEnabled: false`.
    - Uncertain matches are skipped unless
      `policy.blockOnUncertainDuplicate` is `false`.
-5. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
+6. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
    operates on user-controlled, transparent login sessions.
-6. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
+7. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
    (`profile: openclaw`, CDP port `18800`) for all Repost-with-agent OpenClaw
    work. Do not touch Ethan's personal browser/profile unless he explicitly says
    to for that run.
-7. **You CANNOT log in for the user.** If a session is expired, append
+8. **You CANNOT log in for the user.** If a session is expired, append
    `pair.publish.failed` audit with `category: "needs-login"` and stop.
-7. **Append, don't rewrite.** `posted.jsonl` and `audit.jsonl` are append-only.
-   Use `>>` in Bash.
-8. **Destination posts are native posts, not source receipts.** Expand any URLs
+9. **Append, don't rewrite.** `posted.jsonl`, `audit.jsonl`, and
+   `global-posted.jsonl` are append-only. Use `>>` in Bash.
+10. **Destination posts are native posts, not source receipts.** Expand any URLs
    in the source body to their final non-source-platform URL where possible
    (for example `lnkd.in` → the underlying article/video), but do **not** append
    the source platform permalink to the public destination draft. Keep source
    canonical URLs in `posted.jsonl`, audit, and publish confirmation only.
-9. **Use the current harness browser, not Playwright or another agent by default.**
+11. **Use the current harness browser, not Playwright or another agent by default.**
    The plugin has zero Playwright / API-SDK dependencies. The browser automation
    your current harness provides is the only browser path unless Ethan explicitly
    asks for a different harness.
@@ -120,6 +130,7 @@ See `docs/state-files.md` for the full table. Key events:
 - `pair.publish.url_expanded` — one URL was successfully expanded.
 - `pair.publish.semantic_duplicate` — Layer 2 semantic dedupe match. Candidate skipped pre-publish; includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.uncertain` — destination scrape failed; treat candidates conservatively.
+- `pair.dedupe.global_duplicate` — global ledger found the same `contentKey` already posted/caught-up for this destination; skip.
 
 ## Cross-machine context
 

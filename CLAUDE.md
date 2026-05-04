@@ -1,10 +1,10 @@
-# CLAUDE.md — Repost-with-agent (v4.3.1)
+# CLAUDE.md — Repost-with-agent (v4.4.0)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.3.1 architecture in one paragraph
+## v4.4.0 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -99,14 +99,20 @@ links, resolve them to the underlying non-LinkedIn URL before posting to X.
 
 See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 
-## Two-layer dedupe (v4.3.0+)
+## Global + two-layer dedupe (v4.4.0+)
 
-Every publish must clear BOTH layers:
+Every publish must clear the global ledger and BOTH layers:
 
+- **Global cross-pair ledger.** Read
+  `~/.repost-with-agent/global-posted.jsonl`, resolve/inherit the candidate
+  `contentKey`, and skip if any pair has already got that content to this
+  destination platform/account. This is what prevents LinkedIn→X→Bluesky and
+  direct X→Bluesky from double-posting. See
+  `skills/repost-global-dedupe/SKILL.md`.
 - **Layer 1 — strings.** Local exact `sourceItemId` match against
-  `posted.jsonl` plus remote fuzzy-string match (normalize whitespace +
-  lowercase + strip URLs + ≥80-char prefix overlap) against the
-  destination's recent posts. Cheap, catches verbatim re-posts. See
+  `posted.jsonl`, global ledger check, plus remote fuzzy-string match
+  (normalize whitespace + lowercase + strip URLs + ≥80-char prefix overlap)
+  against the destination's recent posts. Cheap, catches verbatim re-posts. See
   `skills/repost-dedup/SKILL.md`.
 - **Layer 2 — agent semantic check.** After Layer 1 clears, you (the
   agent) read the candidate draft + the destination's most recent 30
@@ -120,9 +126,10 @@ semantically looks and processes the content of the message and checks
 the target destination and sees if there's a post with similar wording
 already there... that'll be embarrassing."*
 
-Layer 2 is enabled by default (`pair.policy.semanticDedupeEnabled: true`)
-and can be turned off per-pair. Lean conservative on the threshold —
-when on the fence, skip.
+Global dedupe is enabled by default (`pair.policy.globalDedupeEnabled: true`)
+and Layer 2 is enabled by default (`pair.policy.semanticDedupeEnabled: true`).
+Turn either off only with explicit per-pair policy. Lean conservative on the
+threshold — when on the fence, skip.
 
 ## Audit events to grep for
 
@@ -134,6 +141,7 @@ when on the fence, skip.
   project bug.** Fix immediately.
 - `pair.publish.url_expanded` — one URL was successfully expanded.
 - `pair.publish.semantic_duplicate` — Layer 2 dedupe match; candidate skipped pre-publish. Includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
+- `pair.dedupe.global_duplicate` — global ledger found this content already on this destination from another pair/path.
 - `pair.dedupe.uncertain` — destination scrape failed; candidates skipped.
 
 ## Scheduled-run context

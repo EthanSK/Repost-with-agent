@@ -66,6 +66,7 @@ The directories are created lazily on first run for a pair.
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
         "overlengthStrategy": "skip | truncate",
+        "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
       },
@@ -85,6 +86,7 @@ Field invariants:
 - `mode: "live-approved"` is the only mode that allows scheduled live publishes.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
 - `policy.overlengthStrategy: "skip"` is the safe default. Only set to `"truncate"` if the user explicitly asks for it.
+- `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.
 - `schedule.everyHours` defaults to 5 when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill).

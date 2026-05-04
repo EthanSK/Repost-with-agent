@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.3.1)
+# Repost-with-agent (v4.4.0)
 
 A skill-only agent/OpenClaw-compatible plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
@@ -66,13 +66,21 @@ verbatim — read learnings.md FIRST, fall back to
 cached selector misses. (See
 [`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
 
-## Two-layer dedupe
+## Global + two-layer dedupe
 
-Every publish must clear BOTH layers before going live:
+Every publish must first check the global cross-pair ledger, then clear BOTH
+Layer 1 and Layer 2 before going live:
 
+- **Global cross-pair ledger.** Read
+  `~/.repost-with-agent/global-posted.jsonl` and resolve a `contentKey` for
+  the underlying content. If LinkedIn→X already created/caught-up an X post, a
+  later X→Bluesky candidate inherits the LinkedIn-origin `contentKey`; if that
+  key already reached Bluesky by any pair, the new route skips. This prevents
+  alternate hops from double-posting the same content. See
+  [`skills/repost-global-dedupe/SKILL.md`](skills/repost-global-dedupe/SKILL.md).
 - **Layer 1 — strings.** Exact `sourceItemId` match against
-  `posted.jsonl` plus a fuzzy-string match (normalize whitespace,
-  lowercase, strip URLs, ≥80-char prefix overlap) against the
+  `posted.jsonl`, global ledger check, plus a fuzzy-string match (normalize
+  whitespace, lowercase, strip URLs, ≥80-char prefix overlap) against the
   destination's recent posts. Cheap. Catches verbatim and near-verbatim
   re-posts. See
   [`skills/repost-dedup/SKILL.md`](skills/repost-dedup/SKILL.md).
@@ -247,6 +255,7 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
         "overlengthStrategy": "skip",
+        "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
       }

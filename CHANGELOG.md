@@ -1,5 +1,27 @@
 # Changelog
 
+## v4.4.0 — 2026-05-04 — Global cross-pair dedupe ledger
+
+**Safety/dedupe fix.** Pairs no longer think only in their own `posted.jsonl`. Every publish-capable path now has an explicit global cross-pair ledger step so alternate routes do not double-post the same underlying content to the same destination.
+
+### Added
+
+- `skills/repost-global-dedupe/SKILL.md` — resolves/inherits a cross-pair `contentKey`, reads `~/.repost-with-agent/global-posted.jsonl`, and skips if any pair already got that content to this destination platform/account.
+- `~/.repost-with-agent/global-posted.jsonl` state schema in `docs/state-files.md`.
+- `pair.policy.globalDedupeEnabled` (default `true`) in templates/docs.
+- `pair.dedupe.global_duplicate` audit event schema.
+- `templates/global-posted.jsonl.template`.
+
+### Changed
+
+- `repost-run`, `repost-backfill`, `repost-dedup`, `repost-dedup-semantic`, `INSTRUCTIONS.md`, `README.md`, `AGENTS.md`, and `CLAUDE.md` now say every publish/catch-up proof must update the global ledger.
+- Successful publishes now require both per-pair history append and global ledger append. Semantic/remote/global duplicate catch-ups also append global state when they prove destination state.
+- Manifests/package version bumped to `4.4.0`, and the Claude-compatible manifest lists `repost-global-dedupe`.
+
+### Why
+
+Ethan explicitly clarified the important case: if LinkedIn→X creates or observes a post and another pair later treats that X post as source for Bluesky, direct X→Bluesky and LinkedIn→Bluesky must share global knowledge and not double-post. The global ledger makes all pairs look globally regardless of route.
+
 ## v4.3.1 — 2026-05-04 — OpenClaw first-class harness path
 
 **Compatibility/documentation fix.** Keeps the plugin skill-only and agent-agnostic, but removes the remaining Claude Code default assumptions from the active OpenClaw path.

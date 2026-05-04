@@ -103,14 +103,20 @@ For X / Bluesky / Threads / Facebook: see per-platform docs.
 Collect candidates UNTIL you have at least `max` non-duplicate items (after
 running step 4 dedupe), or you exhaust the platform's pagination.
 
-## Step 4 — Layer 1 dedupe (full set, exact + fuzzy-string match)
+## Step 4 — Layer 1 dedupe (full set: local + global + destination)
 
 Same algorithm as `repost-run` step 4 (see `skills/repost-dedup/SKILL.md`),
 applied to the full collected set. **Layer 1** = cheap string ops over local
-history + the destination scrape.
+history, the global cross-pair content ledger, and the destination scrape.
 
-1. **Local dedupe.** Drop any item whose `sourceItemId` is in `posted.jsonl`.
-2. **Destination dedupe.** Scrape ~50–100 recent destination posts ONCE at the
+1. **Local dedupe.** Drop any item whose `sourceItemId` is in this pair's
+   `posted.jsonl`.
+2. **Global cross-pair dedupe.** Use
+   `skills/repost-global-dedupe/SKILL.md` to resolve each candidate's
+   `contentKey` and drop any item already posted/caught-up for this
+   destination platform/account by any pair. This prevents alternate routes
+   like LinkedIn→X→Bluesky and X→Bluesky from double-posting the same content.
+3. **Destination dedupe.** Scrape ~50–100 recent destination posts ONCE at the
    start of the run, not per-candidate. **Keep this scrape in your reasoning**
    — Layer 2 (step 5.5, per loop iteration) reuses it. Fuzzy-match each
    remaining candidate against the scraped destination posts.
@@ -150,8 +156,8 @@ themselves Layer-2 inputs for later candidates.
 4. If **semantic-duplicate**: append `pair.publish.semantic_duplicate` audit
    event with `{candidateExcerpt, matchedExistingUrl, matchedExistingExcerpt,
    agentReasoning, windowSize}`, append a catch-up entry to `posted.jsonl`,
-   record in `backfill-state.json` as skipped, and continue to the next
-   candidate in the loop.
+   append a matching global ledger catch-up, record in `backfill-state.json` as
+   skipped, and continue to the next candidate in the loop.
 5. If **semantic-unique**: continue to step 6.4 publish.
 
 Layer 2 is OPTIONAL but RECOMMENDED — enabled by default. Both layers must
@@ -173,8 +179,9 @@ For each candidate in order:
 5. If publishing:
    - Run the URL expansion + length check from `repost-run` steps 6–7.
    - Drive the destination compose flow from `repost-run` step 8.
-   - On success: append to `posted.jsonl` (step 9 of `repost-run`), update
-     `backfill-state.json`, append `pair.backfill.published` audit.
+   - On success: append to `posted.jsonl` and
+     `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
+     update `backfill-state.json`, append `pair.backfill.published` audit.
    - **Telegram-confirm Ethan immediately** (step 10 of `repost-run`).
 6. **Sleep** `intervalMinutes * 60` seconds before the next candidate (use
    `sleep` via Bash). This is mandatory — destinations rate-limit aggressively
@@ -182,9 +189,11 @@ For each candidate in order:
 
 ## Step 7 — Re-check destination dedupe between publishes
 
-Between publishes (after sleep, before next publish), re-fetch the destination
-profile and re-run destination-dedupe on the next candidate. If the candidate
-now appears (e.g. some other process posted it), record `pair.backfill.skipped_now_duplicate` and skip.
+Between publishes (after sleep, before next publish), re-read the global ledger,
+re-fetch the destination profile, and re-run global + destination dedupe on the
+next candidate. If the candidate now appears (e.g. another pair/process posted
+it), record `pair.backfill.skipped_now_duplicate`, append catch-up state when
+there is proof of the destination post, and skip.
 
 ## Step 8 — Final summary
 
@@ -264,6 +273,7 @@ one per successful publish (step 6), plus an optional final-summary ping.
 
 - `skills/repost-run/SKILL.md` — single-post version.
 - `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
+- `skills/repost-global-dedupe/SKILL.md` — global cross-pair content ledger.
 - `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).
 - `skills/repost-url-expand/SKILL.md` — URL expansion.
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
