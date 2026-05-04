@@ -39,14 +39,11 @@ stops.
   loaded with `launchctl load`. `StartInterval = everyHours * 3600` seconds.
 - Linux: a cron line in the user's crontab.
 
-The scheduler shells out to:
-
-```bash
-/usr/local/bin/claude --print --no-banner "/repost-run <pair-id>"
-```
-
-(Or the OpenClaw equivalent if Claude Code isn't installed.) The fresh
-subagent loads this plugin, runs the command, exits.
+The scheduler invokes the **same agent harness chosen for this workflow**. For
+OpenClaw, prefer OpenClaw's native cron/session scheduler. For Claude Code, use
+a Claude Code invocation only when the workflow is intentionally Claude Code-based
+or Ethan explicitly asks for it. The fresh agent loads this plugin, runs the
+command, exits.
 
 ## Uninstall
 

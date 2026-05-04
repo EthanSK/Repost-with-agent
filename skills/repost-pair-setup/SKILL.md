@@ -17,7 +17,7 @@ plugin:telegram:telegram).
 2. Ask for the destination platform + account.
 3. Ask for the run mode + safety mode.
 4. Write or update `~/.repost-with-agent/pairs.json`.
-5. Verify the user is logged into both platforms in the browser MCP profile.
+5. Verify the user is logged into both platforms in the current harness browser profile.
 6. Confirm success and explain next steps.
 
 ## State files
@@ -105,18 +105,19 @@ Field invariants:
 
 You CANNOT log in for the user. Before the first preview / publish, the user must
 have an existing logged-in session for both source and destination platforms in
-the browser MCP profile that you'll drive (chrome-devtools-mcp, OpenClaw's
-built-in browser, claude-in-chrome, etc.).
+the current harness browser profile that you'll drive (OpenClaw's built-in
+browser, `chrome-devtools-mcp` when the current harness is Claude Code, or another
+explicit browser adapter).
 
 Tell the user:
 
-> "Before I can run `/repost-run <pair-id>`, please open your browser via the
-> agent's browser MCP and confirm you're logged into both **<source>** and
+> "Before I can run `/repost-run <pair-id>`, please open the current agent's
+> browser profile and confirm you're logged into both **<source>** and
 > **<destination>**. I cannot log in for you. Once both sessions exist, I'll
 > reuse them on every run."
 
-You can verify by running a quick `chrome-devtools-mcp` `navigate_page` to the
-source profile URL and then `take_snapshot` — if you see logged-out indicators
+You can verify by navigating the current harness browser to the source profile
+URL and taking a snapshot — if you see logged-out indicators
 (login modal, "Sign in to continue" CTA, etc.), tell the user and stop.
 
 ## Telegram-confirm every successful publish — non-negotiable
@@ -146,7 +147,7 @@ After writing the pair, print a short summary to the user:
   Schedule:    <schedule.kind> · <schedule.expression or everyHours>
 
 Next steps:
-  1. Verify you're logged into both platforms in the browser MCP profile.
+  1. Verify you're logged into both platforms in the current harness browser profile.
   2. Run /repost-run <id> to do one preview + (if safety mode allows) one live publish.
   3. Run /repost-setup-cron <id> to install a launchd / cron entry that runs every <N> hours.
 ```

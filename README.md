@@ -1,10 +1,10 @@
 # Repost-with-agent (v4.3.0)
 
-A skill-only Claude Code / OpenClaw plugin that drives the running agent
+A skill-only agent/OpenClaw-compatible plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
 no Playwright.** The plugin ships zero code that does the work — it ships
 instructions (skills) and the agent's existing toolkit (Read, Edit, Write,
-Bash, browser MCP, plugin:telegram:telegram) does everything.
+Bash, the current harness's browser automation, plugin:telegram:telegram) does everything.
 
 Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
 operates on the user's transparent, logged-in sessions — no API keys, no
@@ -13,9 +13,9 @@ stealth, no CAPTCHA / 2FA bypass.
 ## TL;DR
 
 1. Clone this repo.
-2. `bash scripts/install.sh` — registers the plugin with Claude Code
-   (`~/.claude/settings.json`) and OpenClaw (`~/.openclaw/openclaw.json`).
-3. Restart Claude Code (or OpenClaw gateway).
+2. `bash scripts/install.sh` — registers the plugin with supported harnesses
+   (`~/.openclaw/openclaw.json`, and `~/.claude/settings.json` when installed).
+3. Restart whichever harness you intend to use.
 4. In a fresh session: `/pair create` to set up a source → destination pair.
 5. `/repost-run <pair-id>` to do a manual end-to-end repost.
 6. `/repost-setup-cron <pair-id>` to schedule recurring ticks (default every 5h).
@@ -75,12 +75,18 @@ duplicate.
 
 The agent in your harness session must have:
 
-- **Read, Edit, Write, Bash** — built-in for both Claude Code and OpenClaw.
-- **A browser MCP** — `chrome-devtools-mcp` (Claude Code), the OpenClaw
-  built-in browser tool, or `claude-in-chrome`. Used to navigate, scrape,
-  fill forms, click buttons.
+- **Read, Edit, Write, Bash** — built-in for supported agent harnesses.
+- **Native browser automation in the current harness** — for example OpenClaw's
+  built-in browser, `chrome-devtools-mcp` when the current harness is Claude
+  Code, or another explicit browser adapter. Used to navigate, scrape, fill
+  forms, click buttons.
 - **`plugin:telegram:telegram`** — the Telegram channel plugin. Used to send
   the mandatory publish-confirmation pings to Ethan.
+
+Do **not** hand a Repost-with-agent run to Claude Code merely because Claude
+Code is listed as a supported harness. The agent that receives the request owns
+the run and should use its own browser tools unless Ethan explicitly asks for a
+different harness.
 
 If any of those is missing in a session, the relevant skill will surface the
 missing dependency and stop. There's no fallback — the plugin trusts the
@@ -93,7 +99,7 @@ When you invoke `/repost-run linkedin-to-x`:
 1. Slash command resolves to `skills/repost-run/SKILL.md`.
 2. Agent reads the skill (Markdown).
 3. Agent reads `~/.repost-with-agent/pairs.json` to find the pair.
-4. Agent uses the browser MCP to navigate to the LinkedIn profile, scroll to
+4. Agent uses its current-harness browser automation to navigate to the LinkedIn profile, scroll to
    load recent posts, scrape text + URLs.
 5. Agent reads `~/.repost-with-agent/pairs/linkedin-to-x/posted.jsonl` to
    check local dedupe.

@@ -12,10 +12,10 @@ If you're upgrading an existing v3 install, this doc walks you through it.
    plugin with Claude Code (`~/.claude/settings.json`) and OpenClaw
    (`~/.openclaw/openclaw.json`), backs up both files, and migrates
    `~/.repost-with-agent/pairs.json` from `schemaVersion: 3` to `4`.
-2. Restart Claude Code (`/exit` and re-open) and OpenClaw (gateway bootout +
-   kickstart) to load the new plugin.
-3. Verify with `/pair list` (Claude Code) — should show your existing pairs
-   with the v4 schema.
+2. Restart whichever harness you intend to use (OpenClaw, Claude Code, etc.)
+   so it loads the new plugin.
+3. Verify with `/pair list` in that same harness — it should show your existing
+   pairs with the v4 schema.
 
 The v3 CLI binary is no longer needed. You can `npm uninstall -g
 repost-with-agent` if you had it globally installed; nothing in v4 depends on
@@ -143,10 +143,9 @@ the v3 install survive the migration unchanged.
 
 1. `cd` to your v4 clone.
 2. `bash scripts/install.sh`.
-3. Restart Claude Code (`/exit` and re-open) and OpenClaw (gateway bootout +
-   kickstart).
-4. In a fresh Claude Code session, run `/pair list`. Confirm your existing
-   pairs show up.
+3. Restart whichever harness you intend to use.
+4. In a fresh session of that same harness, run `/pair list`. Confirm your
+   existing pairs show up.
 5. Run `/pair show linkedin-to-x` (or whichever pair). Confirm the schema is
    v4.
 6. Run `/repost-run <pair-id>` to do a manual tick. Confirm a Telegram
@@ -164,7 +163,7 @@ If v4 doesn't work for you and you need to roll back to v3:
    v3 clone.
 4. Manually restore `~/.repost-with-agent/pairs.json` from
    `~/.repost-with-agent/pairs.json.v3.bak`.
-5. Restart Claude Code.
+5. Restart the harness that will run Repost-with-agent.
 
 But honestly: try v4 first. The rewrite was driven by Ethan's explicit voice
 direction (6024 + 6026) — if it doesn't work, the right move is to fix v4,

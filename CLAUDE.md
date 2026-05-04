@@ -41,8 +41,10 @@ Defense in depth — the rule is restated in:
 Your session must have:
 
 - **Read, Edit, Write, Bash** — built-in.
-- **A browser MCP** — `chrome-devtools-mcp` (Claude Code), OpenClaw's built-in
-  browser tool, or `claude-in-chrome`.
+- **Native browser automation in the current harness** — `chrome-devtools-mcp`
+  when this is truly a Claude Code run, OpenClaw's built-in browser when this
+  is an OpenClaw run, or another explicit browser adapter. Do not route an
+  OpenClaw-owned Repost-with-agent run through Claude Code unless Ethan asks.
 - **`plugin:telegram:telegram`** — for the publish-confirmation pings.
 
 If any is missing, the relevant skill surfaces the missing dependency and
@@ -133,14 +135,12 @@ when on the fence, skip.
 ## Cron / launchd context
 
 The scheduler entry installed by `skills/repost-listen-for-future-setup/SKILL.md`
-shells out to:
-
-```bash
-/usr/local/bin/claude --print --no-banner "/repost-run <pair-id>"
-```
-
-This launches a fresh, ephemeral Claude Code session, which loads this plugin,
-runs the slash command (which loads `skills/repost-run/SKILL.md`), then exits.
+should invoke the same harness the user chose for the workflow. If the current
+harness is OpenClaw, use OpenClaw scheduling/session tools; do not route the
+run through Claude Code. A Claude Code invocation is appropriate only when the
+current workflow is intentionally Claude Code-based. The fresh scheduled agent
+loads this plugin, runs the slash command (which loads `skills/repost-run/SKILL.md`),
+then exits.
 There is no daemon, no long-running process, no shared state in memory between
 ticks.
 

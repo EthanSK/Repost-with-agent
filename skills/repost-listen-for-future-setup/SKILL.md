@@ -1,6 +1,6 @@
 ---
 name: repost-listen-for-future-setup
-description: Install a launchd plist (macOS) or cron entry (Linux) that periodically launches a fresh Claude Code or OpenClaw subagent to run /repost-run on enabled listen-for-future pairs. Use when the user asks to "schedule <pair>", "set up the cron for <pair>", "make <pair> tail new posts automatically", or invokes /repost-setup-cron.
+description: Install a scheduler entry that periodically launches a fresh current-harness agent/subagent to run /repost-run on enabled listen-for-future pairs. Use when the user asks to "schedule <pair>", "set up the cron for <pair>", "make <pair> tail new posts automatically", or invokes /repost-setup-cron.
 when_to_trigger: User wants to wire up automatic, scheduled, recurring repost ticks for a listen-for-future pair.
 ---
 
@@ -11,8 +11,10 @@ a regular interval to run `/repost-run` against every enabled `listen-for-future
 pair.
 
 The scheduler is OS-native (launchd on macOS, cron on Linux). The launched
-process is a one-shot Claude Code or OpenClaw invocation that loads the
-plugin, runs the command, exits.
+process is a one-shot invocation of the same harness chosen for this workflow.
+OpenClaw workflows should use OpenClaw scheduling/session tools; Claude Code is
+only appropriate when the current workflow is intentionally Claude Code-based or
+Ethan explicitly asks for it.
 
 ## Required state
 
@@ -34,23 +36,13 @@ hammering every 5 minutes burns API quota / risks rate-limits without payoff.
 
 ## macOS — launchd
 
-1. Determine which agent harness to use:
-   - If `command -v claude` succeeds (Claude Code CLI installed) → use Claude Code.
-   - Else if `command -v openclaw` succeeds → use OpenClaw.
-   - Else stop and tell the user to install one.
+1. Determine which agent harness to use from the current context. Do **not**
+   prefer Claude Code merely because `claude` is installed. If the user is in
+   OpenClaw, use OpenClaw's scheduler/session tooling. If the user is in Claude
+   Code, use Claude Code. If Ethan names a harness explicitly, follow that.
 
-2. Choose the invocation pattern. For Claude Code:
-
-   ```bash
-   /usr/local/bin/claude --print --no-banner "/repost-run-all"
-   ```
-
-   For OpenClaw (consult its CLI flags; OpenClaw spawns a fresh ephemeral agent
-   per invocation by default):
-
-   ```bash
-   /usr/local/bin/openclaw run "/repost-run-all"
-   ```
+2. Choose and verify the current-harness invocation before writing any scheduler
+   file. If you cannot verify the invocation, stop and ask rather than guessing.
 
 3. Write a plist to `~/Library/LaunchAgents/com.ethansk.repost-with-agent.<pair-id>.plist`:
 
@@ -65,7 +57,7 @@ hammering every 5 minutes burns API quota / risks rate-limits without payoff.
      <array>
        <string>/bin/bash</string>
        <string>-lc</string>
-       <string>/usr/local/bin/claude --print --no-banner "/repost-run <pair-id>" >> $HOME/.repost-with-agent/pairs/<pair-id>/logs/cron.log 2>&1</string>
+       <string><verified-current-harness-command> "/repost-run <pair-id>" >> $HOME/.repost-with-agent/pairs/<pair-id>/logs/cron.log 2>&1</string>
      </array>
      <key>StartInterval</key>
      <integer><everyHours * 3600></integer>
@@ -96,7 +88,7 @@ hammering every 5 minutes burns API quota / risks rate-limits without payoff.
 2. Append a line (don't duplicate if already present — grep first):
 
    ```
-   0 */<everyHours> * * * /usr/local/bin/claude --print --no-banner "/repost-run <pair-id>" >> $HOME/.repost-with-agent/pairs/<pair-id>/logs/cron.log 2>&1
+   0 */<everyHours> * * * <verified-current-harness-command> "/repost-run <pair-id>" >> $HOME/.repost-with-agent/pairs/<pair-id>/logs/cron.log 2>&1
    ```
 
 3. Install the new crontab: `crontab /tmp/crontab.new`.
@@ -147,8 +139,8 @@ the per-publish ping.
 
 ## Cron-spawned subagents read + write learnings.md
 
-Every cron / launchd tick spawns a fresh, ephemeral Claude Code or OpenClaw
-subagent that loads this plugin and runs `/repost-run <pair-id>`. That
+Every cron / launchd tick spawns a fresh, ephemeral current-harness agent that
+loads this plugin and runs `/repost-run <pair-id>`. That
 subagent ALSO follows the learnings-file lifecycle:
 
 - **Step 1.5 of `repost-run`**: the subagent reads

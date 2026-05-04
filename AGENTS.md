@@ -30,12 +30,15 @@ URL templates and DOM selectors at runtime via `docs/destinations/<platform>.md`
 Your session must have:
 
 - **Read, Edit, Write, Bash** — built-in.
-- **A browser MCP** — `chrome-devtools-mcp` (Claude Code), OpenClaw's built-in
-  browser tool, or `claude-in-chrome`.
+- **Native browser automation in the current harness** — for example OpenClaw's
+  built-in browser, `chrome-devtools-mcp` when the current harness is Claude
+  Code, or another explicit browser adapter.
 - **`plugin:telegram:telegram`** — for the publish-confirmation pings.
 
 If any is missing, the relevant skill surfaces the missing dependency and
-stops. There's no fallback.
+stops. There's no fallback. Do **not** hand a Repost-with-agent run to Claude
+Code merely because Claude Code is listed as a supported harness; the current
+agent owns the run unless Ethan explicitly asks for a different harness.
 
 ## State files
 

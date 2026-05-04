@@ -3,9 +3,11 @@
 ## TL;DR
 
 Repost-with-agent v4 is a **skill-only plugin**. It ships zero code that does
-the work. The running AI agent (Claude Code with `chrome-devtools-mcp`,
-OpenClaw with its built-in browser tool, etc.) does everything using its
-existing toolkit — Read, Edit, Write, Bash, browser MCP, plugin:telegram:telegram.
+the work. The running AI agent does everything using its current-harness
+toolkit — Read, Edit, Write, Bash, browser automation, plugin:telegram:telegram.
+OpenClaw runs should use OpenClaw's browser; Claude Code runs should use
+Claude Code's browser MCP. Do not hand off to Claude Code just because it is
+listed as one supported harness.
 
 The plugin contains:
 
@@ -105,16 +107,13 @@ what to do; the agent does it.
 ## How cron / launchd works
 
 The cron / launchd entry doesn't run any of this plugin's code — there's no
-plugin code to run. Instead, it shells out to:
+plugin code to run. Instead, it invokes the **same harness chosen for the workflow**. OpenClaw
+workflows should use OpenClaw scheduling/session tools; Claude Code invocations
+are appropriate only for intentional Claude Code workflows. The fresh scheduled
+agent:
 
-```bash
-/usr/local/bin/claude --print --no-banner "/repost-run <pair-id>"
-```
-
-This launches a **fresh, ephemeral** Claude Code (or OpenClaw) session, which:
-
-1. Loads the plugin (since the plugin is registered in `~/.claude/settings.json`
-   / `~/.openclaw/openclaw.json`).
+1. Loads the plugin (from that harness's plugin registration, such as
+   `~/.openclaw/openclaw.json` or `~/.claude/settings.json`).
 2. Resolves the slash command → loads the skill.
 3. Runs the skill end-to-end.
 4. Exits when the skill is done.

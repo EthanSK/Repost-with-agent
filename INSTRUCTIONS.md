@@ -9,8 +9,9 @@ before you touch state, run a publish, or hand off to a scheduled tick.
 Repost-with-agent v4 is **instructions + JSON state**, with no posting
 framework on disk. There is no CLI, no MCP server, no platform SDK. **You**
 (the running agent) do all the work using your native toolkit: Read, Edit,
-Write, Bash, your browser MCP (chrome-devtools-mcp / OpenClaw built-in /
-claude-in-chrome), and `plugin:telegram:telegram`. The skills under
+Write, Bash, your current harness's browser automation (OpenClaw built-in
+browser, `chrome-devtools-mcp` when the current harness is Claude Code, or
+another explicit browser adapter), and `plugin:telegram:telegram`. The skills under
 `skills/<name>/SKILL.md` are step-by-step procedures you execute directly. The
 slash commands under `commands/*.md` are thin wrappers that load the matching
 skill.
@@ -82,9 +83,10 @@ the full lifecycle + good/bad-entry guidance.
    (for example `lnkd.in` → the underlying article/video), but do **not** append
    the source platform permalink to the public destination draft. Keep source
    canonical URLs in `posted.jsonl`, audit, and Telegram confirmation only.
-9. **Use the browser MCP, not Playwright.** The plugin has zero Playwright /
-   API-SDK dependencies. The browser MCP your harness provides is the only
-   browser path.
+9. **Use the current harness browser, not Playwright or another agent by default.**
+   The plugin has zero Playwright / API-SDK dependencies. The browser automation
+   your current harness provides is the only browser path unless Ethan explicitly
+   asks for a different harness.
 
 ## Failure categories
 
@@ -112,11 +114,11 @@ See `docs/state-files.md` for the full table. Key events:
 
 ## Cross-machine context
 
-If you're a Claude Code session running on Ethan's MacBook Pro, and Ethan
-asks you to mirror state with the Mac Mini's session, use `bridge_send_message`
-to delegate (the Mac Mini's session has GUI keychain access and HTTPS git
-auth that you don't have over SSH). Don't use `agent-bridge run` — it's a
-plain shell utility, not an agent invocation.
+If you're a remote session and Ethan asks you to mirror state with the Mac
+Mini's session, use `bridge_send_message` to coordinate. Do not delegate a
+Repost-with-agent run to Claude Code just because Claude Code is available; use
+the current harness unless Ethan explicitly requests another one. Don't use
+`agent-bridge run` — it's a plain shell utility, not an agent invocation.
 
 ## Where to start
 

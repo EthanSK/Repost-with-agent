@@ -18,9 +18,12 @@ For multi-post historical walks, see `skills/repost-backfill/SKILL.md` instead.
 You MUST have these available in the current session:
 
 - **Read, Edit, Write, Bash** — built-in.
-- **Browser MCP** — one of `chrome-devtools-mcp` (Claude Code), the OpenClaw
-  built-in browser tool, or `claude-in-chrome`. Used to navigate, scrape, and
-  click.
+- **Native browser automation in the current harness** — for example OpenClaw's
+  built-in browser, `chrome-devtools-mcp` when the current harness is Claude
+  Code, or another explicit browser adapter. Used to navigate, scrape, and
+  click. Do not hand the run to Claude Code merely because Claude Code is one
+  supported harness; the current agent owns the run unless Ethan explicitly
+  asks for a different harness.
 - **`plugin:telegram:telegram`** — to send the success confirmation. If the
   Telegram plugin is not loaded in this session, surface the error and stop —
   do not silently skip the confirmation.
@@ -100,7 +103,7 @@ crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 
 ## Step 3 — Scrape the source
 
-Use your browser MCP. Per-platform DOM hints live in
+Use your current-harness browser automation. Per-platform DOM hints live in
 `docs/destinations/<platform>.md` — read the matching one before you start.
 
 For platform `linkedin`:
@@ -129,7 +132,7 @@ ops that catch verbatim and near-verbatim re-posts.
 1. **Local dedupe.** Read `~/.repost-with-agent/pairs/<id>/posted.jsonl`
    (line-delimited JSON, may be empty). For each candidate from step 3, drop it
    if its `sourceItemId` already appears in any line.
-2. **Destination dedupe.** Use the browser MCP to navigate to
+2. **Destination dedupe.** Use your current-harness browser automation to navigate to
    `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. **Keep
    this scrape in your reasoning** — Layer 2 (step 4.5) reuses it. For each
    *remaining* candidate, fuzzy-match the candidate text against the scraped
