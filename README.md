@@ -5,7 +5,7 @@ through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
 no Playwright.** The plugin ships zero code that does the work — it ships
 instructions (skills) and the agent's existing toolkit (Read, Edit, Write,
 Bash, the current harness's browser automation, and the current harness's
-Telegram/message delivery tool) does everything.
+primary message delivery tool) does everything.
 
 Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
 operates on transparent, logged-in sessions — no API keys, no stealth, no
@@ -107,7 +107,7 @@ The agent in your harness session must have:
   built-in browser, `chrome-devtools-mcp` when the current harness is Claude
   Code, or another explicit browser adapter. Used to navigate, scrape, fill
   forms, click buttons.
-- **Telegram/message delivery in the current harness** — OpenClaw should use
+- **primary message delivery in the current harness** — OpenClaw should use
   its first-class `message` tool / Telegram channel; Claude Code should use
   `plugin:telegram:telegram`; other harnesses should use their equivalent
   configured Telegram delivery path. Used to send the mandatory
@@ -143,7 +143,7 @@ When you invoke `/repost-run linkedin-to-x`:
 9. Agent navigates to `x.com/compose/post`, fills the textarea, clicks Post.
 10. Agent reads the resulting URL from the page.
 11. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`.
-12. Agent uses the current harness's Telegram/message delivery tool to send the publish-confirmation:
+12. Agent uses the current harness's primary message delivery tool to send the publish-confirmation:
 
     ```
     [Repost-with-agent] ✅ Posted: linkedin-to-x
@@ -153,10 +153,10 @@ When you invoke `/repost-run linkedin-to-x`:
 
 That's the full v4 flow. No code on disk did any of it.
 
-## Telegram-confirm every successful publish — non-negotiable
+## Confirm every successful publish — non-negotiable
 
 > Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
+> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
 This rule is enforced in `skills/repost-notify/SKILL.md` and replayed in
@@ -164,7 +164,7 @@ This rule is enforced in `skills/repost-notify/SKILL.md` and replayed in
 step 6, plus every slash command body. Defense in depth.
 
 If you (the running agent) trigger a publish through any non-skill path, you
-MUST also fire a Telegram confirmation.
+MUST also fire a publish confirmation.
 
 ## Slash commands
 

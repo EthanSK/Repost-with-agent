@@ -34,13 +34,13 @@ the full lifecycle + good/bad-entry guidance.
 
 ## The non-negotiable rule
 
-> **Telegram-confirm every successful publish — non-negotiable.** Every
+> **Confirm every successful publish — non-negotiable.** Every
 > successful post from this plugin MUST trigger a Telegram message to Ethan
-> confirming the source and destination URL. The plugin enforces this in the
+> confirming the source URL and destination post URL. The plugin enforces this in the
 > `repost-notify` skill (and in the publish flow steps of `repost-run` and
 > `repost-backfill`). If you trigger a publish through any non-skill path
 > (manual one-off via current-harness browser automation outside the skill flow, etc.), you MUST
-> also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice
+> also fire a publish confirmation. Silent publishes are a bug. (Ethan voice
 > 5977 + 5978, 2026-05-01.)
 
 ## Where things live
@@ -58,7 +58,7 @@ the full lifecycle + good/bad-entry guidance.
 
 ## Project rules
 
-1. **Telegram-confirm every successful publish.** Non-negotiable. See above.
+1. **Confirm every successful publish.** Non-negotiable. See above.
 2. **New pairs default to `mode: "preview-only"` and `enabled: false`.** Don't
    flip without explicit, current-conversation user authorization.
 3. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
@@ -91,7 +91,7 @@ the full lifecycle + good/bad-entry guidance.
    in the source body to their final non-source-platform URL where possible
    (for example `lnkd.in` → the underlying article/video), but do **not** append
    the source platform permalink to the public destination draft. Keep source
-   canonical URLs in `posted.jsonl`, audit, and Telegram confirmation only.
+   canonical URLs in `posted.jsonl`, audit, and publish confirmation only.
 9. **Use the current harness browser, not Playwright or another agent by default.**
    The plugin has zero Playwright / API-SDK dependencies. The browser automation
    your current harness provides is the only browser path unless Ethan explicitly

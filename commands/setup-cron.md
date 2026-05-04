@@ -14,7 +14,7 @@ interval to run `/repost-run` against every enabled `live-approved`
 /repost-setup-cron <pair-id>
 ```
 
-Default cadence: every 5 hours. Configurable via the pair's
+Default cadence: once per day. Configurable via the pair's
 `schedule.everyHours` field; edit the pair first with `/pair edit <id>` if you
 want a different cadence.
 
@@ -36,7 +36,9 @@ stops.
 ## What gets installed
 
 - **OpenClaw workflows (preferred):** an `openclaw cron` job that starts a
-  fresh isolated agent turn with `--message "/repost-run <pair-id>"`.
+  fresh isolated agent turn with `--message "/repost-run <pair-id>"` and
+  `thinking=medium` by default. Escalate only when the user or pair explicitly
+  needs heavier reasoning.
 - **Claude Code / other explicitly chosen harnesses:** an equivalent scheduler
   for that harness. On macOS this can be a launchd plist; on Linux this can be
   a crontab line. Use this fallback only when the workflow is intentionally not

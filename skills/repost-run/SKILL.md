@@ -305,13 +305,16 @@ echo '<json-line>' >> ~/.repost-with-agent/pairs/<id>/posted.jsonl
 
 Append `pair.publish.success` to `audit.jsonl` with the `posted_url`.
 
-## Step 10 — Telegram-confirm Ethan (non-negotiable)
+## Step 10 — Confirm to the user with post links (non-negotiable)
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful post from this plugin MUST trigger a message to the user on
+> the primary current-harness communication channel, confirming the source URL
+> and every destination post URL created. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04.)
 
-Use the current harness's Telegram/message delivery tool (OpenClaw `message`, Claude Code `plugin:telegram:telegram` reply, or equivalent). Message format:
+Use the current harness's primary user communication channel / message delivery
+tool (OpenClaw `message` / Telegram in Ethan's setup, Claude Code
+`plugin:telegram:telegram` reply, or equivalent). Message format:
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>
@@ -340,7 +343,7 @@ Print to the user (in the agent transcript, NOT Telegram):
   Source:      <canonical source URL>
   Destination: <destination URL>
   Posted at:   <ts>
-  Telegram:    delivered
+  Notify:      delivered
 ```
 
 ## Final step — Append discovered quirks to learnings.md
@@ -389,7 +392,7 @@ When invoked from a fresh agent/subagent spawned by the scheduler:
 
 - The subagent has no chat user. All interactive prompts above are skipped — it
   just runs the pair end-to-end if `mode === "live-approved"`.
-- It must still Telegram-confirm Ethan via the current harness's Telegram/message delivery tool.
+- It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool, including the source URL and destination URL.
 - It must still append to `posted.jsonl` and `audit.jsonl`.
 - After running, the agent exits. The next scheduled tick spawns a fresh agent/subagent.
 

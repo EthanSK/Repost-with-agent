@@ -34,11 +34,11 @@ harness or Ethan explicitly asks for them.
 
 ## Cadence
 
-Default: every 5 hours. Configurable via the pair's `schedule.everyHours` field
+Default: once per day. Configurable via the pair's `schedule.everyHours` field
 (positive integer) or `schedule.expression` if the user wants a full cron spec.
 
 Conservative defaults; LinkedIn / X / Bluesky etc. don't post that often, so
-hammering every 5 minutes burns quota / risks rate-limits without payoff.
+hammering every few minutes burns quota / risks rate-limits without payoff.
 
 ## OpenClaw scheduler — preferred for OpenClaw workflows
 
@@ -56,7 +56,7 @@ hammering every 5 minutes burns quota / risks rate-limits without payoff.
      --agent main \
      --session isolated \
      --message "/repost-run <pair-id>" \
-     --thinking xhigh \
+     --thinking medium \
      --timeout-seconds 10800 \
      --every "<everyHours>h"
    ```
@@ -71,8 +71,11 @@ hammering every 5 minutes burns quota / risks rate-limits without payoff.
    browser automation, file tools, Bash, and Telegram/message delivery.
 
 3. Delivery notes:
-   - `/repost-run` itself MUST Telegram-confirm every successful publish via
-     `repost-notify`; that is the important user-facing ping.
+   - `/repost-run` itself MUST confirm every successful publish via
+     `repost-notify`; that is the important user-facing ping. The confirmation
+     goes through the primary current-harness communication channel with the
+     user (Telegram in Ethan's OpenClaw setup, or the harness equivalent
+     elsewhere) and includes every destination post link created in the run.
    - Add `--announce --channel telegram --account <account> --to <chat-id>` only
      if Ethan explicitly wants every scheduled tick's final transcript delivered
      too. Otherwise it is usually noise.

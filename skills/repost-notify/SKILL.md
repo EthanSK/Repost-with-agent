@@ -6,27 +6,29 @@ when_to_trigger: Immediately after every successful publish from the plugin (man
 
 # Repost Notify
 
-Send the Telegram confirmation that fires immediately after every successful
-repost publish.
+Send the primary-channel confirmation that fires immediately after every
+successful repost publish. In Ethan's OpenClaw setup this is Telegram; in other
+harnesses use the equivalent primary user-facing communication channel.
 
 ## The non-negotiable rule
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source URL and the destination URL. Silent publishes
-> are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful post from this plugin MUST trigger a message to the user on
+> the primary current-harness communication channel, confirming the source URL
+> and every destination post URL created. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04.)
 
 This is enforced by EVERY publish path in the plugin (`repost-run`,
 `repost-backfill`, any future bespoke flow). No exceptions.
 
 ## Required tool
 
-Use Telegram/message delivery in the current harness:
+Use the primary user-facing message delivery path in the current harness:
 
-- **OpenClaw:** use the first-class `message` tool / configured Telegram channel.
-- **Claude Code:** use `plugin:telegram:telegram`'s `reply` tool.
-- **Other harnesses:** use the equivalent configured Telegram delivery tool.
+- **OpenClaw:** use the first-class `message` tool / configured Telegram channel for Ethan.
+- **Claude Code:** use `plugin:telegram:telegram`'s `reply` tool when that is the configured user channel.
+- **Other harnesses:** use the equivalent configured primary communication channel.
 
-If no Telegram/message delivery path is loaded in the current session, surface
+If no primary message delivery path is loaded in the current session, surface
 the error and stop the publish flow. Do not silently skip.
 
 ## Payload
@@ -46,7 +48,7 @@ Project-tag / prefix rules from the current harness's user instructions still ap
 1. After the publish step in `repost-run` / `repost-backfill` returns success
    AND `posted.jsonl` has been appended:
 2. Build the message payload above.
-3. Call the current harness's Telegram/message delivery tool with the appropriate
+3. Call the current harness's primary message delivery tool with the appropriate
    recipient:
    - OpenClaw: use the `message` tool / Telegram channel/account/target from
      the current session or repost-notification config.
@@ -57,7 +59,7 @@ Project-tag / prefix rules from the current harness's user instructions still ap
 
 ## Failure path
 
-If the Telegram/message delivery call returns an error:
+If the primary message delivery call returns an error:
 
 1. Append `pair.publish.notify.failure` to `audit.jsonl` with the error text.
 2. DO NOT roll back the publish. The post is already up — rollback would
@@ -67,7 +69,7 @@ If the Telegram/message delivery call returns an error:
 
 ## Unconfigured path
 
-If no Telegram/message delivery tool is loaded or configured in the current harness:
+If no primary message delivery tool is loaded or configured in the current harness:
 
 1. Append `pair.publish.notify_skipped_unconfigured` to `audit.jsonl`.
 2. Tell the user IMMEDIATELY in chat: this is a silent publish, which is a
@@ -82,11 +84,11 @@ a pair to live:
 1. Send a hardcoded test message:
 
    ```
-   [Repost-with-agent] 🧪 Telegram test
-   This is a test ping confirming the plugin can deliver publish confirmations to you.
+   [Repost-with-agent] 🧪 Notify test
+   This is a test ping confirming the plugin can deliver publish confirmations to you on the primary channel.
    ```
 
-2. Tell the user in chat: "If you see the test ping land in Telegram, the
+2. Tell the user in chat: "If you see the test ping land in the primary channel, the
    plugin is wired up correctly."
 
 3. Don't append audit events for tests.
@@ -116,7 +118,7 @@ Stay short:
 - TWO URLs: source canonical, destination final.
 - Optional: pair id, item index for backfills (`3/10`).
 
-DO NOT include the full draft text in the Telegram. The destination URL is
+DO NOT include the full draft text in the confirmation. The destination URL is
 enough; the user clicks through to see the actual post.
 
 ## See also

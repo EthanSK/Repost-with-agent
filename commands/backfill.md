@@ -37,10 +37,10 @@ history rather than a gap-bounded historical block. (Ethan voice 6021.)
 - Backfill respects `policy.minDelayBetweenPostsMinutes` as a floor on
   `--interval`.
 
-## Telegram-confirm every successful publish — non-negotiable
+## Confirm every successful publish — non-negotiable
 
 > Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
+> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
 Each successful publish in the backfill loop fires its own ping. After a long

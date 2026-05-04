@@ -24,16 +24,16 @@ This plugin ships **no code that does the work**. The slash command above is a
 thin wrapper that loads the matching skill — the running agent (OpenClaw,
 Claude Code, or another supported harness) does all the heavy lifting using its
 native tools: Read, Edit, Write, Bash, current-harness browser automation, and
-current-harness Telegram/message delivery.
+current-harness primary message delivery.
 
 JSON state lives at `~/.repost-with-agent/pairs.json` and per-pair files under
 `~/.repost-with-agent/pairs/<id>/`. The agent reads/writes them via the native
 Read/Edit/Write tools.
 
-## Telegram-confirm every successful publish — non-negotiable
+## Confirm every successful publish — non-negotiable
 
 > Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
+> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
 The `repost-pair-setup` skill checks Telegram is wired up before flipping a
