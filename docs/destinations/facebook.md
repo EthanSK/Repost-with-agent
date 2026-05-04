@@ -22,7 +22,7 @@ Per-platform DOM hints for the running agent. Read this BEFORE you start a
 
 ## Auth
 
-- Login: the browser MCP profile must have a logged-in `facebook.com` session.
+- Login: the current harness browser profile must have a logged-in `facebook.com` session.
 - Facebook will sometimes prompt for 2FA / device-confirmation challenges.
   The agent CANNOT solve these — append `pair.publish.failed` audit with
   `category: "needs-login"` if a challenge appears.
@@ -36,9 +36,15 @@ Facebook supports posting to:
 - **Group** you're a member of.
 
 In v4, the `destination.accountHint` field is the target's identifier — for a
-page, the page handle; for a personal timeline, the user's handle. Switch into
-the right "audience" before posting (Facebook's composer has an audience
-picker).
+page, the page handle; for a personal timeline, the user's handle.
+`destination.accountDisplayName` is the visible name the UI should show, and
+`destination.targetType` should be `profile`, `page`, or `group`.
+
+Facebook often logs the browser into a master personal account first, then lets
+that account post as a Page. The running agent MUST switch to, or verify it is
+already using, the configured page/profile/group before typing any draft. If the
+composer appears to be posting as the wrong identity, stop with
+`category: "needs-account-switch"` rather than publishing from the wrong account.
 
 ## URLs
 
@@ -49,11 +55,19 @@ picker).
 ## Posting flow
 
 1. Navigate to the appropriate compose URL based on the target type.
+   - For `targetType: "page"`, navigate to `https://www.facebook.com/<page-handle>`
+     and use the page's own "Create post" affordance.
+   - Reuse an existing Facebook tab when one is already open; do not create
+     duplicate Facebook tabs on every scheduled run.
 2. Click into the "What's on your mind?" / "Write a post..." textbox.
-3. Type / paste `draft_text` exactly.
-4. (Optional) verify the audience picker is set correctly (Public / Friends / Page name) — for a page or group, the audience should already be the right scope.
-5. Click "Post".
-6. Wait for the modal to close. Capture `posted_url` by finding the new post on the feed and clicking through to its permalink, OR by reading the post's permalink from the timestamp `<a>`.
+3. Verify the composer identity / audience matches `destination.accountHint`
+   and `destination.accountDisplayName` (for example a Page name such as
+   `Reetham`). Use the profile/page switcher if needed.
+4. Type / paste `draft_text` exactly.
+5. Verify the audience picker is set correctly (Public / Friends / Page name) —
+   for a page or group, the audience should already be the right scope.
+6. Click "Post".
+7. Wait for the modal to close. Capture `posted_url` by finding the new post on the feed and clicking through to its permalink, OR by reading the post's permalink from the timestamp `<a>`.
 
 ## Char cap
 
@@ -91,6 +105,10 @@ publishing, 30 is generous.
 - **Page vs profile vs group composer DOM** — the three look similar but use
   slightly different selectors. Use accessibility-role queries to find the
   textbox/button, not CSS selectors.
+- **Wrong identity risk** — if Facebook opens the composer as Ethan's personal
+  profile when the pair says `targetType: "page"`, switch to the configured
+  page first. If the switcher is hidden behind a Meta account/page menu and you
+  cannot confirm it, stop and ask Ethan to select the page manually.
 - **2FA / login challenge** is the most common failure. If the user is
   prompted to confirm a new device, surface it and let the user complete it
   manually.

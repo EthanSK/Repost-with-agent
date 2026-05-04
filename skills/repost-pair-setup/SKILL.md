@@ -9,7 +9,7 @@ when_to_trigger: User asks to set up, create, configure, or save a new repost pa
 You are the running agent. Repost-with-agent v4 ships ZERO code that does the
 work — this skill is the instructions for you to set up a new source →
 destination pair using your own native tools (Read, Edit, Write, Bash,
-plugin:telegram:telegram).
+current-harness Telegram/message delivery).
 
 ## Goals
 
@@ -51,6 +51,8 @@ The directories are created lazily on first run for a pair.
       "destination": {
         "platform": "linkedin | x | bluesky | threads | facebook",
         "accountHint": "@<handle>",
+        "accountDisplayName": "<visible account/page name>",
+        "targetType": "profile | page | group",
         "profileUrl": "https://x.com/<handle>"
       },
       "schedule": {
@@ -63,7 +65,9 @@ The directories are created lazily on first run for a pair.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | truncate"
+        "overlengthStrategy": "skip | truncate",
+        "semanticDedupeEnabled": true,
+        "semanticDedupeWindowSize": 30
       },
       "createdAt": "<ISO-8601>",
       "updatedAt": "<ISO-8601>"
@@ -78,19 +82,47 @@ Field invariants:
 - New pairs default to `mode: "preview-only"` and `enabled: false`. **Never flip to live without explicit user authorization in the current conversation.**
 - `runMode: "listen-for-future"` is the default — tail new posts on a schedule.
 - `runMode: "backfill"` is for one-shot historical walks (newest-first).
-- `mode: "live-approved"` is the only mode that allows scheduled / cron-driven publishes.
+- `mode: "live-approved"` is the only mode that allows scheduled live publishes.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
 - `policy.overlengthStrategy: "skip"` is the safe default. Only set to `"truncate"` if the user explicitly asks for it.
+- `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
+- `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.
 - `schedule.everyHours` defaults to 5 when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill).
 
 ## Conversation flow
 
 1. **Source.** "What's the source platform and the profile URL? (linkedin / x / bluesky / threads / facebook)"
 2. **Destination.** "What's the destination platform and the account handle? (one of the same five)"
+   - If the destination platform can contain multiple posting identities inside
+     one login (Facebook profile/page/group, Meta/Threads account switchers,
+     Bluesky multi-account sessions), also capture:
+     - `destination.targetType` — `profile`, `page`, or `group`.
+     - `destination.accountDisplayName` — the visible name to confirm in the UI
+       before composing (for example `Reetham`).
+   - If Ethan only gives a brand/account name, preserve it literally and infer
+     the likely handle conservatively (`Reetham` → `@reetham` or
+     `reetham.bsky.social`) until the logged-in browser confirms the exact
+     platform handle.
 3. **Pair name + id.** Suggest `<source>-to-<destination>` as the id; let the user override the human-readable name.
 4. **Run mode.** "`listen-for-future` (tail new posts on a schedule) or `backfill` (one-shot walk back through history)?" Default to `listen-for-future` if unsure.
 5. **Safety mode.** Default to `preview-only`. Only set `approval-required` or `live-approved` if the user explicitly asks for live posting now.
 6. **Schedule (if listen-for-future).** Ask for cadence in hours. Default 5.
+
+## Destination account / page switching
+
+Some sites authenticate through a parent account and then require selecting the
+actual posting identity. Save the intended identity in the pair config and make
+the run skill verify it before typing any draft.
+
+- `destination.accountHint` is the machine-useful handle / vanity path.
+- `destination.accountDisplayName` is the human-visible account or page name.
+- `destination.targetType` tells the agent whether to expect a `profile`,
+  `page`, or `group` composer.
+
+When configuring Facebook pages, prefer `targetType: "page"` and navigate to the
+page URL (`https://www.facebook.com/<page-handle>`) before composing. If the UI
+shows a profile/page switcher, the running agent must switch to, or verify it is
+already using, `accountDisplayName` before posting.
 
 ## Writing the pair
 
@@ -127,8 +159,9 @@ URL and taking a snapshot — if you see logged-out indicators
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
 The agent (you) is responsible for sending this Telegram via
-`plugin:telegram:telegram` immediately after appending to `posted.jsonl`. This
-behavior is enforced by the `repost-notify` and `repost-run` skills.
+the current harness's Telegram/message delivery tool immediately after
+appending to `posted.jsonl`. This behavior is enforced by the `repost-notify`
+and `repost-run` skills.
 
 If you've never sent a Telegram from this plugin on this machine, tell the user
 to test once with the `repost-notify` skill before flipping any pair to a
@@ -149,7 +182,7 @@ After writing the pair, print a short summary to the user:
 Next steps:
   1. Verify you're logged into both platforms in the current harness browser profile.
   2. Run /repost-run <id> to do one preview + (if safety mode allows) one live publish.
-  3. Run /repost-setup-cron <id> to install a launchd / cron entry that runs every <N> hours.
+  3. Run /repost-setup-cron <id> to install a current-harness scheduler entry that runs every <N> hours.
 ```
 
 ## Safety
@@ -159,14 +192,14 @@ Next steps:
 - No stealth, CAPTCHA bypass, 2FA bypass, or anti-detection guidance. Browser
   automation only operates on user-controlled, transparent login sessions.
 - Refuse to scrape or post on behalf of an account the user is not the operator
-  of (e.g. don't reposting from someone else's profile to their account
-  without explicit written authorization).
+  of (e.g. don't repost from someone else's profile to another account without
+  explicit written authorization).
 
 ## See also
 
 - `skills/repost-pair-list/SKILL.md` — list pairs.
 - `skills/repost-pair-show/SKILL.md` — inspect one pair.
 - `skills/repost-run/SKILL.md` — run a pair (single-post).
-- `skills/repost-listen-for-future-setup/SKILL.md` — install the cron / launchd trigger.
+- `skills/repost-listen-for-future-setup/SKILL.md` — install the current-harness scheduler trigger.
 - `docs/state-files.md` — formal state-file schemas.
 - `docs/destinations/<platform>.md` — per-platform DOM hints.

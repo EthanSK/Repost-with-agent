@@ -1,6 +1,6 @@
 ---
 name: repost-run
-description: Run a single Repost-with-agent pair end-to-end — scrape source, dedupe (local + destination), expand URLs, publish via the user's logged-in browser, append history, and Telegram-confirm Ethan. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", or invokes /repost-run. Also invoked by the cron / launchd subagent for listen-for-future pairs.
+description: Run a single Repost-with-agent pair end-to-end — scrape source, dedupe (local + destination), expand URLs, publish via the user's logged-in browser, append history, and Telegram-confirm Ethan. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", or invokes /repost-run. Also invoked by scheduled agents for listen-for-future pairs.
 when_to_trigger: User wants to run a single pair manually, OR a scheduled subagent is ticking a listen-for-future pair, OR the user asks to "post the next one from <pair>". Single-post operation.
 ---
 
@@ -24,9 +24,12 @@ You MUST have these available in the current session:
   click. Do not hand the run to Claude Code merely because Claude Code is one
   supported harness; the current agent owns the run unless Ethan explicitly
   asks for a different harness.
-- **`plugin:telegram:telegram`** — to send the success confirmation. If the
-  Telegram plugin is not loaded in this session, surface the error and stop —
-  do not silently skip the confirmation.
+- **Telegram/message delivery in the current harness** — OpenClaw should use
+  its first-class `message` tool / Telegram channel; Claude Code should use
+  `plugin:telegram:telegram`; other harnesses should use their equivalent
+  configured Telegram delivery path. If no Telegram/message delivery path is
+  loaded in this session, surface the error and stop — do not silently skip the
+  confirmation.
 
 If any of these is missing, tell the user which one and stop. Don't try to
 substitute curl/Playwright/etc.
@@ -40,6 +43,29 @@ substitute curl/Playwright/etc.
 4. Note `mode`, `runMode`, `source`, `destination`, `policy.maxItemsPerRun`
    (default 1), `policy.overlengthStrategy` (default `"skip"`),
    `policy.blockOnUncertainDuplicate` (default true).
+5. Note optional destination identity fields:
+   - `destination.targetType` (`profile`, `page`, or `group`; default `profile`).
+   - `destination.accountDisplayName` (visible account/page name to verify).
+   - `destination.accountHint` (handle / vanity path). These fields are
+     especially important on Facebook and Meta surfaces where one login can
+     post as multiple identities.
+
+## Browser tab reuse rule
+
+Reuse the current harness browser's existing tabs whenever possible.
+
+Before navigating for source scrape, destination dedupe, or compose:
+
+1. List / inspect open browser tabs using the current harness browser adapter.
+2. If an existing tab is already on the same platform origin, profile URL, or
+   compose surface you need, focus that tab and navigate / refresh it in place.
+3. Only open a new tab when no suitable existing tab exists.
+4. Do not leave repeated duplicate login/profile/compose tabs behind on
+   scheduled runs.
+
+This matters because scheduled ticks should behave like a careful human reusing
+the same browser session, not a process that opens the same platform from
+scratch over and over.
 
 ## Step 1.5 — Read pair learnings (institutional memory)
 
@@ -98,7 +124,7 @@ crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
   authorize the post explicitly in chat. Only proceed if they say yes in this
   same conversation.
 - If `mode === "live-approved"`: do everything end-to-end. This is the only
-  mode the cron / launchd subagent should encounter (the install skill refuses
+  mode the scheduled agent should encounter (the install skill refuses
   to schedule non-live-approved pairs).
 
 ## Step 3 — Scrape the source
@@ -230,13 +256,22 @@ If the draft exceeds the cap:
 
 This is where the running agent drives the user's logged-in browser.
 
-1. Navigate to the destination's compose URL (see `docs/destinations/<platform>.md`).
-2. Wait for the textarea / contenteditable.
-3. Click into it.
-4. Type the draft EXACTLY. Don't paraphrase, don't add hashtags.
-5. Click the Post / Share / Tweet button.
-6. Wait for the success indicator (URL changes, modal dismisses, toast appears).
-7. Capture the resulting `posted_url` (e.g. `https://x.com/<handle>/status/<id>`).
+1. Reuse an existing destination tab if one is already open; otherwise navigate
+   to the destination's compose URL (see `docs/destinations/<platform>.md`).
+2. Verify the active posting identity matches the pair config BEFORE typing:
+   - Match `destination.accountHint` and/or `destination.accountDisplayName`.
+   - Respect `destination.targetType` (`profile`, `page`, `group`).
+   - If the platform exposes a profile/page/account switcher, switch to the
+     configured identity first.
+   - If you cannot confirm or switch to the configured identity, append
+     `pair.publish.failed` with `category: "needs-account-switch"`, tell Ethan,
+     and stop. Do not publish from the wrong profile/page.
+3. Wait for the textarea / contenteditable.
+4. Click into it.
+5. Type the draft EXACTLY. Don't paraphrase, don't add hashtags.
+6. Click the Post / Share / Tweet button.
+7. Wait for the success indicator (URL changes, modal dismisses, toast appears).
+8. Capture the resulting `posted_url` (e.g. `https://x.com/<handle>/status/<id>`).
    - For X: the URL changes to `/status/<id>` after posting. Read it from the page.
    - For Bluesky: the toast or feed shows the new post; navigate to your
      profile and grab the topmost post URL.
@@ -246,7 +281,7 @@ If publish fails (login expired, rate limit, platform error):
 
 - Append `pair.publish.failed` audit with `category: "needs-login" | "rate-limit" | "platform-error" | "unknown"`.
 - Tell the user what happened.
-- Telegram Ethan with the failure (`plugin:telegram:telegram`).
+- Telegram Ethan with the failure using the current harness's Telegram/message delivery tool.
 - DO NOT append to `posted.jsonl` (we did not actually post).
 
 ## Step 9 — Append history
@@ -271,7 +306,7 @@ Append `pair.publish.success` to `audit.jsonl` with the `posted_url`.
 > Ethan confirming the source and destination URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
-Use `plugin:telegram:telegram` `reply` tool. Message format:
+Use the current harness's Telegram/message delivery tool (OpenClaw `message`, Claude Code `plugin:telegram:telegram` reply, or equivalent). Message format:
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>
@@ -281,7 +316,7 @@ Source: <canonical source URL>
 
 If the Telegram send fails:
 
-- Append `pair.publish.notify_failed` audit with the error.
+- Append `pair.publish.notify.failure` audit with the error.
 - Tell the user in chat (so the missed ping is replaced).
 - DO NOT roll back the post — it's already up.
 
@@ -343,15 +378,15 @@ heartbeats. See `skills/repost-learnings/SKILL.md` for the full
 "signal vs noise" rules + the good/bad entry example showing all three
 optional sub-sections.
 
-## Cron / launchd context
+## Scheduled-run context
 
-When invoked from a fresh subagent spawned by the cron job:
+When invoked from a fresh agent/subagent spawned by the scheduler:
 
 - The subagent has no chat user. All interactive prompts above are skipped — it
   just runs the pair end-to-end if `mode === "live-approved"`.
-- It must still Telegram-confirm Ethan via `plugin:telegram:telegram`.
+- It must still Telegram-confirm Ethan via the current harness's Telegram/message delivery tool.
 - It must still append to `posted.jsonl` and `audit.jsonl`.
-- After running, the subagent exits. The next cron tick spawns a fresh subagent.
+- After running, the agent exits. The next scheduled tick spawns a fresh agent/subagent.
 
 ## Error categories
 
@@ -359,7 +394,7 @@ When you hit a failure, append the appropriate audit event and tell the user
 which category:
 
 - `needs-login` — destination or source session expired. User must log in via
-  the browser MCP profile, then re-run.
+  the current harness browser profile, then re-run.
 - `needs-config` — Telegram not configured, pair config missing required field, etc.
 - `rate-limit` — destination platform rejected with a 429 or rate-limit modal.
   Wait and retry later.

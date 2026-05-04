@@ -1,14 +1,14 @@
-# State files (v4.0.0)
+# State files (v4.3.1)
 
-All Repost-with-agent state lives at `~/.repost-with-agent/`. The plugin
-ships ZERO code that touches these files at install time — the running agent
-reads / writes them via its native Read / Edit / Write tools as part of the
-skill workflows.
+All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
+touch this state directly; runtime reposting is skill-only. The running agent
+reads / writes state via its native Read / Edit / Write / Bash tools as part of
+the skill workflows.
 
 ```
 ~/.repost-with-agent/
 ├── pairs.json                          # all pair configs (schemaVersion 4)
-├── pairs.json.bak.<unix-ts>            # backups produced by install.sh / pair-edit
+├── pairs.json.bak.<unix-ts>            # backups produced by manual migration / pair-edit
 ├── pairs.json.v3.bak                   # one-time backup of the v3 file
 └── pairs/
     └── <pair-id>/
@@ -17,7 +17,7 @@ skill workflows.
         ├── learnings.md                # free-form notes for the agent
         ├── backfill-state.json         # transient: backfill resume state
         └── logs/
-            ├── cron.log                # stdout+stderr from the launchd / cron tick
+            ├── cron.log                # fallback launchd/crontab logs when that scheduler path is used
             └── notify-errors.log       # Telegram delivery errors (when present)
 ```
 
@@ -41,6 +41,8 @@ skill workflows.
       "destination": {
         "platform": "linkedin | x | bluesky | threads | facebook",
         "accountHint": "@<handle>",
+        "accountDisplayName": "<visible account/page name>",
+        "targetType": "profile | page | group",
         "profileUrl": "https://x.com/<handle>"
       },
       "schedule": {
@@ -67,11 +69,11 @@ skill workflows.
 ### Field invariants
 
 - `id` — kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
-- `enabled` — `false` for new pairs by default. Cron / launchd ignores disabled pairs.
+- `enabled` — `false` for new pairs by default. Schedulers ignore disabled pairs.
 - `mode`:
   - `preview-only` — never publishes. Default.
   - `approval-required` — agent asks user per-post before publishing.
-  - `live-approved` — agent publishes without per-post prompting. Required for cron-driven ticks.
+  - `live-approved` — agent publishes without per-post prompting. Required for scheduled live ticks.
 - `runMode`:
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — one-shot historical walk (newest-first).
@@ -80,6 +82,12 @@ skill workflows.
   - `truncate` — drafts are shrunk to fit the destination cap without adding a
     source-platform permalink suffix.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
+- `destination.targetType` — optional identity type for destinations where a
+  login can publish as multiple identities. Defaults to `profile`; use `page`
+  for Facebook pages and `group` for Facebook groups.
+- `destination.accountDisplayName` — optional visible account/page name. The
+  run skill uses it, alongside `accountHint`, to verify or switch the active
+  posting identity before composing.
 - `policy.semanticDedupeEnabled` — when `true` (default), Layer 2 semantic
   dedupe runs after Layer 1 fuzzy-string match clears a candidate. When
   `false`, only Layer 1 runs and the candidate publishes immediately on
@@ -91,7 +99,7 @@ skill workflows.
   produced. Tune up for high-volume destinations (X power-users) and
   down for low-volume destinations (Substack-style); 30 is a sweet spot
   for most accounts.
-- `schedule.everyHours` — positive integer; used by `repost-listen-for-future-setup` to compute the launchd `StartInterval` in seconds.
+- `schedule.everyHours` — positive integer; used by `repost-listen-for-future-setup` to set OpenClaw `--every "<N>h"` or a fallback scheduler interval.
 
 ### Migration from v3
 
@@ -101,7 +109,7 @@ doesn't use anymore:
 - `policy.requirePreviewBeforeFirstLiveRun` — v4 enforces this naturally via the safety modes.
 - `policy.preferOfficialApi` — v4 has no API path. Field is ignored if present.
 - `dedupe.strategy` — v4 hardcodes the algorithm in the `repost-dedup` skill. Field is ignored if present.
-- `source.authRef`, `destination.authRef` — v4 uses the browser MCP profile, no auth refs.
+- `source.authRef`, `destination.authRef` — v4 uses the current harness browser profile, no auth refs.
 - `source.type`, `destination.type` — replaced by `source.platform` / `destination.platform`.
 
 The migration is a one-shot transformation: change `schemaVersion` from 3 to 4,
@@ -151,9 +159,9 @@ Append-only NDJSON. Each line is one audit event. Schema:
 
 | Event                                   | Meaning |
 | --------------------------------------- | ------- |
-| `pair.run.start`                        | Manual or cron tick begins. |
+| `pair.run.start`                        | Manual or scheduled tick begins. |
 | `pair.run.end`                          | Tick ended. Includes `outcome: "published" \| "no_new_items" \| "skipped" \| "error"`. |
-| `pair.fetch.start`                      | Browser MCP started scraping the source. |
+| `pair.fetch.start`                      | Browser automation started scraping the source. |
 | `pair.fetch.success`                    | Source scraped successfully. Includes `candidateCount`. |
 | `pair.fetch.failed`                     | Source scrape failed. Includes `category` (`needs-login` etc.) + `error`. |
 | `pair.dedupe.local`                     | Local dedupe completed. Includes `duplicates`, `survivors`. |
@@ -170,7 +178,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. |
 | `pair.publish.notify.success`           | Telegram-confirm delivered. |
 | `pair.publish.notify.failure`           | Telegram-confirm failed. Includes error. **The post itself stayed up.** |
-| `pair.publish.notify_skipped_unconfigured` | Telegram plugin not loaded. **Treat as a silent-publish alert.** |
+| `pair.publish.notify_skipped_unconfigured` | Telegram/message delivery not loaded. **Treat as a silent-publish alert.** |
 | `pair.run.no_new_items`                 | Run completed; nothing new to publish. |
 | `pair.backfill.would_publish`           | Dry-run hit on a candidate. |
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
@@ -205,7 +213,7 @@ candidate is NOT published, and a catch-up entry is appended to
 Per-pair institutional-memory file. Free-form Markdown that the running
 agent reads at the start of every run + appends to at the end of every run.
 The point: the agent doesn't have to re-figure platform quirks from scratch
-on each cron tick — quirks accumulate here over time. (Ethan voice 6029,
+on each scheduled tick — quirks accumulate here over time. (Ethan voice 6029,
 2026-05-01.)
 
 ### Format
@@ -268,7 +276,7 @@ run, it should:
 
 ### Lifecycle
 
-1. **Start of every run** (`repost-run`, `repost-backfill`, the cron-spawned
+1. **Start of every run** (`repost-run`, `repost-backfill`, the scheduler-spawned
    subagent): read the file, treat as up-front context.
 2. **During execution**: track quirks in reasoning, don't append mid-run.
 3. **End of run**: append any newly-discovered quirks with a timestamped
@@ -300,7 +308,7 @@ clean completion. Schema:
 ## File-mode invariants
 
 - `pairs.json` mode: `0644` (default umask). Contains no secrets — Telegram
-  bot tokens etc. live in the `plugin:telegram:telegram` plugin's own config,
+  bot tokens etc. live in the current harness's Telegram/message delivery config,
   not in this plugin.
 - `posted.jsonl` mode: `0644`.
 - `audit.jsonl` mode: `0644`.

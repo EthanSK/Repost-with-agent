@@ -21,7 +21,7 @@ Per-platform DOM hints for the running agent. Read this BEFORE you start a
 
 ## Auth
 
-- Login: the browser MCP profile must have a logged-in `threads.net` session.
+- Login: the current harness browser profile must have a logged-in `threads.net` session.
 - Threads auth piggybacks off Instagram. If `instagram.com` is not also logged
   in, expect login flow redirects.
 - If session is expired, append `pair.publish.failed` audit with `category:
@@ -34,12 +34,18 @@ Per-platform DOM hints for the running agent. Read this BEFORE you start a
 
 ## Posting flow
 
-1. Navigate to `https://www.threads.net/`.
-2. Click the "Start a thread..." input at the top, OR click the `+` icon in the side nav.
-3. Wait for the composer modal — textarea is the focused element.
-4. Type / paste `draft_text` exactly.
-5. Click "Post" (visible label).
-6. Wait for the modal to close. Capture `posted_url` by navigating to `https://www.threads.net/@<handle>` and grabbing the topmost thread permalink.
+1. Reuse an existing Threads tab if one is already open; otherwise navigate to
+   `https://www.threads.net/`.
+2. Verify the active Threads / Instagram-backed account matches
+   `destination.accountHint` / `destination.accountDisplayName`. If a Meta
+   account switcher is present and the wrong account is active, switch to the
+   configured account before composing. If you cannot confirm it, stop with
+   `category: "needs-account-switch"`.
+3. Click the "Start a thread..." input at the top, OR click the `+` icon in the side nav.
+4. Wait for the composer modal — textarea is the focused element.
+5. Type / paste `draft_text` exactly.
+6. Click "Post" (visible label).
+7. Wait for the modal to close. Capture `posted_url` by navigating to `https://www.threads.net/@<handle>` and grabbing the topmost thread permalink.
 
 ## Char cap
 
@@ -78,5 +84,9 @@ active Threads accounts or leave at 30 for moderate-cadence ones.
   — skip them in source scrape since they're not original Threads content.
 - **Login wall.** Anonymous browsing of Threads is partially supported but
   inconsistent. Always operate from a logged-in session.
+- **Meta account switching.** Threads auth can use a parent Instagram/Meta
+  login with multiple profiles. The running agent must verify the active handle
+  against the pair destination before posting; if the UI cannot be confirmed,
+  ask Ethan to select it manually.
 - **DOM is React Native Web** with mobile-first selectors. Prefer
   accessibility-role queries.

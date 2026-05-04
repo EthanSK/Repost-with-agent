@@ -4,7 +4,7 @@
 *.swo
 *.log
 
-# Local backups produced by scripts/install.sh
+# Local backups produced during manual/agent-assisted migrations
 *.bak.*
 
 # Per-machine state (user data lives in ~/.repost-with-agent, not in the repo)

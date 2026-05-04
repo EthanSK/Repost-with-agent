@@ -8,13 +8,15 @@ If you're upgrading an existing v3 install, this doc walks you through it.
 
 ## TL;DR
 
-1. Run `bash scripts/install.sh` from the v4 plugin clone. It registers the
-   plugin with Claude Code (`~/.claude/settings.json`) and OpenClaw
-   (`~/.openclaw/openclaw.json`), backs up both files, and migrates
-   `~/.repost-with-agent/pairs.json` from `schemaVersion: 3` to `4`.
-2. Restart whichever harness you intend to use (OpenClaw, Claude Code, etc.)
-   so it loads the new plugin.
-3. Verify with `/pair list` in that same harness — it should show your existing
+1. Register the v4 repo directory as a directory-source plugin in the harness
+   you want to use (OpenClaw via `plugins.load.paths` +
+   `plugins.entries["repost-with-agent"]`; Claude-compatible loaders via
+   `.claude-plugin/`).
+2. Back up `~/.repost-with-agent/pairs.json`, then migrate it from
+   `schemaVersion: 3` to `4` if needed using the transformation below.
+3. Restart/reload whichever harness you intend to use (OpenClaw, Claude Code,
+   etc.) for first install or manifest/command changes.
+4. Verify with `/pair list` in that same harness — it should show your existing
    pairs with the v4 schema.
 
 The v3 CLI binary is no longer needed. You can `npm uninstall -g
@@ -37,7 +39,7 @@ it.
 - The `repost-with-agent` CLI binary entry from `package.json`.
 - `commands/preview.md` (functionality folded into `commands/run.md`).
 - `scripts/agent-bridge-handler.sh`, `scripts/init_repost_with_agent_workspace.py`,
-  `scripts/install-for-openclaw.sh` (old v3 installer).
+  and the old v3 OpenClaw registration helper.
 - `templates/repost_with_agent_workspace/` (old workspace template).
 
 ### Added (v3 → v4)
@@ -45,8 +47,6 @@ it.
 - `.claude-plugin/marketplace.json` (directory-source marketplace manifest).
 - 10 `skills/*/SKILL.md` files (the playbook).
 - 4 `commands/*.md` slash command wrappers.
-- `scripts/install.sh` + `scripts/uninstall.sh` (idempotent, edits both
-  Claude Code and OpenClaw config files with backups).
 - `templates/pairs.json.template`, `templates/posted.jsonl.template`,
   `templates/audit.jsonl.template`.
 - `docs/state-files.md`, `docs/architecture.md`, `docs/migration-v3-to-v4.md`,
@@ -60,7 +60,9 @@ it.
 - `.claude-plugin/plugin.json` — declares 10 skills + 4 commands. `version`
   bumped 3.0.0 → 4.0.0.
 - `openclaw.plugin.json` — `runtime` block removed (no entrypoint to run);
-  `skills_roots` + `commands_roots` only.
+  native metadata declares an empty strict `configSchema` and the `skills`
+  directory. Slash-command wrappers remain in the Claude-compatible bundle
+  manifest.
 - `pairs.json` schema — `schemaVersion` bumped 3 → 4. Deprecated fields
   ignored (`policy.requirePreviewBeforeFirstLiveRun`,
   `policy.preferOfficialApi`, `dedupe.strategy`, `*.authRef`, `source.type`,
@@ -68,11 +70,11 @@ it.
 - The Telegram-on-publish rule is now enforced by the `repost-notify` skill
   (and replayed in `repost-run` step 10 + `repost-backfill` step 6) — there's
   no `notify.json` config file in v4. The plugin uses the running session's
-  `plugin:telegram:telegram` plugin, which has its own access config.
+  current-harness Telegram/message delivery config instead.
 
 ## Schema migration: pairs.json v3 → v4
 
-The `scripts/install.sh` script handles this for you. The transformation:
+Use this transformation for the one-time migration:
 
 ```diff
  {
@@ -141,17 +143,17 @@ the v3 install survive the migration unchanged.
 
 ## What you (the user) need to do
 
-1. `cd` to your v4 clone.
-2. `bash scripts/install.sh`.
-3. Restart whichever harness you intend to use.
+1. Register the v4 clone as a directory-source plugin in the harness config.
+2. Back up and migrate `~/.repost-with-agent/pairs.json` if it is still v3.
+3. Restart/reload whichever harness you intend to use.
 4. In a fresh session of that same harness, run `/pair list`. Confirm your
    existing pairs show up.
 5. Run `/pair show linkedin-to-x` (or whichever pair). Confirm the schema is
    v4.
 6. Run `/repost-run <pair-id>` to do a manual tick. Confirm a Telegram
    confirmation lands.
-7. Run `/repost-setup-cron <pair-id>` to install the launchd / cron entry for
-   recurring listen-for-future ticks (default every 5 hours).
+7. Run `/repost-setup-cron <pair-id>` to install the current-harness scheduler
+   entry for recurring listen-for-future ticks (default every 5 hours).
 
 ## Rollback
 

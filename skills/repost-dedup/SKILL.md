@@ -68,7 +68,7 @@ jq -r '.sourceItemId' ~/.repost-with-agent/pairs/<id>/posted.jsonl | grep -Fxq "
 
 ## Remote dedupe (destination scrape)
 
-1. Use the browser MCP to navigate to `pair.destination.profileUrl`.
+1. Use current-harness browser automation to navigate to `pair.destination.profileUrl`.
 2. Scroll to load 50–100 recent destination posts (this covers ~7 days for
    active accounts; tune per platform).
 3. For each loaded destination post, extract its visible text body.

@@ -23,7 +23,7 @@ or destination).
 
 ## Auth
 
-- Login: the browser MCP profile must already have a logged-in `bsky.app`
+- Login: the current harness browser profile must already have a logged-in `bsky.app`
   session (or whichever PDS the user is on).
 - App passwords are only relevant for the AT Protocol API path, which v4.0.0
   does NOT use. Browser session is enough.
@@ -37,12 +37,18 @@ or destination).
 
 ## Posting flow
 
-1. Navigate to `https://bsky.app/`.
-2. Click the "New Post" / `+` button (top-left in the app shell).
-3. Wait for the compose modal — textarea is the focused element by default.
-4. Type / paste `draft_text` exactly.
-5. Click the "Post" button in the modal (visible label "Post").
-6. Wait for the modal to close. Bluesky doesn't auto-navigate to the new post — to capture `posted_url`, navigate to `https://bsky.app/profile/<handle>` and grab the topmost post link.
+1. Reuse an existing Bluesky tab if one is already open; otherwise navigate to
+   `https://bsky.app/`.
+2. Verify the logged-in account matches `destination.accountHint` /
+   `destination.accountDisplayName` before composing. If Bluesky exposes a
+   multi-account switcher and the wrong account is active, switch to the
+   configured account. If you cannot confirm the active account, stop with
+   `category: "needs-account-switch"`.
+3. Click the "New Post" / `+` button (top-left in the app shell).
+4. Wait for the compose modal — textarea is the focused element by default.
+5. Type / paste `draft_text` exactly.
+6. Click the "Post" button in the modal (visible label "Post").
+7. Wait for the modal to close. Bluesky doesn't auto-navigate to the new post — to capture `posted_url`, navigate to `https://bsky.app/profile/<handle>` and grab the topmost post link.
 
 ## Char cap
 
@@ -83,6 +89,9 @@ style accounts, 30 is more than enough.
 - **Hashtags** become `#tag` clickable text. Plain text travels fine.
 - **Replies** are rendered as part of a thread on the profile feed. Skip them
   — only top-level posts.
+- **Account switcher** — logged-in browsers can have more than one Bluesky
+  identity. Do not assume the active account from the login state alone; verify
+  it matches the pair destination before posting.
 
 ## DOM stability
 

@@ -18,12 +18,13 @@ to the matching skill based on the subcommand.
 - `/pair edit <id>` → invoke `skills/repost-pair-setup/SKILL.md` in edit
   mode (read existing pair, ask the user which fields to update, write back).
 
-## Architecture (v4.0.0)
+## Architecture (v4.3.1)
 
 This plugin ships **no code that does the work**. The slash command above is a
-thin wrapper that loads the matching skill — the running agent (Claude Code,
-OpenClaw) does all the heavy lifting using its native tools (Read, Edit, Write,
-Bash, browser MCP, plugin:telegram:telegram).
+thin wrapper that loads the matching skill — the running agent (OpenClaw,
+Claude Code, or another supported harness) does all the heavy lifting using its
+native tools: Read, Edit, Write, Bash, current-harness browser automation, and
+current-harness Telegram/message delivery.
 
 JSON state lives at `~/.repost-with-agent/pairs.json` and per-pair files under
 `~/.repost-with-agent/pairs/<id>/`. The agent reads/writes them via the native
@@ -42,4 +43,4 @@ new pair to a non-`preview-only` mode.
 
 - `/repost-run` — run a single pair end-to-end.
 - `/repost-backfill` — multi-post historical walk.
-- `/repost-setup-cron` — install launchd / cron entry for listen-for-future pairs.
+- `/repost-setup-cron` — install a current-harness scheduler entry for listen-for-future pairs (OpenClaw cron preferred for OpenClaw workflows).

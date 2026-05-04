@@ -15,8 +15,8 @@ and rate-limiting differ.
 
 ## Required tools
 
-Same as `repost-run`: Read, Edit, Write, Bash, browser MCP,
-`plugin:telegram:telegram`.
+Same as `repost-run`: Read, Edit, Write, Bash, current-harness browser
+automation, and current-harness Telegram/message delivery.
 
 ## Step 1 — Load pair config + backfill options
 
@@ -88,7 +88,7 @@ already-completed items.
 
 ## Step 3 — Source pagination
 
-Use the browser MCP to walk back through historical posts on the source
+Use current-harness browser automation to walk back through historical posts on the source
 profile. Per-platform pagination differs — see `docs/destinations/<platform>.md`.
 
 For LinkedIn:

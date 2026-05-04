@@ -1,11 +1,11 @@
 ---
-description: Install a launchd plist (macOS) or cron entry (Linux) that periodically launches a fresh agent subagent to run /repost-run on enabled listen-for-future pairs.
+description: Install a current-harness scheduler entry that periodically launches a fresh agent/subagent to run /repost-run on enabled listen-for-future pairs. OpenClaw cron is the preferred scheduler for OpenClaw workflows.
 ---
 
 # `/repost-setup-cron`
 
-Install the host-level scheduler entry that triggers a fresh agent subagent on
-a regular interval to run `/repost-run` against every enabled `live-approved`
+Install the scheduler entry that triggers a fresh agent/subagent on a regular
+interval to run `/repost-run` against every enabled `live-approved`
 `listen-for-future` pair.
 
 ## Usage
@@ -26,34 +26,37 @@ to install the scheduler unless ALL of these hold:
 - [ ] `pair.enabled === true`
 - [ ] `pair.mode === "live-approved"`
 - [ ] `pair.runMode === "listen-for-future"`
-- [ ] User is logged into source + destination platforms in the browser MCP profile
+- [ ] User is logged into source + destination platforms in the current harness browser profile
 - [ ] At least one preview run has succeeded (audit.jsonl shows a `pair.preview.success` or `pair.publish.success`)
-- [ ] Telegram is configured (run `repost-notify` test once)
+- [ ] Telegram/message delivery is configured (run `repost-notify` test once)
 
 If any check fails, the skill tells the user which prerequisite is missing and
 stops.
 
 ## What gets installed
 
-- macOS: `~/Library/LaunchAgents/com.ethansk.repost-with-agent.<pair-id>.plist`
-  loaded with `launchctl load`. `StartInterval = everyHours * 3600` seconds.
-- Linux: a cron line in the user's crontab.
+- **OpenClaw workflows (preferred):** an `openclaw cron` job that starts a
+  fresh isolated agent turn with `--message "/repost-run <pair-id>"`.
+- **Claude Code / other explicitly chosen harnesses:** an equivalent scheduler
+  for that harness. On macOS this can be a launchd plist; on Linux this can be
+  a crontab line. Use this fallback only when the workflow is intentionally not
+  OpenClaw-based or Ethan explicitly asks for it.
 
-The scheduler invokes the **same agent harness chosen for this workflow**. For
-OpenClaw, prefer OpenClaw's native cron/session scheduler. For Claude Code, use
-a Claude Code invocation only when the workflow is intentionally Claude Code-based
-or Ethan explicitly asks for it. The fresh agent loads this plugin, runs the
-command, exits.
+Do **not** route an OpenClaw-owned Repost-with-agent workflow through Claude
+Code just because `claude` is installed. The scheduler should invoke the same
+harness that owns the workflow.
 
 ## Uninstall
 
 To stop the scheduler:
 
-- macOS: `launchctl unload ~/Library/LaunchAgents/com.ethansk.repost-with-agent.<pair-id>.plist && rm` it.
-- Linux: edit the crontab and remove the line.
+- OpenClaw: `openclaw cron show repost-with-agent.<pair-id>` to confirm the exact job,
+  then `openclaw cron rm <job-id>` and verify with `openclaw cron list`.
+- launchd fallback: unload the plist and move/delete it.
+- crontab fallback: remove the matching `repost-with-agent.<pair-id>` line.
 
 ## See also
 
 - `skills/repost-listen-for-future-setup/SKILL.md` — full step-by-step.
-- `skills/repost-run/SKILL.md` — what each cron tick actually does.
+- `skills/repost-run/SKILL.md` — what each scheduled tick actually does.
 - `/pair edit <pair-id>` — adjust cadence by editing `schedule.everyHours`.

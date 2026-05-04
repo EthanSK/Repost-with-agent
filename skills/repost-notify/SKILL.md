@@ -20,13 +20,18 @@ This is enforced by EVERY publish path in the plugin (`repost-run`,
 
 ## Required tool
 
-`plugin:telegram:telegram` — specifically the `reply` MCP tool. If the
-Telegram plugin is not loaded in the current session, surface the error and
-stop the publish flow. Do not silently skip.
+Use Telegram/message delivery in the current harness:
+
+- **OpenClaw:** use the first-class `message` tool / configured Telegram channel.
+- **Claude Code:** use `plugin:telegram:telegram`'s `reply` tool.
+- **Other harnesses:** use the equivalent configured Telegram delivery tool.
+
+If no Telegram/message delivery path is loaded in the current session, surface
+the error and stop the publish flow. Do not silently skip.
 
 ## Payload
 
-Format (HTML parse_mode is the default for the Telegram plugin):
+Format (use the current harness's normal Telegram formatting mode):
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>
@@ -34,22 +39,25 @@ Source: <canonicalSourceUrl>
 → Destination: <destinationUrl>
 ```
 
-Project-tag rules from the global CLAUDE.md still apply: include `[Repost-with-agent]` (alongside any other actively-worked projects, comma-separated) at the start. The agent invoking this skill MAY append other current projects per the global tag rule.
+Project-tag / prefix rules from the current harness's user instructions still apply. Include `[Repost-with-agent]` at the start unless the harness has a stricter active-project tag rule.
 
 ## Success path
 
 1. After the publish step in `repost-run` / `repost-backfill` returns success
    AND `posted.jsonl` has been appended:
 2. Build the message payload above.
-3. Call `plugin:telegram:telegram` `reply` with the appropriate `chat_id`
-   (whichever chat the user has configured for repost notifications — see the
-   Telegram plugin's access config). For Ethan, this is whichever chat is set
-   up in `~/.claude/plugins/...telegram.../access.json`.
+3. Call the current harness's Telegram/message delivery tool with the appropriate
+   recipient:
+   - OpenClaw: use the `message` tool / Telegram channel/account/target from
+     the current session or repost-notification config.
+   - Claude Code: use `plugin:telegram:telegram` `reply` with the configured
+     `chat_id`.
+   - Other harnesses: use their equivalent configured Telegram delivery path.
 4. Append `pair.publish.notify.success` to `~/.repost-with-agent/pairs/<id>/audit.jsonl`.
 
 ## Failure path
 
-If the Telegram `reply` call returns an error:
+If the Telegram/message delivery call returns an error:
 
 1. Append `pair.publish.notify.failure` to `audit.jsonl` with the error text.
 2. DO NOT roll back the publish. The post is already up — rollback would
@@ -59,13 +67,12 @@ If the Telegram `reply` call returns an error:
 
 ## Unconfigured path
 
-If `plugin:telegram:telegram` is not loaded (the user hasn't installed /
-enabled the Telegram plugin):
+If no Telegram/message delivery tool is loaded or configured in the current harness:
 
 1. Append `pair.publish.notify_skipped_unconfigured` to `audit.jsonl`.
 2. Tell the user IMMEDIATELY in chat: this is a silent publish, which is a
    project bug per the non-negotiable rule.
-3. Recommend they install the Telegram plugin and re-run.
+3. Recommend they configure the current harness's Telegram/message delivery path and re-run.
 
 ## Test path (standalone)
 
@@ -117,4 +124,4 @@ enough; the user clicks through to see the actual post.
 - `skills/repost-run/SKILL.md` step 10 — where this skill is invoked in the
   single-post flow.
 - `skills/repost-backfill/SKILL.md` step 6 — same, in the backfill loop.
-- Global CLAUDE.md for project-tag prefix rules.
+- Current harness/user instructions for project-tag prefix rules.

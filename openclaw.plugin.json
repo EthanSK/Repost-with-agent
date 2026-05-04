@@ -1,13 +1,14 @@
 {
-  "schema_version": 1,
   "id": "repost-with-agent",
   "name": "Repost-with-agent",
-  "version": "4.3.0",
-  "description": "Skill-only OpenClaw plugin for agent-driven, browser-based reposting (v4.3.0 — no CLI, no MCP server). The running agent (OpenClaw via its built-in browser tool, Claude Code via chrome-devtools-mcp, etc.) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe (Layer 1 string-match + Layer 2 agent semantic check), expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. v4.3.0 adds Layer 2 semantic dedupe so paraphrased duplicates (same announcement / opinion, different words) are caught before publish — Ethan would rather miss a post than ship an embarrassing duplicate. Maintains a per-pair learnings.md so the agent doesn't re-figure platform quirks every cron tick. Supports LinkedIn, X, Bluesky, Threads, Facebook. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
-  "skills_roots": [
+  "version": "4.3.1",
+  "description": "Skill-only OpenClaw/current-harness plugin for agent-driven, browser-based reposting (v4.3.1 — no CLI, no MCP server, no shell registration script). The running agent (OpenClaw via its built-in browser, Claude Code via chrome-devtools-mcp, or another explicit browser adapter) reads pair configs from ~/.repost-with-agent/pairs.json and uses its native tools to scrape sources, dedupe (Layer 1 string-match + Layer 2 agent semantic check), expand URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan via the current harness's Telegram/message tool. v4.3.1 makes OpenClaw the first-class/default harness path while remaining agent-agnostic. NON-NEGOTIABLE RULE: every successful publish MUST Telegram-confirm Ethan with source + destination URL. Silent publishes are a bug.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "skills": [
     "skills"
-  ],
-  "commands_roots": [
-    "commands"
   ]
 }

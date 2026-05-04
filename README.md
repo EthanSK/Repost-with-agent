@@ -1,10 +1,11 @@
-# Repost-with-agent (v4.3.0)
+# Repost-with-agent (v4.3.1)
 
 A skill-only agent/OpenClaw-compatible plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
 no Playwright.** The plugin ships zero code that does the work — it ships
 instructions (skills) and the agent's existing toolkit (Read, Edit, Write,
-Bash, the current harness's browser automation, plugin:telegram:telegram) does everything.
+Bash, the current harness's browser automation, and the current harness's
+Telegram/message delivery tool) does everything.
 
 Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
 operates on the user's transparent, logged-in sessions — no API keys, no
@@ -13,14 +14,39 @@ stealth, no CAPTCHA / 2FA bypass.
 ## TL;DR
 
 1. Clone this repo.
-2. `bash scripts/install.sh` — registers the plugin with supported harnesses
-   (`~/.openclaw/openclaw.json`, and `~/.claude/settings.json` when installed).
-3. Restart whichever harness you intend to use.
+2. Register this repo as a directory-source plugin in the harness you want to use:
+   - OpenClaw: add the repo path to `plugins.load.paths` and enable
+     `plugins.entries["repost-with-agent"]`.
+   - Claude Code / compatible loaders: point the loader at `.claude-plugin/`.
+3. Restart/reload the harness only when first registering the repo, moving the
+   repo, or changing manifests/commands. Plain skill/doc edits are read from
+   this directory by fresh agent runs.
 4. In a fresh session: `/pair create` to set up a source → destination pair.
 5. `/repost-run <pair-id>` to do a manual end-to-end repost.
 6. `/repost-setup-cron <pair-id>` to schedule recurring ticks (default every 5h).
 
 That's it. The agent does everything else.
+
+
+## Registration / update mechanics
+
+This is a directory-source plugin. Harness config points at this repo instead
+of copying the skill files elsewhere. There is no repo-owned shell registration
+helper.
+
+- **OpenClaw primary path:** `~/.openclaw/openclaw.json` includes this repo in
+  `plugins.load.paths` and enables
+  `plugins.entries["repost-with-agent"]`.
+- **Claude Code / Claude-compatible path:** the loader points at the
+  `.claude-plugin/` directory-source metadata when that harness is used.
+- **After a normal repo edit or `git pull`:** no re-registration is needed as
+  long as the configured path still points at this repo.
+- **Re-register the repo path:** only for first setup, if the repo moved, if the
+  plugin was disabled, or if harness config was reset.
+- **Restart/reload the harness:** needed for first registration and usually
+  safest after manifest or slash-command additions/removals. Existing
+  long-running agent sessions may keep old startup context; start a fresh
+  run/session for newly edited skill text.
 
 ## Architecture in one sentence
 
@@ -30,7 +56,7 @@ itself runs zero code at runtime.
 
 The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
 every run — pagination caps, DOM changes, rate-limit signatures, and
-account-specific gotchas accumulate across cron ticks instead of being
+account-specific gotchas accumulate across scheduled ticks instead of being
 rediscovered from scratch each time. v4.2.0 adds a structured entry shape
 (optional `### Selectors`, `### Step playbook`, and `### Quirks`
 sub-sections) so each entry doubles as a recipe the next run can follow
@@ -80,8 +106,11 @@ The agent in your harness session must have:
   built-in browser, `chrome-devtools-mcp` when the current harness is Claude
   Code, or another explicit browser adapter. Used to navigate, scrape, fill
   forms, click buttons.
-- **`plugin:telegram:telegram`** — the Telegram channel plugin. Used to send
-  the mandatory publish-confirmation pings to Ethan.
+- **Telegram/message delivery in the current harness** — OpenClaw should use
+  its first-class `message` tool / Telegram channel; Claude Code should use
+  `plugin:telegram:telegram`; other harnesses should use their equivalent
+  configured Telegram delivery path. Used to send the mandatory
+  publish-confirmation pings to Ethan.
 
 Do **not** hand a Repost-with-agent run to Claude Code merely because Claude
 Code is listed as a supported harness. The agent that receives the request owns
@@ -113,7 +142,7 @@ When you invoke `/repost-run linkedin-to-x`:
 9. Agent navigates to `x.com/compose/post`, fills the textarea, clicks Post.
 10. Agent reads the resulting URL from the page.
 11. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`.
-12. Agent uses `plugin:telegram:telegram` to send the publish-confirmation:
+12. Agent uses the current harness's Telegram/message delivery tool to send the publish-confirmation:
 
     ```
     [Repost-with-agent] ✅ Posted: linkedin-to-x
@@ -145,7 +174,7 @@ MUST also fire a Telegram confirmation.
 - `/repost-run <pair-id>` — run a single pair end-to-end (single post).
 - `/repost-run all` — iterate over every enabled live-approved listen-for-future pair.
 - `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — multi-post historical walk, newest-first.
-- `/repost-setup-cron <pair-id>` — install launchd plist (macOS) or cron entry (Linux) to tick a listen-for-future pair on a schedule.
+- `/repost-setup-cron <pair-id>` — install a current-harness scheduler entry (OpenClaw cron preferred for OpenClaw workflows) to tick a listen-for-future pair on a schedule.
 
 ## Skills
 
@@ -172,13 +201,13 @@ All state lives at `~/.repost-with-agent/`:
 - `pairs/<id>/audit.jsonl` — append-only audit events.
 - `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
   this at the start of every run and appends new quirks at the end. Quirks
-  accumulate across cron ticks so the agent doesn't re-figure pagination
+  accumulate across scheduled ticks so the agent doesn't re-figure pagination
   caps / DOM changes / rate-limit signatures from scratch each time. Each
   entry has free-form prose plus optional structured sub-sections
   (`### Selectors`, `### Step playbook`, `### Quirks`) so the next run
   can follow a recipe verbatim.
 - `pairs/<id>/backfill-state.json` — transient resume state for backfills.
-- `pairs/<id>/logs/cron.log` — stdout+stderr from the launchd / cron tick.
+- `pairs/<id>/logs/cron.log` — stdout/stderr from fallback launchd/crontab ticks when that scheduler path is explicitly used.
 
 Full schemas: [`docs/state-files.md`](docs/state-files.md).
 
@@ -202,6 +231,8 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
       "destination": {
         "platform": "x",
         "accountHint": "@<handle>",
+        "accountDisplayName": "<visible account/page name>",
+        "targetType": "profile",
         "profileUrl": "https://x.com/<handle>"
       },
       "schedule": {
@@ -227,10 +258,16 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
 
 - `mode: "preview-only"` — never publishes. Default for new pairs.
 - `mode: "approval-required"` — agent asks per-post before publishing.
-- `mode: "live-approved"` — agent publishes without prompting. Required for cron-driven ticks.
+- `mode: "live-approved"` — agent publishes without prompting. Required for scheduled live ticks.
 
 New pairs default to `mode: preview-only` + `enabled: false`. That's
 intentional. Don't flip without explicit user authorization.
+
+For destinations where one login can post as multiple identities, set
+`destination.targetType` (`profile`, `page`, or `group`) and
+`destination.accountDisplayName`. The run skill must verify/switch to that
+identity before typing the draft, and must stop rather than publish from the
+wrong profile/page.
 
 ## Run modes
 
@@ -239,10 +276,11 @@ intentional. Don't flip without explicit user authorization.
 
 ## v3 → v4 migration
 
-If you're upgrading from v3, run `bash scripts/install.sh` — it migrates
-`pairs.json` from `schemaVersion: 3` to `4` and backs up the v3 file to
-`~/.repost-with-agent/pairs.json.v3.bak`. The 11 entries in
-`~/.repost-with-agent/pairs/linkedin-to-x/posted.jsonl` survive untouched.
+If you're upgrading from v3, ask the running agent to follow
+`docs/migration-v3-to-v4.md`: back up `~/.repost-with-agent/pairs.json`, edit
+it from `schemaVersion: 3` to `4`, and leave existing per-pair history files
+(`posted.jsonl`, `audit.jsonl`, and `learnings.md`) untouched. There is
+intentionally no repo-owned shell migration helper.
 
 Full migration walkthrough: [`docs/migration-v3-to-v4.md`](docs/migration-v3-to-v4.md).
 
@@ -271,7 +309,7 @@ missing is the playbook. v4 ships only the playbook.
 - Browser automation only operates on the user's transparent, logged-in sessions.
 - Refuse to scrape or post on behalf of an account the user is not the operator of.
 - New pairs default to preview-only + disabled.
-- Live publishes always require either `mode: live-approved` (for cron-driven
+- Live publishes always require either `mode: live-approved` (for scheduled live
   ticks) or explicit per-post user authorization (`mode: approval-required`).
 - Dedupe is re-checked between every publish — both Layer 1 (string match)
   and Layer 2 (agent semantic check) must clear; uncertain matches are

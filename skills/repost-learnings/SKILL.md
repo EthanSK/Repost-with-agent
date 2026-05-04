@@ -12,7 +12,7 @@ quirks, account-specific gotchas, and DOM observations across runs. This is
 the project's institutional-memory file: every run reads it up-front and
 appends to it on exit.
 
-> **Why this exists.** Without it, every cron tick re-figures the same DOM
+> **Why this exists.** Without it, every scheduled tick re-figures the same DOM
 > change / shortener-redirect quirk / rate-limit pattern from scratch. The
 > learnings file is how the agent gets smarter at running this specific pair
 > over time. (Ethan voice 6029, 2026-05-01: "Have instructions so the agent
@@ -25,7 +25,7 @@ link to it.
 
 ## Lifecycle
 
-1. **Start of every run** (`repost-run`, `repost-backfill`, the cron-spawned
+1. **Start of every run** (`repost-run`, `repost-backfill`, the scheduler-spawned
    subagent): Read `~/.repost-with-agent/pairs/<id>/learnings.md` if it
    exists. Treat it as up-front context — quirks to be aware of before you
    start scraping or composing. **Prioritize the most-recent entry's
@@ -101,7 +101,7 @@ that saves a lot of time.")
 
 - **`### Selectors`** — one bullet per element. Format:
   `` `<label>`: `<selector>` (<platform>, <where>) ``. Use whatever
-  selector form your browser MCP can re-use (CSS, ARIA path, text-based
+  selector form your current-harness browser automation can re-use (CSS, ARIA path, text-based
   locator). When in doubt, prefer ARIA / role-based selectors — they
   survive cosmetic redesigns better than class chains.
 - **`### Step playbook`** — numbered imperative steps that REFERENCE

@@ -1,5 +1,26 @@
 # Changelog
 
+## v4.3.1 — 2026-05-04 — OpenClaw first-class harness path
+
+**Compatibility/documentation fix.** Keeps the plugin skill-only and agent-agnostic, but removes the remaining Claude Code default assumptions from the active OpenClaw path.
+
+### Changed
+
+- Manifests now describe Repost-with-agent as an agent/OpenClaw-compatible current-harness plugin instead of a Claude Code-first plugin.
+- Runtime instructions now name OpenClaw's built-in browser and `message` / Telegram-channel delivery as first-class paths, with Claude Code's `chrome-devtools-mcp` + `plugin:telegram:telegram` as Claude-specific equivalents.
+- Scheduler setup now prefers `openclaw cron add ... --message "/repost-run <pair-id>"` for OpenClaw workflows; launchd/crontab shell invocations are fallback paths only when a non-OpenClaw harness is explicitly chosen.
+- README now documents directory-source install/update mechanics: normal repo edits and `git pull` do not require reinstall when the registered plugin path still points at this repo.
+- Pair schema/docs now support `destination.targetType` and `destination.accountDisplayName` so one login can explicitly target the right profile/page/group.
+- Run instructions now require reusing existing browser tabs where possible instead of opening duplicate platform tabs on every scheduled tick.
+- Facebook, Bluesky, and Threads destination notes now require verifying or switching to the configured identity before typing a draft, and stopping with `needs-account-switch` rather than publishing from the wrong account.
+- Removed legacy shell registration helpers; the repo now contains no executable config-helper path. Harness registration is documented as configuration-only.
+- Removed the browser stealth research note so the repo stays aligned with transparent logged-in-session automation and no CAPTCHA / anti-detection bypass guidance.
+- `openclaw.plugin.json` now uses the documented native manifest shape: empty strict `configSchema` plus `skills: ["skills"]`, with no unsupported legacy root-list fields.
+
+### Safety
+
+No posting code, platform API integration, MCP server, CLI runtime, shell registration helper, or browser-publishing action was added. This remains a Markdown skill/command plugin; the running agent performs the workflow with its native tools.
+
 ## v4.3.0 — 2026-05-01 — Layer 2 semantic dedupe (agent reasoning over destination)
 
 **Additive change.** Adds a second dedupe layer on top of v4.2.0's existing
@@ -360,7 +381,7 @@ don't code anything in.")
 - `examples/`, `site/`, `.github/` workflows, `PLAN.md`.
 - `commands/preview.md` (functionality folded into `commands/run.md`).
 - `scripts/agent-bridge-handler.sh`, `scripts/init_repost_with_agent_workspace.py`,
-  `scripts/install-for-openclaw.sh` — the v3 installer rig.
+  and the old v3 OpenClaw registration helper.
 - `docs/WORKFLOW.md`, `docs/scheduling.md`, `docs/safety.md`,
   `docs/setup-flow.md`, `docs/migration-v2-to-v3.md`, the v3 versions of
   `docs/architecture.md`, `docs/migration.md`, `docs/url-expander.md`,
@@ -386,9 +407,6 @@ don't code anything in.")
   - `repost-notify` — Telegram-confirm payload + non-negotiable rule.
 - 4 `commands/*.md` slash command wrappers: `/pair`, `/repost-run`,
   `/repost-backfill`, `/repost-setup-cron`.
-- `scripts/install.sh` + `scripts/uninstall.sh` — idempotent JSON edits to
-  `~/.claude/settings.json` + `~/.openclaw/openclaw.json`. Backs up pre-edit
-  files. Validates post-edit JSON, restores backup on parse failure.
 - `templates/pairs.json.template`, `posted.jsonl.template`,
   `audit.jsonl.template`.
 - `docs/state-files.md` — formal schemas + audit-event taxonomy.
@@ -404,8 +422,8 @@ don't code anything in.")
   description, license, keywords, repository, homepage.
 - `.claude-plugin/plugin.json` — declares 10 skills + 4 commands. NO
   `mcpServers` section.
-- `openclaw.plugin.json` — `runtime` block removed entirely.
-  `skills_roots` + `commands_roots` only. NO `mcp` section.
+- `openclaw.plugin.json` — `runtime` block removed entirely; OpenClaw-native
+  metadata declares skill directories only. NO `mcp` section.
 - `pairs.json` schema — `schemaVersion` 3 → 4. Deprecated fields ignored
   (`policy.requirePreviewBeforeFirstLiveRun`, `policy.preferOfficialApi`,
   `dedupe.strategy`, `*.authRef`, `source.type`, `destination.type`).
@@ -430,13 +448,8 @@ don't code anything in.")
 
 ### Migration
 
-`scripts/install.sh` is idempotent. Running it on a fresh v4 clone:
-
-1. Backs up `~/.claude/settings.json` and `~/.openclaw/openclaw.json` to
-   `<file>.bak.<unix-ts>`.
-2. Adds repost-with-agent as a directory-source marketplace + enabled plugin.
-3. Ensures `~/.repost-with-agent/` exists with empty `pairs.json` if missing.
-4. Validates JSON post-edit; restores backup on parse failure.
+Register the v4 clone as a directory-source plugin in the target harness config,
+then back up and migrate `~/.repost-with-agent/pairs.json` if it is still v3.
 
 For v3 → v4 schema migration on `pairs.json`, see `docs/migration-v3-to-v4.md`.
 
@@ -533,7 +546,7 @@ INSTRUCTIONS.md, openclaw.plugin.json, and every slash command body.
 - `docs/url-expander.md` (new), `docs/migration-v2-to-v3.md` (new), `docs/destinations/{linkedin,x,bluesky,threads,facebook}.md` (new) added.
 - `examples/pairs.example.json` rewritten to v3 shape (`platform` + `runMode` + `schemaVersion: 3`).
 - `.env.example` cut down to just the data-dir override and Telegram-notify fallback. v2's X / LinkedIn / Facebook / Playwright env vars are gone.
-- `scripts/install-for-openclaw.sh` updated to reflect v3 (no X auth flow / Playwright profile / browser-login walkthrough; just notify + pair create + schedule).
+- OpenClaw registration notes updated to reflect v3 (no X auth flow / Playwright profile / browser-login walkthrough; just notify + pair create + schedule).
 - Bumped `VERSION` to `3.0.0` in both `package.json` and `src/index.ts`.
 
 ### Removed

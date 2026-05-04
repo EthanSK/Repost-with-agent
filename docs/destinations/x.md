@@ -22,7 +22,7 @@ destination).
 
 ## Auth
 
-- Login: the browser MCP profile must already have a logged-in `x.com`
+- Login: the current harness browser profile must already have a logged-in `x.com`
   session. The agent cannot log in for the user. If the session is expired,
   append `pair.publish.failed` audit with `category: "needs-login"` and stop.
 

@@ -1,17 +1,18 @@
-# CLAUDE.md — Repost-with-agent (v4.3.0)
+# CLAUDE.md — Repost-with-agent (v4.3.1)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.3.0 architecture in one paragraph
+## v4.3.1 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
-your native toolkit (Read, Edit, Write, Bash, browser MCP,
-plugin:telegram:telegram). The skills under `skills/<name>/SKILL.md` are
-step-by-step procedures you read and execute directly. The slash commands
-under `commands/*.md` are thin wrappers that load the matching skill.
+your native toolkit: Read, Edit, Write, Bash, current-harness browser
+automation, and current-harness Telegram/message delivery. The skills under
+`skills/<name>/SKILL.md` are step-by-step procedures you read and execute
+directly. The slash commands under `commands/*.md` are thin wrappers that load
+the matching skill.
 
 Supported platforms: **LinkedIn, X, Bluesky, Threads, Facebook**. Platform
 labels are free-form strings in pair config; you read them and pick the right
@@ -45,7 +46,10 @@ Your session must have:
   when this is truly a Claude Code run, OpenClaw's built-in browser when this
   is an OpenClaw run, or another explicit browser adapter. Do not route an
   OpenClaw-owned Repost-with-agent run through Claude Code unless Ethan asks.
-- **`plugin:telegram:telegram`** — for the publish-confirmation pings.
+- **Telegram/message delivery in the current harness** — OpenClaw should use
+  its first-class `message` tool / Telegram channel; Claude Code should use
+  `plugin:telegram:telegram`; other harnesses should use their equivalent
+  configured Telegram delivery path. Used for the publish-confirmation pings.
 
 If any is missing, the relevant skill surfaces the missing dependency and
 stops. There's no fallback.
@@ -67,13 +71,13 @@ Edit, Write tools.
   `docs/destinations/<platform>.md` only when learnings.md is silent.
   Full lifecycle: `skills/repost-learnings/SKILL.md`.
 - `pairs/<id>/backfill-state.json` — transient backfill resume state.
-- `pairs/<id>/logs/cron.log` — stdout+stderr from the launchd / cron tick.
+- `pairs/<id>/logs/cron.log` — stdout/stderr from fallback launchd/crontab ticks when that scheduler path is used.
 
 Full schemas + audit-event taxonomy: `docs/state-files.md`.
 
 ## Two run-modes
 
-- **`listen-for-future`**: tail new posts on a schedule (launchd / cron).
+- **`listen-for-future`**: tail new posts on a current-harness scheduler (OpenClaw cron preferred for OpenClaw workflows).
   Default. Each tick spawns a fresh subagent which runs `skills/repost-run/SKILL.md`.
 - **`backfill`**: one-shot walk back through historical source posts,
   newest-first (Ethan voice 6021). Use `skills/repost-backfill/SKILL.md`.
@@ -132,7 +136,7 @@ when on the fence, skip.
 - `pair.publish.semantic_duplicate` — Layer 2 dedupe match; candidate skipped pre-publish. Includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.uncertain` — destination scrape failed; candidates skipped.
 
-## Cron / launchd context
+## Scheduled-run context
 
 The scheduler entry installed by `skills/repost-listen-for-future-setup/SKILL.md`
 should invoke the same harness the user chose for the workflow. If the current
@@ -147,7 +151,7 @@ ticks.
 ## Project rules in one paragraph
 
 - New pairs default to `mode: "preview-only"` and `enabled: false`. Intentional.
-- Live publishes always need either `mode: "live-approved"` (for cron-driven
+- Live publishes always need either `mode: "live-approved"` (for scheduled
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.
 - Dedupe is re-checked at every publish — both layers (Layer 1 string
@@ -179,7 +183,7 @@ survive untouched. See `docs/migration-v3-to-v4.md` for the full walkthrough.
 ## What to do if you find a `pair.publish.notify_skipped_unconfigured` audit event
 
 1. Tell Ethan directly via Telegram (so the missed ping is replaced).
-2. Verify `plugin:telegram:telegram` is installed + enabled in this harness.
+2. Verify the current harness Telegram/message delivery tool is installed + enabled in this harness.
 3. Re-run the affected publish flow once Telegram is wired up.
 4. File the gap in this file with date + audit-event line so future sessions
    see it.

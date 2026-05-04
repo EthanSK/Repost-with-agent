@@ -11,14 +11,16 @@ framework on disk. There is no CLI, no MCP server, no platform SDK. **You**
 (the running agent) do all the work using your native toolkit: Read, Edit,
 Write, Bash, your current harness's browser automation (OpenClaw built-in
 browser, `chrome-devtools-mcp` when the current harness is Claude Code, or
-another explicit browser adapter), and `plugin:telegram:telegram`. The skills under
+another explicit browser adapter), and the current harness's Telegram/message
+delivery tool (OpenClaw `message` tool / Telegram channel, Claude Code
+`plugin:telegram:telegram`, or equivalent). The skills under
 `skills/<name>/SKILL.md` are step-by-step procedures you execute directly. The
 slash commands under `commands/*.md` are thin wrappers that load the matching
 skill.
 
 The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
 every run — pagination caps, DOM changes, rate-limit signatures, and
-account-specific gotchas accumulate across cron ticks instead of being
+account-specific gotchas accumulate across scheduled ticks instead of being
 rediscovered from scratch each time. v4.2.0 adds a structured entry shape:
 each entry can include optional `### Selectors`, `### Step playbook`, and
 `### Quirks` sub-sections so the next run can grep + skim for actionable
@@ -34,7 +36,7 @@ the full lifecycle + good/bad-entry guidance.
 > confirming the source and destination URL. The plugin enforces this in the
 > `repost-notify` skill (and in the publish flow steps of `repost-run` and
 > `repost-backfill`). If you trigger a publish through any non-skill path
-> (manual one-off via the browser MCP outside the skill flow, etc.), you MUST
+> (manual one-off via current-harness browser automation outside the skill flow, etc.), you MUST
 > also fire a Telegram confirmation. Silent publishes are a bug. (Ethan voice
 > 5977 + 5978, 2026-05-01.)
 
@@ -45,7 +47,7 @@ the full lifecycle + good/bad-entry guidance.
 - **Per-pair audit**: `~/.repost-with-agent/pairs/<id>/audit.jsonl` (NDJSON, append-only).
 - **Per-pair learnings**: `~/.repost-with-agent/pairs/<id>/learnings.md` (free-form Markdown prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections per entry).
 - **Backfill resume state**: `~/.repost-with-agent/pairs/<id>/backfill-state.json` (transient).
-- **Cron / launchd logs**: `~/.repost-with-agent/pairs/<id>/logs/cron.log`.
+- **Scheduler logs**: `~/.repost-with-agent/pairs/<id>/logs/cron.log` is only for fallback launchd/crontab paths; OpenClaw cron keeps job/run state in OpenClaw.
 - **Skill bodies**: `skills/<name>/SKILL.md`.
 - **Slash command wrappers**: `commands/*.md`.
 - **Per-platform DOM hints**: `docs/destinations/<platform>.md`.
@@ -56,7 +58,7 @@ the full lifecycle + good/bad-entry guidance.
 1. **Telegram-confirm every successful publish.** Non-negotiable. See above.
 2. **New pairs default to `mode: "preview-only"` and `enabled: false`.** Don't
    flip without explicit, current-conversation user authorization.
-3. **Live publishes need either `mode: "live-approved"` (for cron-driven ticks)
+3. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
 4. **Dedupe runs in two layers, both must clear.**
@@ -140,7 +142,7 @@ If the user runs `/repost-run <id>`:
    the structured shape (prose + optional `### Selectors` / `### Step
    playbook` / `### Quirks`).
 
-If the cron job spawned you fresh with `/repost-run all`:
+If the scheduler spawned you fresh with `/repost-run all`:
 
 1. Read `~/.repost-with-agent/pairs.json`.
 2. For each pair where `enabled === true && mode === "live-approved" && runMode === "listen-for-future"`, run `skills/repost-run/SKILL.md` end-to-end.
