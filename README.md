@@ -102,7 +102,8 @@ When you invoke `/repost-run linkedin-to-x`:
    URLs, ≥80-char prefix overlap).
 7. Agent picks the newest non-duplicate item.
 8. Agent expands shortened URLs (`lnkd.in`, `t.co`, `bit.ly`, etc.) via
-   `curl -sIL` in Bash.
+   `curl -sIL` in Bash, and does **not** add the source platform permalink to
+   the destination post body. Source URLs stay in state/audit/Telegram only.
 9. Agent navigates to `x.com/compose/post`, fills the textarea, clicks Post.
 10. Agent reads the resulting URL from the page.
 11. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`.

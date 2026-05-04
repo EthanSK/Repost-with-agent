@@ -77,7 +77,14 @@ In the `repost-run` step 6 flow:
 1. Take the candidate's text body from the source scrape.
 2. Run URL expansion across every URL in the body.
 3. Substitute resolved URLs.
-4. Append the source canonical URL as a backlink.
+4. Do **not** append the source canonical URL as a public backlink. Store the
+   source canonical URL in `posted.jsonl`, audit, and Telegram confirmation
+   only. The destination post should be native to the destination platform.
+
+If the source text contains source-platform wrapper URLs (for example
+`lnkd.in` / LinkedIn safety redirects), resolve them to the underlying
+non-LinkedIn final URL before publishing to X. Do not publish LinkedIn wrapper
+links to X unless the LinkedIn URL itself is the intended content.
 
 For each successful expansion, append `pair.publish.url_expanded` to
 `audit.jsonl`:

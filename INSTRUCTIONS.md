@@ -77,7 +77,12 @@ the full lifecycle + good/bad-entry guidance.
    `pair.publish.failed` audit with `category: "needs-login"` and stop.
 7. **Append, don't rewrite.** `posted.jsonl` and `audit.jsonl` are append-only.
    Use `>>` in Bash.
-8. **Use the browser MCP, not Playwright.** The plugin has zero Playwright /
+8. **Destination posts are native posts, not source receipts.** Expand any URLs
+   in the source body to their final non-source-platform URL where possible
+   (for example `lnkd.in` → the underlying article/video), but do **not** append
+   the source platform permalink to the public destination draft. Keep source
+   canonical URLs in `posted.jsonl`, audit, and Telegram confirmation only.
+9. **Use the browser MCP, not Playwright.** The plugin has zero Playwright /
    API-SDK dependencies. The browser MCP your harness provides is the only
    browser path.
 

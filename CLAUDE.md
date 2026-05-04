@@ -85,6 +85,12 @@ in Bash. Shorteners covered: `lnkd.in`, `t.co`, `bit.ly`, `buff.ly`, `goo.gl`,
 `tinyurl.com`, `ow.ly`, `is.gd`, `rebrand.ly`, `tr.im`, `shorturl.at`, `cutt.ly`,
 `rb.gy`. Failure is fail-soft — original URL kept.
 
+Do **not** append the source platform's canonical URL to the public destination
+draft. The destination post should read like a fresh native post; keep the
+source canonical URL only in `posted.jsonl`, audit events, and Telegram
+confirmation. If the source body contains `lnkd.in` / LinkedIn safety wrapper
+links, resolve them to the underlying non-LinkedIn URL before posting to X.
+
 See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 
 ## Two-layer dedupe (v4.3.0+)

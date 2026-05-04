@@ -28,6 +28,10 @@ appear in your X feed (when reposted by this plugin) as `lnkd.in/abc → t.co/xy
 
 Expanding to the canonical URL fixes all three.
 
+Separate rule: do not add LinkedIn source permalinks to X posts just as a
+backlink. Reposts should feel like fresh native destination posts; the source
+permalink is bookkeeping for `posted.jsonl`, audit, and Telegram confirmation.
+
 ## Algorithm
 
 See `skills/repost-url-expand/SKILL.md` for the agent-facing procedure. In
@@ -38,6 +42,9 @@ short:
    -sIL --max-time 5 --max-redirs 5 -o /dev/null -w '%{url_effective}'`.
 3. Substitute the resolved URL.
 4. Fail-soft: any error keeps the original URL.
+5. Do **not** append the source platform's canonical URL to the public post.
+   Source canonical URLs belong in state/audit/Telegram confirmation, not in the
+   destination post body.
 
 ## Per-platform quirks
 

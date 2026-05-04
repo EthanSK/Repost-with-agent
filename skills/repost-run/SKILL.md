@@ -200,9 +200,15 @@ Use the `repost-url-expand` skill semantics:
    `pair.publish.url_expand_failed` to audit with the error.
 5. Append a `pair.publish.url_expanded` audit event per successful expansion.
 
-Append the source canonical URL at the end of the draft if not already present:
-`<draft body>\n\n<pair.source.canonicalUrl>` — this gives the destination post
-a backlink and helps with future destination-dedupe.
+Do **not** append the source platform's canonical URL to the public draft.
+The destination post should read like a fresh native post on that destination,
+not like a cross-post receipt. Keep the source canonical URL only in
+`posted.jsonl`, audit events, and the Telegram confirmation.
+
+If the source body contains URLs, expand/resolve them to the non-source-platform
+final URL before publishing (for example `lnkd.in` / LinkedIn safety redirect →
+the underlying article or video URL). Do not leave LinkedIn wrapper URLs in an X
+post unless the LinkedIn URL itself is the intended content.
 
 ## Step 7 — Length check
 
@@ -213,8 +219,9 @@ Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 If the draft exceeds the cap:
 
 - `policy.overlengthStrategy === "skip"`: append a `pair.publish.skipped_overlength` audit event and stop. Tell the user.
-- `policy.overlengthStrategy === "truncate"`: shrink to `(cap − 24)` chars,
-  append `… <source canonical URL>`. Append `pair.publish.truncated` audit.
+- `policy.overlengthStrategy === "truncate"`: shrink to fit the destination
+  cap without adding a source-platform backlink. Append `pair.publish.truncated`
+  audit.
 
 ## Step 8 — Publish
 

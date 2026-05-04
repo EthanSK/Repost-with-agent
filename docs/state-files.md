@@ -77,7 +77,8 @@ skill workflows.
   - `backfill` — one-shot historical walk (newest-first).
 - `policy.overlengthStrategy`:
   - `skip` — drafts exceeding destination char cap are skipped. Default.
-  - `truncate` — drafts are shrunk to `(cap − 24)` chars + `… <source URL>` suffix.
+  - `truncate` — drafts are shrunk to fit the destination cap without adding a
+    source-platform permalink suffix.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
 - `policy.semanticDedupeEnabled` — when `true` (default), Layer 2 semantic
   dedupe runs after Layer 1 fuzzy-string match clears a candidate. When
