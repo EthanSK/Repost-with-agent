@@ -27,6 +27,10 @@ harness or Ethan explicitly asks for them.
   once before enabling scheduled publishes).
 - The user MUST already be logged into source + destination platforms in the
   current harness browser profile. You cannot log in for them.
+- **OpenClaw hard rule:** OpenClaw scheduled ticks MUST use OpenClaw's own
+  browser/profile (`profile: openclaw`, CDP port `18800`). Do **not** use
+  Ethan's personal browser, Chrome relay, or `profile="user"` for
+  Repost-with-agent unless Ethan explicitly overrides this for a specific run.
 
 ## Cadence
 

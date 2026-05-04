@@ -24,6 +24,11 @@ You MUST have these available in the current session:
   click. Do not hand the run to Claude Code merely because Claude Code is one
   supported harness; the current agent owns the run unless Ethan explicitly
   asks for a different harness.
+  - **OpenClaw hard rule:** when this workflow is running in OpenClaw, use
+    OpenClaw's own browser/profile (`profile: openclaw`, CDP port `18800`). Do
+    **not** use Ethan's personal browser, Chrome relay, or `profile="user"`
+    for Repost-with-agent unless Ethan explicitly overrides this for a specific
+    run.
 - **Telegram/message delivery in the current harness** — OpenClaw should use
   its first-class `message` tool / Telegram channel; Claude Code should use
   `plugin:telegram:telegram`; other harnesses should use their equivalent

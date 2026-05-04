@@ -16,7 +16,10 @@ delivery tool (OpenClaw `message` tool / Telegram channel, Claude Code
 `plugin:telegram:telegram`, or equivalent). The skills under
 `skills/<name>/SKILL.md` are step-by-step procedures you execute directly. The
 slash commands under `commands/*.md` are thin wrappers that load the matching
-skill.
+skill. For OpenClaw, Repost-with-agent MUST use OpenClaw's own browser/profile
+(`profile: openclaw`, CDP port `18800`) — not Ethan's personal browser/profile,
+Chrome relay, or `profile="user"`, unless Ethan explicitly overrides this for a
+specific run.
 
 The agent maintains a per-pair `learnings.md` so it doesn't re-figure quirks
 every run — pagination caps, DOM changes, rate-limit signatures, and
@@ -76,7 +79,11 @@ the full lifecycle + good/bad-entry guidance.
      `policy.blockOnUncertainDuplicate` is `false`.
 5. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
    operates on user-controlled, transparent login sessions.
-6. **You CANNOT log in for the user.** If a session is expired, append
+6. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
+   (`profile: openclaw`, CDP port `18800`) for all Repost-with-agent OpenClaw
+   work. Do not touch Ethan's personal browser/profile unless he explicitly says
+   to for that run.
+7. **You CANNOT log in for the user.** If a session is expired, append
    `pair.publish.failed` audit with `category: "needs-login"` and stop.
 7. **Append, don't rewrite.** `posted.jsonl` and `audit.jsonl` are append-only.
    Use `>>` in Bash.

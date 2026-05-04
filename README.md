@@ -8,8 +8,9 @@ Bash, the current harness's browser automation, and the current harness's
 Telegram/message delivery tool) does everything.
 
 Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
-operates on the user's transparent, logged-in sessions — no API keys, no
-stealth, no CAPTCHA / 2FA bypass.
+operates on transparent, logged-in sessions — no API keys, no stealth, no
+CAPTCHA / 2FA bypass. For OpenClaw runs, that means OpenClaw's own browser
+profile (`openclaw`, CDP port `18800`), not Ethan's personal browser/profile.
 
 ## TL;DR
 

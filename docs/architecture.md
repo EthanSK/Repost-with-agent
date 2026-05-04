@@ -8,10 +8,12 @@ toolkit: Read, Edit, Write, Bash, browser automation, and Telegram/message
 delivery.
 
 OpenClaw runs should use OpenClaw's built-in browser and `message` /
-Telegram-channel tooling. Claude Code runs should use `chrome-devtools-mcp` and
-`plugin:telegram:telegram`. Do not hand off to Claude Code just because it is
-listed as one supported harness; the harness that received the workflow owns it
-unless Ethan explicitly chooses another one.
+Telegram-channel tooling. For Repost-with-agent, OpenClaw means OpenClaw's own
+browser/profile (`profile: openclaw`, CDP port `18800`) — not Ethan's personal
+browser/profile, Chrome relay, or `profile="user"`. Claude Code runs should use
+`chrome-devtools-mcp` and `plugin:telegram:telegram`. Do not hand off to Claude
+Code just because it is listed as one supported harness; the harness that
+received the workflow owns it unless Ethan explicitly chooses another one.
 
 The plugin contains:
 
