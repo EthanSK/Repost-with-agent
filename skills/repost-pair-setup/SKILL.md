@@ -116,15 +116,20 @@ Some sites authenticate through a parent account and then require selecting the
 actual posting identity. Save the intended identity in the pair config and make
 the run skill verify it before typing any draft.
 
-- `destination.accountHint` is the machine-useful handle / vanity path.
-- `destination.accountDisplayName` is the human-visible account or page name.
+- `destination.accountDisplayName` is the primary human-visible name to match in
+  the browser UI. When Ethan says "use whatever is logged in", configure this to
+  the currently logged-in visible name.
+- `destination.accountHint` is a loose human hint (name, handle, vanity path, or
+  page label), not a separate authoritative account id unless Ethan explicitly
+  gives an exact handle.
 - `destination.targetType` tells the agent whether to expect a `profile`,
   `page`, or `group` composer.
 
-When configuring Facebook pages, prefer `targetType: "page"` and navigate to the
-page URL (`https://www.facebook.com/<page-handle>`) before composing. If the UI
-shows a profile/page switcher, the running agent must switch to, or verify it is
-already using, `accountDisplayName` before posting.
+When configuring Facebook/Meta surfaces, prefer the visible logged-in name Ethan
+expects the browser to use. If the UI shows a profile/page switcher, the running
+agent must switch to, or verify it is already using, `accountDisplayName` before
+posting. Do not block merely because a stale handle differs from the logged-in
+profile; update the pair to the logged-in visible name.
 
 ## Writing the pair
 

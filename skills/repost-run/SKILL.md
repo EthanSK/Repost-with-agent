@@ -49,12 +49,15 @@ substitute curl/Playwright/etc.
    (default 1), `policy.overlengthStrategy` (default `"skip"`),
    `policy.blockOnUncertainDuplicate` (default true), and
    `policy.globalDedupeEnabled` (default true).
-5. Note optional destination identity fields:
+5. Note optional destination identity fields. These are **UI matching hints**,
+   not an external account registry:
+   - `destination.accountDisplayName` — the visible logged-in name/page/profile
+     name the agent should see in the browser UI. Prefer this over exact handles
+     when Ethan says "use whatever is logged in".
+   - `destination.accountHint` — optional loose hint (name, handle, vanity path,
+     or page label). Do not treat it as a hard identity id unless Ethan
+     explicitly configured an exact handle.
    - `destination.targetType` (`profile`, `page`, or `group`; default `profile`).
-   - `destination.accountDisplayName` (visible account/page name to verify).
-   - `destination.accountHint` (handle / vanity path). These fields are
-     especially important on Facebook and Meta surfaces where one login can
-     post as multiple identities.
 
 ## Browser tab reuse rule
 
@@ -275,14 +278,19 @@ This is where the running agent drives the user's logged-in browser.
 
 1. Reuse an existing destination tab if one is already open; otherwise navigate
    to the destination's compose URL (see `docs/destinations/<platform>.md`).
-2. Verify the active posting identity matches the pair config BEFORE typing:
-   - Match `destination.accountHint` and/or `destination.accountDisplayName`.
-   - Respect `destination.targetType` (`profile`, `page`, `group`).
+2. Verify the active posting identity by **visible UI name** BEFORE typing:
+   - Match `destination.accountDisplayName` first; use `destination.accountHint`
+     only as a loose human hint. The pair is not meant to maintain a separate
+     external account identity database.
+   - If Ethan asked to use "whatever is logged in", configure the destination to
+     the currently visible logged-in name/profile, then match that name in the UI.
+   - Respect `destination.targetType` (`profile`, `page`, `group`) only as a UI
+     expectation for where the composer appears.
    - If the platform exposes a profile/page/account switcher, switch to the
-     configured identity first.
-   - If you cannot confirm or switch to the configured identity, append
-     `pair.publish.failed` with `category: "needs-account-switch"`, tell Ethan,
-     and stop. Do not publish from the wrong profile/page.
+     visible configured name if available.
+   - If no configured/visible name can be confirmed, append `pair.publish.failed`
+     with `category: "needs-account-switch"`, capture/report the visible screen,
+     and stop. Do not publish from an obviously wrong profile/page.
 3. Wait for the textarea / contenteditable.
 4. Click into it.
 5. Type the draft EXACTLY. Don't paraphrase, don't add hashtags.
