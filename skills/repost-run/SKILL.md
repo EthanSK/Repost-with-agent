@@ -343,7 +343,11 @@ this destination.
 
 Use the current harness's primary user communication channel / message delivery
 tool (OpenClaw `message` / Telegram in Ethan's setup, Claude Code
-`plugin:telegram:telegram` reply, or equivalent). Message format:
+`plugin:telegram:telegram` reply, or equivalent). In Ethan's OpenClaw install,
+this is **not** inferred from the current/default account: call
+`message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<payload>)`.
+Never omit `accountId`, never use `accountId="default"`, and never paste raw
+JSON/tool output into Telegram. Message format:
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>

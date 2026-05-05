@@ -24,9 +24,11 @@ This is enforced by EVERY publish path in the plugin (`repost-run`,
 
 Use the primary user-facing message delivery path in the current harness:
 
-- **OpenClaw:** use the first-class `message` tool / configured Telegram channel for Ethan.
+- **OpenClaw / Ethan hard rule:** do **not** rely on the default/current Telegram account. For any user-visible Repost notification in Ethan's OpenClaw install, call the first-class `message` tool with exactly `channel="telegram"`, `accountId="clordlethird"`, and `target="telegram:6164541473"`. Never omit `accountId`, and never use `accountId="default"` for Repost notifications.
 - **Claude Code:** use `plugin:telegram:telegram`'s `reply` tool when that is the configured user channel.
 - **Other harnesses:** use the equivalent configured primary communication channel.
+
+Keep Telegram payloads human-readable and short. Do **not** paste raw JSON, tool results, audit rows, internal transcripts, or stack dumps into Telegram; keep that evidence in files/logs and summarize it in plain language.
 
 If no primary message delivery path is loaded in the current session, surface
 the error and stop the publish flow. Do not silently skip.
@@ -50,8 +52,8 @@ Project-tag / prefix rules from the current harness's user instructions still ap
 2. Build the message payload above.
 3. Call the current harness's primary message delivery tool with the appropriate
    recipient:
-   - OpenClaw: use the `message` tool / Telegram channel/account/target from
-     the current session or repost-notification config.
+   - OpenClaw / Ethan: use `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<payload>)`.
+   - OpenClaw / other users: use the explicitly configured Telegram channel/account/target.
    - Claude Code: use `plugin:telegram:telegram` `reply` with the configured
      `chat_id`.
    - Other harnesses: use their equivalent configured Telegram delivery path.
@@ -81,7 +83,7 @@ If no primary message delivery tool is loaded or configured in the current harne
 When the user asks "test the repost telegram" or runs the test before flipping
 a pair to live:
 
-1. Send a hardcoded test message:
+1. Send a hardcoded test message using the same routing rule above (in Ethan's OpenClaw install: `channel="telegram"`, `accountId="clordlethird"`, `target="telegram:6164541473"`):
 
    ```
    [Repost-with-agent] 🧪 Notify test

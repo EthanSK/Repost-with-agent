@@ -30,6 +30,9 @@ to install the scheduler unless ALL of these hold:
 - [ ] At least one preview run has succeeded (audit.jsonl shows a `pair.preview.success` or `pair.publish.success`)
 - [ ] Telegram/message delivery is configured (run `repost-notify` test once)
 
+
+**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+
 If any check fails, the skill tells the user which prerequisite is missing and
 stops.
 

@@ -96,6 +96,9 @@ Concretely, when `/repost-run linkedin-to-x` is invoked:
 9. **Agent Telegram-confirms.** Uses current-harness Telegram/message delivery
    (OpenClaw `message`, Claude Code `plugin:telegram:telegram`, or equivalent).
 
+
+**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+
 No code in this plugin does any of those things. The skills tell the agent what
 to do; the agent does it.
 

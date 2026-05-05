@@ -269,7 +269,11 @@ good/bad entry example showing all three optional sub-sections.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
 Backfill is the highest-volume publish path. Wire Telegram pings carefully:
-one per successful publish (step 6), plus an optional final-summary ping.
+one per successful publish (step 6), plus an optional final-summary ping. In
+Ethan's OpenClaw install, every user-visible Repost ping MUST use
+`message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`.
+Never omit `accountId`, never use `accountId="default"`, and never paste raw
+JSON/tool output into Telegram.
 
 ## See also
 

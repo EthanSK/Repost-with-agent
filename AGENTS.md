@@ -121,3 +121,6 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - `docs/architecture.md`, `docs/state-files.md`, `docs/migration-v3-to-v4.md`
 - `docs/url-expander.md`, `docs/destinations/<platform>.md`
 - `skills/<name>/SKILL.md` for each skill body
+
+
+**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.

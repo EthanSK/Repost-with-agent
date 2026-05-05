@@ -72,10 +72,12 @@ hammering every few minutes burns quota / risks rate-limits without payoff.
 
 3. Delivery notes:
    - `/repost-run` itself MUST confirm every successful publish via
-     `repost-notify`; that is the important user-facing ping. The confirmation
-     goes through the primary current-harness communication channel with the
-     user (Telegram in Ethan's OpenClaw setup, or the harness equivalent
-     elsewhere) and includes every destination post link created in the run.
+     `repost-notify`; that is the important user-facing ping. In Ethan's
+     OpenClaw setup, this user-visible Repost confirmation MUST use
+     `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short payload>)`.
+     Never omit `accountId`, never use `accountId="default"`, and never send raw
+     JSON/tool output to Telegram. Other harnesses should use their explicit
+     configured user-facing channel.
    - Add `--announce --channel telegram --account <account> --to <chat-id>` only
      if Ethan explicitly wants every scheduled tick's final transcript delivered
      too. Otherwise it is usually noise.

@@ -43,6 +43,9 @@ the full lifecycle + good/bad-entry guidance.
 > also fire a publish confirmation. Silent publishes are a bug. (Ethan voice
 > 5977 + 5978, 2026-05-01.)
 
+
+**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+
 ## Where things live
 
 - **Pair configs**: `~/.repost-with-agent/pairs.json` (schemaVersion 4).
