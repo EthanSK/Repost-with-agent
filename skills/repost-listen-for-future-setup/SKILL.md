@@ -23,7 +23,7 @@ harness or Ethan explicitly asks for them.
 - The pair MUST be in `mode === "live-approved"` for the scheduler to actually
   publish. Refuse to schedule non-live-approved pairs unless Ethan explicitly
   asks for a preview-only scheduler.
-- Telegram/message delivery MUST be configured (run the `repost-notify` test
+- `notification.delivery` MUST be configured and tested (run the `repost-notify` test
   once before enabling scheduled publishes).
 - The user MUST already be logged into source + destination platforms in the
   current harness browser profile. You cannot log in for them.
@@ -68,16 +68,15 @@ hammering every few minutes burns quota / risks rate-limits without payoff.
    ```
 
    Do not add a restrictive `--tools` list unless you are certain it includes
-   browser automation, file tools, Bash, and Telegram/message delivery.
+   browser automation, file tools, Bash, and configured user-message delivery.
 
 3. Delivery notes:
    - `/repost-run` itself MUST confirm every successful publish via
-     `repost-notify`; that is the important user-facing ping. In Ethan's
-     OpenClaw setup, this user-visible Repost confirmation MUST use
-     `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short payload>)`.
-     Never omit `accountId`, never use `accountId="default"`, and never send raw
-     JSON/tool output to Telegram. Other harnesses should use their explicit
-     configured user-facing channel.
+     `repost-notify`; that is the important user-facing ping. The concrete
+     channel/account/target MUST come from `notification.delivery` in
+     `~/.repost-with-agent/pairs.json` (captured from the current chat/harness
+     during setup). Never rely on default delivery accounts, and never send raw
+     JSON/tool output in user-facing messages.
    - Add `--announce --channel telegram --account <account> --to <chat-id>` only
      if Ethan explicitly wants every scheduled tick's final transcript delivered
      too. Otherwise it is usually noise.
@@ -154,7 +153,7 @@ Before installing the scheduler, verify:
 - [ ] `pair.runMode === "listen-for-future"`
 - [ ] User is logged into source + destination platforms in the current harness browser profile
 - [ ] At least one preview run has succeeded (check audit.jsonl for a `pair.preview.success` or `pair.publish.success` event)
-- [ ] Telegram/message delivery is configured (run the `repost-notify` test skill once, see it land)
+- [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed
 
 If any check fails, refuse to install the scheduler and tell the user which
 prerequisite is missing.

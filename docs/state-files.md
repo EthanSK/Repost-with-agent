@@ -27,6 +27,17 @@ the skill workflows.
 ```json
 {
   "schemaVersion": 4,
+  "notification": {
+    "delivery": {
+      "harness": "openclaw | claude-code | other",
+      "channel": "telegram | slack | discord | ...",
+      "accountId": "<harness account/bot id, optional when the harness has only one>",
+      "target": "<chat/user/channel destination id>",
+      "threadId": "<optional thread/topic id>"
+    },
+    "payloadStyle": "short-human",
+    "noRawToolOutput": true
+  },
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -70,6 +81,8 @@ the skill workflows.
 
 ### Field invariants
 
+- `notification.delivery` — optional but strongly recommended for scheduled/live runs. It records the user-facing notification route the setup agent captured from the current harness/chat. For OpenClaw this maps directly to `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<short payload>)`; other harnesses map the same abstract fields to their own user-message tool. Do not rely on a default account/bot when multiple accounts exist.
+- `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` mean publish pings are concise human summaries, never raw JSON/tool/audit dumps.
 - `id` — kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
 - `enabled` — `false` for new pairs by default. Schedulers ignore disabled pairs.
 - `mode`:
@@ -227,7 +240,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. Categories include `needs-login`, `needs-config`, `needs-account-switch`, `rate-limit`, `platform-error`, and `unknown`. |
 | `pair.publish.notify.success`           | Telegram-confirm delivered. |
 | `pair.publish.notify.failure`           | Telegram-confirm failed. Includes error. **The post itself stayed up.** |
-| `pair.publish.notify_skipped_unconfigured` | Telegram/message delivery not loaded. **Treat as a silent-publish alert.** |
+| `pair.publish.notify_skipped_unconfigured` | User-message delivery not configured/loaded. **Treat as a silent-publish alert.** |
 | `pair.run.no_new_items`                 | Run completed; nothing new to publish. |
 | `pair.backfill.would_publish`           | Dry-run hit on a candidate. |
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
@@ -392,7 +405,7 @@ clean completion. Schema:
 ## File-mode invariants
 
 - `pairs.json` mode: `0644` (default umask). Contains no secrets — Telegram
-  bot tokens etc. live in the current harness's Telegram/message delivery config,
+  bot tokens etc. live in the current harness's message-delivery config,
   not in this plugin.
 - `global-posted.jsonl` mode: `0644`.
 - `posted.jsonl` mode: `0644`.

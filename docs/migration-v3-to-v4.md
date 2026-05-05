@@ -70,7 +70,7 @@ it.
 - The Telegram-on-publish rule is now enforced by the `repost-notify` skill
   (and replayed in `repost-run` step 10 + `repost-backfill` step 6) — there's
   no `notify.json` config file in v4. The plugin uses the running session's
-  current-harness Telegram/message delivery config instead.
+  current-harness message-delivery config instead.
 
 ## Schema migration: pairs.json v3 → v4
 

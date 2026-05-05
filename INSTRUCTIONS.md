@@ -44,7 +44,7 @@ the full lifecycle + good/bad-entry guidance.
 > 5977 + 5978, 2026-05-01.)
 
 
-**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+**Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
 
 ## Where things live
 

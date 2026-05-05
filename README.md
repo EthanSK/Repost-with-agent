@@ -5,7 +5,7 @@ through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
 no Playwright.** The plugin ships zero code that does the work — it ships
 instructions (skills) and the agent's existing toolkit (Read, Edit, Write,
 Bash, the current harness's browser automation, and the current harness's
-primary message delivery tool) does everything.
+configured message-delivery tool) does everything.
 
 Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
 operates on transparent, logged-in sessions — no API keys, no stealth, no
@@ -122,10 +122,10 @@ The agent in your harness session must have:
   built-in browser, `chrome-devtools-mcp` when the current harness is Claude
   Code, or another explicit browser adapter. Used to navigate, scrape, fill
   forms, click buttons.
-- **primary message delivery in the current harness** — OpenClaw should use
+- **configured message delivery in the current harness** — OpenClaw should use
   its first-class `message` tool / Telegram channel; Claude Code should use
   `plugin:telegram:telegram`; other harnesses should use their equivalent
-  configured Telegram delivery path. Used to send the mandatory
+  configured delivery path. Used to send the mandatory
   publish-confirmation pings to Ethan.
 
 Do **not** hand a Repost-with-agent run to Claude Code merely because Claude
@@ -337,4 +337,4 @@ missing is the playbook. v4 ships only the playbook.
 MIT. See [`LICENSE`](LICENSE).
 
 
-**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+**Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.

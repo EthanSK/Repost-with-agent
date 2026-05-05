@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "repost-with-agent",
-      "description": "Skill-only reposting workflow plugin. Skills + slash commands instruct the running agent (OpenClaw via its built-in browser, Claude Code via chrome-devtools-mcp, or another explicit browser adapter) how to scrape a source profile, dedupe against history + destination, expand shortened URLs, post via the user's logged-in browser, append history, and Telegram-confirm Ethan. JSON state lives at ~/.repost-with-agent/. No code on disk performs any of the work — the agent does it all with native tools.",
+      "description": "Skill-only reposting workflow plugin. Skills + slash commands instruct the running agent (OpenClaw via its built-in browser, Claude Code via chrome-devtools-mcp, or another explicit browser adapter) how to scrape a source profile, dedupe against history + destination, expand shortened URLs, post via the user's logged-in browser, append history, and notify the user via configured delivery. JSON state lives at ~/.repost-with-agent/. No code on disk performs any of the work — the agent does it all with native tools.",
       "category": "productivity",
       "source": ".",
       "homepage": "https://github.com/EthanSK/Repost-with-agent",

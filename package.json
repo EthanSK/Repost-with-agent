@@ -1,7 +1,7 @@
 {
   "name": "repost-with-agent",
   "version": "4.4.0",
-  "description": "Skill-only agent/OpenClaw-compatible plugin for agent-driven, browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. No CLI, no MCP server, no Playwright, no platform SDKs — just skills + commands + JSON state. OpenClaw is a first-class harness path; the current agent uses its own browser automation and Telegram/message tools.",
+  "description": "Skill-only agent/OpenClaw-compatible plugin for agent-driven, browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. No CLI, no MCP server, no Playwright, no platform SDKs — just skills + commands + JSON state. OpenClaw is a first-class harness path; the current agent uses its own browser automation and message-delivery tools.",
   "license": "MIT",
   "repository": {
     "type": "git",

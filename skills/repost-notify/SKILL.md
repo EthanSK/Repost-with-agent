@@ -1,14 +1,15 @@
 ---
 name: repost-notify
-description: Send a Telegram confirmation to Ethan after a successful repost publish, OR test that Telegram delivery is wired up. Use as part of the repost-run / repost-backfill flow, or standalone when the user asks "test the repost telegram", "send a test ping", or "verify notify is configured".
-when_to_trigger: Immediately after every successful publish from the plugin (mandatory, non-negotiable), OR when the user asks to test Telegram delivery.
+description: Send the configured user-facing confirmation after a successful repost publish, OR test that notification delivery is wired up. Use as part of the repost-run / repost-backfill flow, or standalone when the user asks "test the repost telegram", "send a test ping", or "verify notify is configured".
+when_to_trigger: Immediately after every successful publish from the plugin (mandatory, non-negotiable), OR when the user asks to test notification delivery.
 ---
 
 # Repost Notify
 
 Send the primary-channel confirmation that fires immediately after every
-successful repost publish. In Ethan's OpenClaw setup this is Telegram; in other
-harnesses use the equivalent primary user-facing communication channel.
+successful repost publish. The channel is not inherently Telegram: read the
+configured `notification.delivery` route from `~/.repost-with-agent/pairs.json`
+and map it to the current harness's user-facing message tool.
 
 ## The non-negotiable rule
 
@@ -22,13 +23,17 @@ This is enforced by EVERY publish path in the plugin (`repost-run`,
 
 ## Required tool
 
-Use the primary user-facing message delivery path in the current harness:
+Use the configured primary user-facing message delivery path:
 
-- **OpenClaw / Ethan hard rule:** do **not** rely on the default/current Telegram account. For any user-visible Repost notification in Ethan's OpenClaw install, call the first-class `message` tool with exactly `channel="telegram"`, `accountId="clordlethird"`, and `target="telegram:6164541473"`. Never omit `accountId`, and never use `accountId="default"` for Repost notifications.
-- **Claude Code:** use `plugin:telegram:telegram`'s `reply` tool when that is the configured user channel.
-- **Other harnesses:** use the equivalent configured primary communication channel.
+1. Read `notification.delivery` from `~/.repost-with-agent/pairs.json`.
+2. If it is missing during setup/test, write it from the current harness metadata before scheduling live runs (for example OpenClaw's channel/account/chat target, Slack channel id, Discord channel/user id, etc.). Do not guess or silently fall back to a default bot/account when multiple accounts exist.
+3. Send via the current harness adapter:
+   - **OpenClaw:** call `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<payload>)`.
+   - **Claude Code / other harnesses:** use the configured user-facing delivery tool and equivalent delivery fields.
 
-Keep Telegram payloads human-readable and short. Do **not** paste raw JSON, tool results, audit rows, internal transcripts, or stack dumps into Telegram; keep that evidence in files/logs and summarize it in plain language.
+For Ethan's current OpenClaw install, `notification.delivery` is expected to be `channel="telegram"`, `accountId="clordlethird"`, and `target="telegram:6164541473"`; that is instance data, not a hard-coded product rule.
+
+Keep notification payloads human-readable and short. Do **not** paste raw JSON, tool results, audit rows, internal transcripts, or stack dumps into user-facing messages; keep that evidence in files/logs and summarize it in plain language.
 
 If no primary message delivery path is loaded in the current session, surface
 the error and stop the publish flow. Do not silently skip.
@@ -50,13 +55,10 @@ Project-tag / prefix rules from the current harness's user instructions still ap
 1. After the publish step in `repost-run` / `repost-backfill` returns success
    AND `posted.jsonl` has been appended:
 2. Build the message payload above.
-3. Call the current harness's primary message delivery tool with the appropriate
-   recipient:
-   - OpenClaw / Ethan: use `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<payload>)`.
-   - OpenClaw / other users: use the explicitly configured Telegram channel/account/target.
-   - Claude Code: use `plugin:telegram:telegram` `reply` with the configured
-     `chat_id`.
-   - Other harnesses: use their equivalent configured Telegram delivery path.
+3. Call the current harness's primary message delivery tool with the configured
+   recipient from `notification.delivery`:
+   - OpenClaw: `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<payload>)`.
+   - Claude Code / other harnesses: use their equivalent configured delivery path.
 4. Append `pair.publish.notify.success` to `~/.repost-with-agent/pairs/<id>/audit.jsonl`.
 
 ## Failure path
@@ -76,21 +78,21 @@ If no primary message delivery tool is loaded or configured in the current harne
 1. Append `pair.publish.notify_skipped_unconfigured` to `audit.jsonl`.
 2. Tell the user IMMEDIATELY in chat: this is a silent publish, which is a
    project bug per the non-negotiable rule.
-3. Recommend they configure the current harness's Telegram/message delivery path and re-run.
+3. Recommend they configure `notification.delivery` for the current harness and re-run.
 
 ## Test path (standalone)
 
-When the user asks "test the repost telegram" or runs the test before flipping
+When the user asks to test repost notifications or runs the test before flipping
 a pair to live:
 
-1. Send a hardcoded test message using the same routing rule above (in Ethan's OpenClaw install: `channel="telegram"`, `accountId="clordlethird"`, `target="telegram:6164541473"`):
+1. Send a hardcoded test message using `notification.delivery` and the same adapter rule above:
 
    ```
    [Repost-with-agent] 🧪 Notify test
    This is a test ping confirming the plugin can deliver publish confirmations to you on the primary channel.
    ```
 
-2. Tell the user in chat: "If you see the test ping land in the primary channel, the
+2. Tell the user in chat: "If you see the test ping land in the configured primary channel, the
    plugin is wired up correctly."
 
 3. Don't append audit events for tests.

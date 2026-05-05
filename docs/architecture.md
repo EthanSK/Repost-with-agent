@@ -54,9 +54,9 @@ only `package.json` fields that matter are marketplace/metadata fields such as
 > — Ethan voice 6026, 2026-05-01
 
 When the harness already provides file tools, Bash, browser automation, and
-Telegram/message delivery, the only missing piece for end-to-end reposting is
+configured user-message delivery, the only missing piece for end-to-end reposting is
 the **playbook** — the step-by-step "navigate here, scrape that, dedupe like
-so, expand URLs, post here, log there, ping Ethan". That playbook is exactly
+so, expand URLs, post here, log there, notify the user". That playbook is exactly
 what this plugin's skills are.
 
 Coding the playbook into TypeScript means:
@@ -93,11 +93,11 @@ Concretely, when `/repost-run linkedin-to-x` is invoked:
    tools, then reads the resulting destination URL after submit.
 8. **Agent appends history.** Native Bash `echo '<json>' >> posted.jsonl` and
    `echo '<json>' >> global-posted.jsonl` for publish/catch-up proof.
-9. **Agent Telegram-confirms.** Uses current-harness Telegram/message delivery
-   (OpenClaw `message`, Claude Code `plugin:telegram:telegram`, or equivalent).
+9. **Agent notifies.** Uses `notification.delivery` with the current-harness
+   message tool (OpenClaw `message`, Claude Code's configured channel tool, Slack/Discord/etc. equivalents).
 
 
-**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+**Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
 
 No code in this plugin does any of those things. The skills tell the agent what
 to do; the agent does it.
@@ -116,7 +116,7 @@ to do; the agent does it.
 | Per-platform logic  | TypeScript + skill hints       | Per-platform `docs/destinations/<p>.md` |
 | URL expansion       | `src/core/url-expander.ts`     | `skills/repost-url-expand/SKILL.md` (curl via Bash) |
 | Dedupe              | `src/core/dedupe.ts`           | `skills/repost-dedup*.md` (agent reasoning + grep) |
-| Notify              | `src/core/notify.ts` HTTPS POST | `skills/repost-notify/SKILL.md` (current-harness Telegram/message delivery) |
+| Notify              | `src/core/notify.ts` HTTPS POST | `skills/repost-notify/SKILL.md` (configured current-harness user-message delivery) |
 | Scheduler           | CLI invoked from launchd       | Current harness scheduler invokes a fresh agent/subagent |
 | Schedule update     | `pair edit --schedule-kind cron --expression ...` | Edit `pairs.json`, update/recreate the harness scheduler job |
 
@@ -166,7 +166,7 @@ the typical case) or shell out to `sed` / `awk` if the candidate set is large
 
 - **Browser automation not loaded** → skill body explicitly checks for it; if
   missing, it tells the user and stops. No silent fallthrough.
-- **Telegram/message delivery not loaded** → skill writes
+- **User-message delivery not configured/loaded** → skill writes
   `pair.publish.notify_skipped_unconfigured` to audit.jsonl and surfaces the
   silent publish to the user immediately.
 - **Source / destination login expired** → `category: "needs-login"` audit

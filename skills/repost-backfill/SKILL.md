@@ -16,7 +16,7 @@ and rate-limiting differ.
 ## Required tools
 
 Same as `repost-run`: Read, Edit, Write, Bash, current-harness browser
-automation, and current-harness Telegram/message delivery.
+automation, and configured current-harness user-message delivery.
 
 ## Step 1 — Load pair config + backfill options
 
@@ -183,7 +183,7 @@ For each candidate in order:
    - On success: append to `posted.jsonl` and
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
-   - **Telegram-confirm Ethan immediately** (step 10 of `repost-run`).
+   - **Notify the user immediately** (step 10 of `repost-run`).
 6. **Sleep** `effectiveIntervalMinutes * 60` seconds before the next candidate
    (use `sleep` via Bash). This is mandatory — destinations rate-limit
    aggressively on rapid-fire posts, and the per-pair policy floor prevents
@@ -268,12 +268,11 @@ good/bad entry example showing all three optional sub-sections.
 > Ethan confirming the source and destination URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
-Backfill is the highest-volume publish path. Wire Telegram pings carefully:
-one per successful publish (step 6), plus an optional final-summary ping. In
-Ethan's OpenClaw install, every user-visible Repost ping MUST use
-`message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`.
-Never omit `accountId`, never use `accountId="default"`, and never paste raw
-JSON/tool output into Telegram.
+Backfill is the highest-volume publish path. Wire notification pings carefully:
+one per successful publish (step 6), plus an optional final-summary ping. Use
+`notification.delivery` from `~/.repost-with-agent/pairs.json` for the concrete
+channel/account/target (OpenClaw maps this to the `message` tool). Never rely on
+default delivery accounts, and never paste raw JSON/tool output into user-facing messages.
 
 ## See also
 

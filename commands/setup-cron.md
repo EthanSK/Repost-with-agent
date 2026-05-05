@@ -28,10 +28,10 @@ to install the scheduler unless ALL of these hold:
 - [ ] `pair.runMode === "listen-for-future"`
 - [ ] User is logged into source + destination platforms in the current harness browser profile
 - [ ] At least one preview run has succeeded (audit.jsonl shows a `pair.preview.success` or `pair.publish.success`)
-- [ ] Telegram/message delivery is configured (run `repost-notify` test once)
+- [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed
 
 
-**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+**Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
 
 If any check fails, the skill tells the user which prerequisite is missing and
 stops.

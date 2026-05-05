@@ -9,7 +9,7 @@ scheduled tick.
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
 your native toolkit: Read, Edit, Write, Bash, current-harness browser
-automation, and current-harness Telegram/message delivery. The skills under
+automation, and configured current-harness user-message delivery. The skills under
 `skills/<name>/SKILL.md` are step-by-step procedures you read and execute
 directly. The slash commands under `commands/*.md` are thin wrappers that load
 the matching skill.
@@ -46,13 +46,12 @@ Your session must have:
   when this is truly a Claude Code run, OpenClaw's built-in browser when this
   is an OpenClaw run, or another explicit browser adapter. Do not route an
   OpenClaw-owned Repost-with-agent run through Claude Code unless Ethan asks.
-- **Telegram/message delivery in the current harness** — OpenClaw should use
-  its first-class `message` tool / Telegram channel; Claude Code should use
-  `plugin:telegram:telegram`; other harnesses should use their equivalent
-  configured Telegram delivery path. Used for the publish-confirmation pings.
+- **User-message delivery in the current harness** — read `notification.delivery`
+  from `~/.repost-with-agent/pairs.json` and map it to the harness's configured
+  message tool. Used for the publish-confirmation pings.
 
 
-**Ethan OpenClaw routing hard rule:** any user-visible Repost notification sent from OpenClaw must call `message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<short human payload>)`. Do not omit `accountId`, do not use `accountId="default"`, and do not paste raw JSON/tool output into Telegram.
+**Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
 
 If any is missing, the relevant skill surfaces the missing dependency and
 stops. There's no fallback.
@@ -194,7 +193,7 @@ survive untouched. See `docs/migration-v3-to-v4.md` for the full walkthrough.
 ## What to do if you find a `pair.publish.notify_skipped_unconfigured` audit event
 
 1. Tell Ethan directly via Telegram (so the missed ping is replaced).
-2. Verify the current harness Telegram/message delivery tool is installed + enabled in this harness.
+2. Verify `notification.delivery` is configured and the current harness message-delivery tool is installed + enabled in this harness.
 3. Re-run the affected publish flow once Telegram is wired up.
 4. File the gap in this file with date + audit-event line so future sessions
    see it.

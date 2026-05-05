@@ -1,6 +1,6 @@
 ---
 name: repost-run
-description: Run a single Repost-with-agent pair end-to-end — scrape source, dedupe (local + destination), expand URLs, publish via the user's logged-in browser, append history, and Telegram-confirm Ethan. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", or invokes /repost-run. Also invoked by scheduled agents for listen-for-future pairs.
+description: Run a single Repost-with-agent pair end-to-end — scrape source, dedupe (local + destination), expand URLs, publish via the user's logged-in browser, append history, and notify the user. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", or invokes /repost-run. Also invoked by scheduled agents for listen-for-future pairs.
 when_to_trigger: User wants to run a single pair manually, OR a scheduled subagent is ticking a listen-for-future pair, OR the user asks to "post the next one from <pair>". Single-post operation.
 ---
 
@@ -8,8 +8,8 @@ when_to_trigger: User wants to run a single pair manually, OR a scheduled subage
 
 You are the running agent. This skill instructs you how to do ONE end-to-end
 repost: pick the next non-duplicate item from the source, expand any shortened
-URLs, post it via the user's logged-in browser, append history, and Telegram-
-confirm.
+URLs, post it via the user's logged-in browser, append history, and notify
+the user via configured delivery.
 
 For multi-post historical walks, see `skills/repost-backfill/SKILL.md` instead.
 
@@ -29,10 +29,10 @@ You MUST have these available in the current session:
     **not** use Ethan's personal browser, Chrome relay, or `profile="user"`
     for Repost-with-agent unless Ethan explicitly overrides this for a specific
     run.
-- **Telegram/message delivery in the current harness** — OpenClaw should use
-  its first-class `message` tool / Telegram channel; Claude Code should use
-  `plugin:telegram:telegram`; other harnesses should use their equivalent
-  configured Telegram delivery path. If no Telegram/message delivery path is
+- **User-facing message delivery in the current harness** — read
+  `notification.delivery` from `~/.repost-with-agent/pairs.json` and map it to
+  the harness's message tool (OpenClaw `message`, Claude Code's configured
+  channel tool, Slack/Discord/etc. equivalents). If no delivery route/tool is
   loaded in this session, surface the error and stop — do not silently skip the
   confirmation.
 
@@ -309,7 +309,7 @@ If publish fails (login expired, account mismatch, missing config, rate limit, p
 
 - Append `pair.publish.failed` audit with `category: "needs-login" | "needs-config" | "needs-account-switch" | "rate-limit" | "platform-error" | "unknown"`.
 - Tell the user what happened.
-- Telegram Ethan with the failure using the current harness's Telegram/message delivery tool.
+- Notify the user of the failure using `notification.delivery` and the current harness's message-delivery tool.
 - DO NOT append to `posted.jsonl` (we did not actually post).
 
 ## Step 9 — Append history
@@ -342,13 +342,13 @@ this destination.
 > and every destination post URL created. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04.)
 
-Use the current harness's primary user communication channel / message delivery
-tool (OpenClaw `message` / Telegram in Ethan's setup, Claude Code
-`plugin:telegram:telegram` reply, or equivalent). In Ethan's OpenClaw install,
-this is **not** inferred from the current/default account: call
-`message(action="send", channel="telegram", accountId="clordlethird", target="telegram:6164541473", message=<payload>)`.
-Never omit `accountId`, never use `accountId="default"`, and never paste raw
-JSON/tool output into Telegram. Message format:
+Use the configured primary user communication channel / message delivery tool.
+Read `notification.delivery` from `~/.repost-with-agent/pairs.json`; do not infer
+from the current/default account when multiple accounts/bots exist. In OpenClaw,
+call `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<payload>)`.
+For Ethan's current OpenClaw config, those values are Telegram + `clordlethird` +
+`telegram:6164541473`, but other users/harnesses should write their own route.
+Never paste raw JSON/tool output into user-facing messages. Message format:
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>

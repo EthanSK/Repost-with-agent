@@ -1,5 +1,16 @@
 {
   "schemaVersion": 4,
+  "notification": {
+    "delivery": {
+      "harness": "openclaw",
+      "channel": "telegram",
+      "accountId": "<current-harness-account-id>",
+      "target": "telegram:<chat-or-user-id>",
+      "threadId": null
+    },
+    "payloadStyle": "short-human",
+    "noRawToolOutput": true
+  },
   "pairs": [
     {
       "id": "linkedin-to-x",

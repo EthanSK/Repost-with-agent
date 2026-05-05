@@ -5,7 +5,7 @@
 ### Changed
 
 - Added `policy.overlengthStrategy: "compact"` guidance/default for Ethan/OpenClaw: over-limit drafts should be rewritten shorter while preserving the original voice/essence before skipping.
-- Hardened Ethan/OpenClaw notification routing: Repost publish/test/failure Telegram messages must explicitly use `channel="telegram"`, `accountId="clordlethird"`, and `target="telegram:6164541473"`; never the default Telegram account, and never raw JSON/tool dumps.
+- Generalized notification routing: Repost publish/test/failure notifications now use `notification.delivery` in `~/.repost-with-agent/pairs.json` (channel/account/target/thread metadata captured from the current harness), with Ethan's Telegram `clordlethird` route as instance config rather than a product-wide hard-code; never default accounts or raw JSON/tool dumps.
 - Aligned README, templates, pair setup/list docs, migration notes, and state schema on the current conservative daily/default-24h cadence instead of stale every-5h examples.
 - Documented clean marketplace packaging guidance so local ignored/private state is not bundled.
 - Clarified preview proof logging with `pair.preview.success`, including schema and template sample, because scheduler setup checks for it before arming live ticks.

@@ -9,7 +9,7 @@ when_to_trigger: User asks to set up, create, configure, or save a new repost pa
 You are the running agent. Repost-with-agent v4 ships ZERO code that does the
 work — this skill is the instructions for you to set up a new source →
 destination pair using your own native tools (Read, Edit, Write, Bash,
-current-harness Telegram/message delivery).
+configured current-harness user-message delivery).
 
 ## Goals
 
@@ -36,6 +36,17 @@ The directories are created lazily on first run for a pair.
 ```json
 {
   "schemaVersion": 4,
+  "notification": {
+    "delivery": {
+      "harness": "openclaw | claude-code | other",
+      "channel": "telegram | slack | discord | ...",
+      "accountId": "<harness account/bot id, optional when the harness has only one>",
+      "target": "<chat/user/channel destination id>",
+      "threadId": "<optional thread/topic id>"
+    },
+    "payloadStyle": "short-human",
+    "noRawToolOutput": true
+  },
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -79,6 +90,8 @@ The directories are created lazily on first run for a pair.
 
 Field invariants:
 
+- `notification.delivery` records where publish confirmations should go. The setup agent should write it from the current harness/chat metadata (OpenClaw `channel`/`accountId`/`target`, Slack/Discord channel id, etc.) rather than relying on a default bot/account.
+- `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` keep user-facing pings concise and prevent raw tool/JSON dumps.
 - `id` is kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
 - New pairs default to `mode: "preview-only"` and `enabled: false`. **Never flip to live without explicit user authorization in the current conversation.**
 - `runMode: "listen-for-future"` is the default — tail new posts on a schedule.
@@ -109,6 +122,7 @@ Field invariants:
 4. **Run mode.** "`listen-for-future` (tail new posts on a schedule) or `backfill` (one-shot walk back through history)?" Default to `listen-for-future` if unsure.
 5. **Safety mode.** Default to `preview-only`. Only set `approval-required` or `live-approved` if the user explicitly asks for live posting now.
 6. **Schedule (if listen-for-future).** Ask for cadence in hours. Default 24 (daily).
+7. **Notification route.** Capture or confirm the current user-facing delivery route and write it to top-level `notification.delivery` in `~/.repost-with-agent/pairs.json`. Prefer harness metadata over asking: e.g. OpenClaw can use its current `channel`, `account_id`, and chat target; Slack/Discord equivalents should record channel/user ids; Claude Code should record its configured user channel. If the route is unavailable, block scheduled/live setup until the user provides it.
 
 ## Destination account / page switching
 
@@ -133,12 +147,14 @@ profile; update the pair to the logged-in visible name.
 
 ## Writing the pair
 
-1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "pairs": []}`.
-2. **Validate** that `id` is unique in the existing pairs.
-3. **Append** the new pair object with the fields above. Set `createdAt` and `updatedAt` to the current ISO-8601 UTC timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ` via Bash).
-4. **Write** the updated JSON with two-space indentation.
-5. **Verify** with `jq . ~/.repost-with-agent/pairs.json` (Bash) — if jq exits non-zero, restore from a `pairs.json.bak.<unix-ts>` backup taken before the write and tell the user.
-6. **Create** the per-pair dir `~/.repost-with-agent/pairs/<pair-id>/` if missing (`mkdir -p`). Create empty `posted.jsonl`, `audit.jsonl`, `learnings.md` files (touch).
+1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "notification": {"delivery": {}, "payloadStyle": "short-human", "noRawToolOutput": true}, "pairs": []}`.
+2. **Populate notification route** before enabling scheduled/live pairs: write top-level `notification.delivery` from current harness/chat metadata where available, otherwise ask the user for the delivery destination.
+3. **Validate** that `id` is unique in the existing pairs.
+4. **Append** the new pair object with the fields above. Set `createdAt` and `updatedAt` to the current ISO-8601 UTC timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ` via Bash).
+5. **Backup** before write: copy existing `pairs.json` to `pairs.json.bak.<unix-ts>`.
+6. **Write** the updated JSON with two-space indentation.
+7. **Verify** with `jq . ~/.repost-with-agent/pairs.json` (Bash) — if jq exits non-zero, restore from the backup and tell the user.
+8. **Create** the per-pair dir `~/.repost-with-agent/pairs/<pair-id>/` if missing (`mkdir -p`). Create empty `posted.jsonl`, `audit.jsonl`, `learnings.md` files (touch).
 
 ## Login checkpoint (CRITICAL)
 
@@ -159,20 +175,21 @@ You can verify by navigating the current harness browser to the source profile
 URL and taking a snapshot — if you see logged-out indicators
 (login modal, "Sign in to continue" CTA, etc.), tell the user and stop.
 
-## Telegram-confirm every successful publish — non-negotiable
+## Notify after every successful publish — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
+> Every successful post from this plugin MUST trigger a user-facing message
+> confirming the source and destination URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
-The agent (you) is responsible for sending this Telegram via
-the current harness's Telegram/message delivery tool immediately after
-appending to `posted.jsonl`. This behavior is enforced by the `repost-notify`
-and `repost-run` skills.
+The agent (you) is responsible for sending this via the configured
+`notification.delivery` route and the current harness's message-delivery tool
+immediately after appending to `posted.jsonl`. This behavior is enforced by the
+`repost-notify` and `repost-run` skills.
 
-If you've never sent a Telegram from this plugin on this machine, tell the user
-to test once with the `repost-notify` skill before flipping any pair to a
-non-`preview-only` mode.
+During setup, write `notification.delivery` into `~/.repost-with-agent/pairs.json`
+from the current harness/chat metadata (channel, account/bot id, target/chat id,
+optional thread id), then test once with `repost-notify` before flipping any pair
+to a non-`preview-only` mode.
 
 ## Final summary
 
