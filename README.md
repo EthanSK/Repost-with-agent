@@ -1,5 +1,7 @@
 # Repost-with-agent (v4.4.0)
 
+**GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
+
 A skill-only agent/OpenClaw-compatible plugin that drives the running agent
 through cross-platform reposting. **No CLI, no MCP server, no platform SDKs,
 no Playwright.** The plugin ships zero code that does the work — it ships
@@ -7,10 +9,20 @@ instructions (skills) and the agent's existing toolkit (Read, Edit, Write,
 Bash, the current harness's browser automation, and the current harness's
 configured message-delivery tool) does everything.
 
-Supports LinkedIn, X, Bluesky, Threads, Facebook. Browser automation only
-operates on transparent, logged-in sessions — no API keys, no stealth, no
-CAPTCHA / 2FA bypass. For OpenClaw runs, that means OpenClaw's own browser
-profile (`openclaw`, CDP port `18800`), not Ethan's personal browser/profile.
+Works with any website the agent can safely operate through the logged-in
+browser: sources, destinations, and compose flows are defined by pair config,
+platform docs, per-pair `learnings.md`, and custom rules rather than a hardcoded
+platform list. This repo ships documented/validated example surfaces for
+LinkedIn, X, Bluesky, Threads, and Facebook.
+
+That generic model still has real limits: no API keys, no stealth, no CAPTCHA /
+2FA bypass, no private-inbox scraping unless explicitly authorized, no posting
+where site policy or account ownership is unclear, and no assumption that a new
+site's DOM will be stable. New websites need a preview validation pass, account
+identity checks, destination-specific dedupe, and learnings/custom rules as the
+agent discovers the safe flow. For OpenClaw runs, browser automation means
+OpenClaw's own browser profile (`openclaw`, CDP port `18800`), not Ethan's
+personal browser/profile.
 
 ## TL;DR
 
@@ -331,7 +343,12 @@ Ethan voice 6024 + 6026 (2026-05-01) clarified that even the CLI is
 unnecessary: the harness already has all the tools needed; the only thing
 missing is the playbook. v4 ships only the playbook.
 
-## Per-platform notes
+## Documented example surfaces
+
+The plugin is not limited to these websites. They are the currently documented /
+validated examples that ship with the repo; new sites should get their own pair
+config, preview validation, destination dedupe notes, and `learnings.md` updates
+as the agent discovers the safe flow.
 
 - [`docs/destinations/linkedin.md`](docs/destinations/linkedin.md)
 - [`docs/destinations/x.md`](docs/destinations/x.md)

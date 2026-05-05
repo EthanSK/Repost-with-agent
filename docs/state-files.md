@@ -69,12 +69,12 @@ the skill workflows.
       "mode": "preview-only | approval-required | live-approved",
       "runMode": "listen-for-future | backfill",
       "source": {
-        "platform": "linkedin | x | bluesky | threads | facebook",
+        "platform": "<site-key, e.g. linkedin | x | bluesky | threads | facebook | your-site>",
         "url": "https://www.linkedin.com/in/<handle>",
         "profileUrl": "https://www.linkedin.com/in/<handle>"
       },
       "destination": {
-        "platform": "linkedin | x | bluesky | threads | facebook",
+        "platform": "<site-key, e.g. linkedin | x | bluesky | threads | facebook | your-site>",
         "accountHint": "@<handle>",
         "accountDisplayName": "<visible account/page name>",
         "targetType": "profile | page | group",

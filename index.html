@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Repost-with-agent</title>
+  <meta name="description" content="Skill-only OpenClaw-compatible reposting plugin for websites the agent can safely operate through a logged-in browser; ships documented examples for LinkedIn, X, Bluesky, Threads, and Facebook.">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f3ec;
+      --panel: #fffaf1;
+      --panel-2: #f0eadc;
+      --ink: #18140f;
+      --muted: #62594d;
+      --line: #ded2bd;
+      --accent: #d85f3f;
+      --accent-2: #236a7c;
+      --accent-3: #7b5bd6;
+      --code: #2d2418;
+      --shadow: 0 22px 70px rgba(72, 49, 22, 0.14);
+      --radius: 22px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14110d;
+        --panel: #211b14;
+        --panel-2: #2b241a;
+        --ink: #f6efe5;
+        --muted: #c8bca9;
+        --line: #443727;
+        --accent: #ff8a63;
+        --accent-2: #75d3e8;
+        --accent-3: #aa95ff;
+        --code: #f7dfbd;
+        --shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(216, 95, 63, 0.20), transparent 34rem),
+        radial-gradient(circle at 82% 12%, rgba(35, 106, 124, 0.16), transparent 28rem),
+        var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+    }
+
+    a { color: var(--accent-2); text-decoration-thickness: 0.08em; text-underline-offset: 0.18em; }
+    a:hover { color: var(--accent); }
+
+    .wrap { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+
+    header {
+      padding: 30px 0 18px;
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+    }
+
+    .mark {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-3));
+      color: white;
+      box-shadow: var(--shadow);
+    }
+
+    .navlinks { display: flex; gap: 16px; flex-wrap: wrap; }
+    .navlinks a { color: var(--muted); text-decoration: none; }
+    .navlinks a:hover { color: var(--ink); }
+
+    .hero {
+      padding: 68px 0 42px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.18fr) minmax(310px, 0.82fr);
+      gap: 34px;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--panel) 76%, transparent);
+      font-size: 0.9rem;
+      font-weight: 650;
+    }
+
+    h1 {
+      margin: 18px 0 14px;
+      font-size: clamp(2.6rem, 7vw, 5.9rem);
+      line-height: 0.94;
+      letter-spacing: -0.075em;
+    }
+
+    .lead {
+      max-width: 740px;
+      color: var(--muted);
+      font-size: clamp(1.08rem, 2vw, 1.32rem);
+      margin: 0 0 26px;
+    }
+
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      color: var(--ink);
+      text-decoration: none;
+      font-weight: 800;
+      box-shadow: 0 10px 30px rgba(72, 49, 22, 0.08);
+    }
+
+    .button.primary {
+      border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
+      background: linear-gradient(135deg, var(--accent), #e68b3b);
+      color: white;
+    }
+
+    .button:hover { transform: translateY(-1px); color: inherit; }
+
+    .hero-card {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      box-shadow: var(--shadow);
+    }
+
+    .status-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .status-row {
+      display: grid;
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 12px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--panel-2) 68%, transparent);
+    }
+
+    .status-row strong { font-size: 0.88rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em; }
+    .status-row span { font-weight: 750; }
+
+    main { padding-bottom: 70px; }
+
+    section {
+      margin-top: 28px;
+      padding: 30px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--panel) 88%, transparent);
+      box-shadow: 0 12px 44px rgba(72, 49, 22, 0.08);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(1.55rem, 2.8vw, 2.25rem);
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+    }
+
+    h3 { margin: 0 0 8px; letter-spacing: -0.02em; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 0; padding-left: 1.2rem; }
+    li + li { margin-top: 8px; }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .tile {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--panel-2) 62%, transparent);
+    }
+
+    .tile p { color: var(--muted); margin-bottom: 0; }
+
+    .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    .badge {
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+      color: var(--muted);
+      font-size: 0.9rem;
+      font-weight: 700;
+    }
+
+    code, pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      padding: 0.14em 0.35em;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--panel-2) 84%, transparent);
+      color: var(--code);
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 14px 0 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #15110c;
+      color: #f7dfbd;
+      line-height: 1.45;
+    }
+
+    .callout {
+      margin-top: 16px;
+      padding: 16px;
+      border-left: 4px solid var(--accent);
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+    }
+
+    .workflow {
+      counter-reset: step;
+      list-style: none;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .workflow li {
+      counter-increment: step;
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: color-mix(in srgb, var(--panel-2) 58%, transparent);
+    }
+
+    .workflow li::before {
+      content: counter(step);
+      width: 32px;
+      height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 11px;
+      background: var(--accent-2);
+      color: white;
+      font-weight: 900;
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .link-card {
+      display: block;
+      padding: 15px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      color: var(--ink);
+      text-decoration: none;
+      background: color-mix(in srgb, var(--panel-2) 58%, transparent);
+    }
+
+    .link-card span { display: block; color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+    .link-card:hover { border-color: var(--accent-2); color: var(--ink); }
+
+    footer { padding: 30px 0 52px; color: var(--muted); font-size: 0.94rem; }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding-top: 44px; }
+      .grid, .grid.two, .links { grid-template-columns: 1fr; }
+      section { padding: 22px; }
+      .status-row { grid-template-columns: 1fr; gap: 3px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <nav aria-label="Primary navigation">
+        <a class="brand" href="./" aria-label="Repost-with-agent home"><span class="mark">↻</span> Repost-with-agent</a>
+        <div class="navlinks">
+          <a href="#quick-start">Quick start</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#commands">Commands</a>
+          <a href="https://github.com/EthanSK/Repost-with-agent">GitHub</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <div class="hero">
+      <div>
+        <span class="eyebrow">v4.4.0 · skill-only · OpenClaw-compatible</span>
+        <h1>Website reposting run by the agent you already use.</h1>
+        <p class="lead">A practical plugin of Markdown skills, slash commands, templates, and state-file rules. The current harness uses its logged-in browser automation to repost between websites it can safely operate; the repo ships no posting runtime of its own.</p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/EthanSK/Repost-with-agent#readme">Read the README</a>
+          <a class="button" href="https://github.com/EthanSK/Repost-with-agent/tree/main/skills">Browse skills</a>
+          <a class="button" href="https://github.com/EthanSK/Repost-with-agent/blob/main/docs/architecture.md">Architecture</a>
+        </div>
+        <div class="badges" aria-label="Documented example surfaces">
+          <span class="badge">Any safe logged-in website</span>
+          <span class="badge">LinkedIn example</span>
+          <span class="badge">X example</span>
+          <span class="badge">Bluesky example</span>
+          <span class="badge">Threads example</span>
+          <span class="badge">Facebook example</span>
+        </div>
+      </div>
+
+      <aside class="hero-card" aria-label="Project facts">
+        <div class="status-grid">
+          <div class="status-row"><strong>It is</strong><span>Skills + commands + JSON state</span></div>
+          <div class="status-row"><strong>It uses</strong><span>Current-harness browser automation</span></div>
+          <div class="status-row"><strong>It avoids</strong><span>CLI runtime, MCP server, SDKs, Playwright</span></div>
+          <div class="status-row"><strong>It requires</strong><span>Transparent logged-in sessions</span></div>
+          <div class="status-row"><strong>It confirms</strong><span>Every successful publish</span></div>
+        </div>
+      </aside>
+    </div>
+
+    <section id="overview">
+      <h2>What this is</h2>
+      <div class="grid">
+        <div class="tile">
+          <h3>Skill-only plugin</h3>
+          <p>The repository contains instructions the agent reads at runtime. There is no daemon, binary, queue worker, SDK integration, or hidden publisher.</p>
+        </div>
+        <div class="tile">
+          <h3>Current-harness first</h3>
+          <p>OpenClaw uses OpenClaw tools. Claude-compatible harnesses use their own registered tools. The agent that receives the task owns the run unless the user explicitly chooses a different harness.</p>
+        </div>
+        <div class="tile">
+          <h3>Generic by design</h3>
+          <p>Works with any website the agent can safely operate through the logged-in browser. LinkedIn, X, Bluesky, Threads, and Facebook are documented example surfaces, not a closed list.</p>
+        </div>
+        <div class="tile">
+          <h3>State, not memory</h3>
+          <p>Pair configs, posted history, dedupe proofs, custom-rule decisions, audits, and learnings live under <code>~/.repost-with-agent/</code>.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="quick-start">
+      <h2>Quick start</h2>
+      <ol class="workflow">
+        <li><div><strong>Clone or register the directory-source plugin.</strong><br>OpenClaw points at this repo path and enables <code>repost-with-agent</code>; Claude-compatible loaders point at <code>.claude-plugin/</code>.</div></li>
+        <li><div><strong>Create a source → destination pair.</strong><br>Run <code>/pair create</code>. New pairs start safe: <code>preview-only</code> and disabled until explicitly approved.</div></li>
+        <li><div><strong>Validate in the logged-in browser profile.</strong><br>The agent checks source and destination sessions, account identity, candidate text, URLs, and preview/publish readiness.</div></li>
+        <li><div><strong>Run one pair manually.</strong><br><code>/repost-run &lt;pair-id&gt;</code> scrapes, applies custom rules, dedupes, expands URLs, drafts/posts, writes state, and sends a confirmation.</div></li>
+        <li><div><strong>Schedule the all-pairs sweep.</strong><br><code>/repost-setup-cron</code> installs one current-harness scheduler job that invokes <code>/repost-run all</code> sequentially.</div></li>
+      </ol>
+      <div class="callout"><strong>Important:</strong> scheduled live posting requires <code>mode: "live-approved"</code>, a successful preview/publish proof, and a configured <code>notification.delivery</code> route. Silent publishes are treated as bugs.</div>
+    </section>
+
+    <section id="workflow">
+      <h2>Runtime workflow</h2>
+      <ol class="workflow">
+        <li><div>Read <code>~/.repost-with-agent/pairs.json</code>, the per-pair history, audit, and <code>learnings.md</code>.</div></li>
+        <li><div>Open the configured logged-in browser profile and scrape recent source posts using the current harness's browser automation.</div></li>
+        <li><div>Apply user-defined <code>customRules</code> and existing <code>considered.jsonl</code> decisions before any publish work.</div></li>
+        <li><div>Check global cross-pair dedupe, local per-pair history, destination-feed fuzzy string matches, and Layer 2 semantic similarity.</div></li>
+        <li><div>Expand shortened URLs with the harness shell, prepare the destination draft, and verify the intended posting identity.</div></li>
+        <li><div>Publish only if the pair mode permits it, append proof ledgers, write audit events, update learnings, and send the publish confirmation.</div></li>
+      </ol>
+    </section>
+
+    <section id="safety-dedupe">
+      <h2>Safety and dedupe</h2>
+      <div class="grid two">
+        <div class="tile">
+          <h3>Conservative by default</h3>
+          <ul>
+            <li>No stealth, CAPTCHA bypass, 2FA bypass, or anti-detection tricks.</li>
+            <li>Browser automation operates only on transparent logged-in sessions.</li>
+            <li>New pairs default to disabled <code>preview-only</code>.</li>
+            <li>New websites need preview validation, account identity checks, destination-specific dedupe, and learnings/custom rules.</li>
+            <li>Stop on unclear account ownership, site-policy/ToS issues, private data exposure, or brittle/unverified DOM flows.</li>
+          </ul>
+        </div>
+        <div class="tile">
+          <h3>Duplicate guardrails</h3>
+          <ul>
+            <li><strong>Global ledger:</strong> <code>global-posted.jsonl</code> prevents alternate routes from reposting the same underlying content.</li>
+            <li><strong>Layer 1:</strong> exact source IDs plus normalized fuzzy string matching against destination posts.</li>
+            <li><strong>Layer 2:</strong> the agent compares candidate meaning against recent destination posts and skips semantic duplicates.</li>
+            <li><strong>Custom rules:</strong> user preference skips go to <code>considered.jsonl</code>, not publish ledgers.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="commands">
+      <h2>Slash commands</h2>
+      <div class="grid two">
+        <div class="tile">
+          <h3>Pair management</h3>
+          <ul>
+            <li><code>/pair list</code> — summarize configured pairs.</li>
+            <li><code>/pair show &lt;id&gt;</code> — inspect config, history, and audit.</li>
+            <li><code>/pair create</code> — create a new pair safely.</li>
+            <li><code>/pair edit &lt;id&gt;</code> — update an existing pair.</li>
+          </ul>
+        </div>
+        <div class="tile">
+          <h3>Running and scheduling</h3>
+          <ul>
+            <li><code>/repost-run &lt;pair-id&gt;</code> — run one pair end-to-end.</li>
+            <li><code>/repost-run all</code> — run every enabled live-approved listen-for-future pair sequentially.</li>
+            <li><code>/repost-backfill &lt;pair-id&gt; [--max N --interval M --allow-publish --resume]</code> — historical walk.</li>
+            <li><code>/repost-setup-cron</code> — install the single scheduled all-pairs sweep.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="state-files">
+      <h2>State files</h2>
+      <p>Runtime state is user-owned and append-heavy. The plugin docs tell the agent how to read and write it; the repo itself does not run code against it.</p>
+      <pre><code>~/.repost-with-agent/
+├── pairs.json
+├── global-posted.jsonl
+├── considered.jsonl
+└── pairs/&lt;pair-id&gt;/
+    ├── posted.jsonl
+    ├── audit.jsonl
+    ├── learnings.md
+    ├── backfill-state.json
+    └── logs/</code></pre>
+    </section>
+
+    <section id="links">
+      <h2>Useful links</h2>
+      <div class="links">
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent#readme"><strong>README</strong><span>Install, architecture, and policy overview</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/blob/main/docs/architecture.md"><strong>Architecture</strong><span>Skill-only design and v4 contrast</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/blob/main/docs/state-files.md"><strong>State schemas</strong><span>pairs.json, ledgers, audit events</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/tree/main/skills"><strong>Skills</strong><span>The playbooks agents execute</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/tree/main/commands"><strong>Commands</strong><span>Slash command wrappers</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/tree/main/docs/destinations"><strong>Example surface notes</strong><span>Documented flows for LinkedIn, X, Bluesky, Threads, Facebook</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/blob/main/docs/migration-v3-to-v4.md"><strong>v3 → v4 migration</strong><span>Move from CLI contract to skill-only</span></a>
+        <a class="link-card" href="https://github.com/EthanSK/Repost-with-agent/blob/main/CHANGELOG.md"><strong>Changelog</strong><span>Current version history</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">MIT licensed. Repost-with-agent is factual by design: skills, state, browser automation, confirmations — no hidden posting stack.</div>
+  </footer>
+</body>
+</html>

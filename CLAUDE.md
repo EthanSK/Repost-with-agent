@@ -14,9 +14,12 @@ automation, and configured current-harness user-message delivery. The skills und
 directly. The slash commands under `commands/*.md` are thin wrappers that load
 the matching skill.
 
-Supported platforms: **LinkedIn, X, Bluesky, Threads, Facebook**. Platform
-labels are free-form strings in pair config; you read them and pick the right
-URL templates and DOM selectors at runtime via `docs/destinations/<platform>.md`.
+The architecture is generic: it can work with any website the current harness
+can safely operate through a logged-in browser. This repo ships documented and
+validated example surfaces for **LinkedIn, X, Bluesky, Threads, and Facebook**;
+other websites need pair-specific validation, destination dedupe, account
+identity checks, and `learnings.md`/custom-rule updates rather than an
+assumption that the existing examples fully apply.
 
 (Ethan voice 6024 + 6026, 2026-05-01: "essentially just a skill for the
 existing harness... we don't code anything in.")

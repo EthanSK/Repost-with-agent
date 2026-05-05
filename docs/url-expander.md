@@ -6,8 +6,8 @@ the WHY and lists per-platform quirks the agent should know.
 
 ## Why expand URLs at all?
 
-LinkedIn, X, Bluesky, Threads, and Facebook all wrap URLs in their own
-shortener domains as a side-effect of posting:
+Many social sites wrap URLs in shortener or tracking domains as a side-effect
+of posting. The documented example surfaces in this repo include:
 
 - LinkedIn → `lnkd.in/<hash>`
 - X → `t.co/<hash>`

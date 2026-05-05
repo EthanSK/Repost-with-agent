@@ -1,6 +1,6 @@
 ---
 name: repost-pair-setup
-description: Create or save a new Repost-with-agent source → destination pair. Use when the user wants to set up cross-posting from one social platform (LinkedIn, X, Bluesky, Threads, Facebook) to another, or asks to "configure a repost pair", "set up reposting", "wire up cross-posting", or "add a new pair to repost-with-agent / repost_with_agent".
+description: Create or save a new Repost-with-agent source → destination pair. Use when the user wants to set up cross-posting between websites the agent can safely operate through a logged-in browser (with documented examples for LinkedIn, X, Bluesky, Threads, and Facebook), or asks to "configure a repost pair", "set up reposting", "wire up cross-posting", or "add a new pair to repost-with-agent / repost_with_agent".
 when_to_trigger: User asks to set up, create, configure, or save a new repost pair, e.g. "set up reposting from LinkedIn to X", "add a Bluesky → Threads pair", "configure repost-with-agent for my new account".
 ---
 
@@ -56,12 +56,12 @@ The directories are created lazily on first run for a pair.
       "mode": "preview-only | approval-required | live-approved",
       "runMode": "listen-for-future | backfill",
       "source": {
-        "platform": "linkedin | x | bluesky | threads | facebook",
+        "platform": "<site-key, e.g. linkedin | x | bluesky | threads | facebook | your-site>",
         "url": "https://www.linkedin.com/in/<handle>",
         "profileUrl": "https://www.linkedin.com/in/<handle>"
       },
       "destination": {
-        "platform": "linkedin | x | bluesky | threads | facebook",
+        "platform": "<site-key, e.g. linkedin | x | bluesky | threads | facebook | your-site>",
         "accountHint": "@<handle>",
         "accountDisplayName": "<visible account/page name>",
         "targetType": "profile | page | group",
