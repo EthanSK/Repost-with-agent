@@ -261,7 +261,7 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip",
+        "overlengthStrategy": "compact",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30

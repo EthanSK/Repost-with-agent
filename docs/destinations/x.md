@@ -51,7 +51,7 @@ destination).
 - Premium / Verified: 25 000 chars.
 
 The default in the `repost-run` length check is 280. If the user is on
-Premium, set the per-pair `policy.overlengthStrategy: "truncate"` or override
+Premium, set the per-pair cap accordingly; otherwise use `policy.overlengthStrategy: "compact"` (preferred) or override
 the cap explicitly.
 
 ## Source scraping
@@ -97,8 +97,8 @@ already produced — no extra browser cost.
   shows up in the destination scrape as `t.co/abc123`. Strip URLs from both
   candidate and scraped text before comparing.
 - **Threading.** Long drafts can't be threaded automatically in v4 —
-  overlength drafts are either skipped (`overlengthStrategy: "skip"`) or
-  truncated (`"truncate"`). Re-introduce threading as a separate skill if
+  overlength drafts are compacted (`overlengthStrategy: "compact"`, preferred), skipped (`"skip"`), or
+  mechanically truncated (`"truncate"`). Re-introduce threading as a separate skill if
   needed.
 - **Quoted reposts.** Show up in the profile feed but are dedupe-irrelevant.
   Skip them in source scrape (they're not original content); treat them like

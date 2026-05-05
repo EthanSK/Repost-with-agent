@@ -4,6 +4,7 @@
 
 ### Changed
 
+- Added `policy.overlengthStrategy: "compact"` guidance/default for Ethan/OpenClaw: over-limit drafts should be rewritten shorter while preserving the original voice/essence before skipping.
 - Hardened Ethan/OpenClaw notification routing: Repost publish/test/failure Telegram messages must explicitly use `channel="telegram"`, `accountId="clordlethird"`, and `target="telegram:6164541473"`; never the default Telegram account, and never raw JSON/tool dumps.
 - Aligned README, templates, pair setup/list docs, migration notes, and state schema on the current conservative daily/default-24h cadence instead of stale every-5h examples.
 - Documented clean marketplace packaging guidance so local ignored/private state is not bundled.

@@ -56,7 +56,7 @@ the skill workflows.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | truncate",
+        "overlengthStrategy": "skip | compact | truncate",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -80,9 +80,10 @@ the skill workflows.
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — one-shot historical walk (newest-first).
 - `policy.overlengthStrategy`:
-  - `skip` — drafts exceeding destination char cap are skipped. Default.
-  - `truncate` — drafts are shrunk to fit the destination cap without adding a
-    source-platform permalink suffix.
+  - `compact` — drafts exceeding destination char cap are rewritten shorter while preserving the original voice, intent, links, and essence as much as possible. Ethan/OpenClaw default.
+  - `skip` — drafts exceeding destination char cap are skipped.
+  - `truncate` — drafts are mechanically shrunk to fit the destination cap without adding a
+    source-platform permalink suffix. Use only when explicitly requested.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
 - `policy.globalDedupeEnabled` — when `true` (default), every publish-capable
   path reads `global-posted.jsonl`, resolves a cross-pair `contentKey`, and
@@ -219,6 +220,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.start`                    | About to drive the destination compose flow. |
 | `pair.publish.url_expanded`             | One shortened URL was expanded. Includes `from`, `to`. |
 | `pair.publish.url_expand_failed`        | One URL expansion failed. Includes `url`, `error`. |
+| `pair.publish.compacted`                | Draft exceeded char cap; compact strategy rewrote it to fit while preserving voice/essence. Includes original length, compacted length, cap, and note. |
 | `pair.publish.truncated`                | Draft exceeded char cap; truncate strategy applied. |
 | `pair.publish.skipped_overlength`       | Draft exceeded char cap; skip strategy applied. |
 | `pair.publish.success`                  | Destination confirmed the post. Includes `sourceItemId`, `destinationUrl`. |

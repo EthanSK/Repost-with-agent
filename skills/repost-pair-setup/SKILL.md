@@ -65,7 +65,7 @@ The directories are created lazily on first run for a pair.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | truncate",
+        "overlengthStrategy": "skip | compact | truncate",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -85,7 +85,7 @@ Field invariants:
 - `runMode: "backfill"` is for one-shot historical walks (newest-first).
 - `mode: "live-approved"` is the only mode that allows scheduled live publishes.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
-- `policy.overlengthStrategy: "skip"` is the safe default. Only set to `"truncate"` if the user explicitly asks for it.
+- `policy.overlengthStrategy: "compact"` is the Ethan/OpenClaw default for tight destinations: if a draft is over the cap, rewrite it shorter while preserving the original voice, intent, links, and meaning as much as possible. Use `"skip"` only when Ethan wants overlength drafts dropped; use `"truncate"` only if he explicitly asks for mechanical shortening.
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.

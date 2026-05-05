@@ -46,7 +46,7 @@ substitute curl/Playwright/etc.
 3. Verify `pair.enabled === true`. If false, tell the user the pair is
    disabled and stop.
 4. Note `mode`, `runMode`, `source`, `destination`, `policy.maxItemsPerRun`
-   (default 1), `policy.overlengthStrategy` (default `"skip"`),
+   (default 1), `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
    `policy.blockOnUncertainDuplicate` (default true), and
    `policy.globalDedupeEnabled` (default true).
 5. Note optional destination identity fields. These are **UI matching hints**,
@@ -269,10 +269,11 @@ Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 
 If the draft exceeds the cap:
 
+- `policy.overlengthStrategy === "compact"` (Ethan/OpenClaw default): rewrite the draft to fit the destination cap while making it sound as close to the original as possible and preserving the essence, intent, tone, URLs, and key claims. Do not add a source-platform backlink. After compacting, re-run the destination length check and a quick duplicate check against the compacted text. Append `pair.publish.compacted` audit with original length, compacted length, cap, and a 1-sentence note. If it still cannot fit without losing the point, append `pair.publish.skipped_overlength` and stop.
 - `policy.overlengthStrategy === "skip"`: append a `pair.publish.skipped_overlength` audit event and stop. Tell the user.
-- `policy.overlengthStrategy === "truncate"`: shrink to fit the destination
+- `policy.overlengthStrategy === "truncate"`: mechanically shrink to fit the destination
   cap without adding a source-platform backlink. Append `pair.publish.truncated`
-  audit.
+  audit. Prefer `compact` over `truncate` unless Ethan explicitly asks for mechanical truncation.
 
 ## Step 8 — Publish
 
