@@ -7,9 +7,11 @@ when_to_trigger: Any time you (the agent) need to decide whether a candidate pos
 # Repost Dedup — Layer 1 (exact + fuzzy string matching)
 
 Reference algorithm for deciding whether a candidate post is a duplicate of
-something already on the destination. Three checks run before publish: local
-(per-pair `posted.jsonl`), global (cross-pair `global-posted.jsonl`), and
-remote (against the actual destination feed).
+something already on the destination. Custom user rules run before this skill;
+see `skills/repost-custom-rules/SKILL.md` for not-post-worthy preference skips.
+Then three dedupe checks run before publish: local (per-pair `posted.jsonl`),
+global (cross-pair `global-posted.jsonl`), and remote (against the actual
+destination feed).
 
 This skill is **Layer 1** of a two-layer dedupe pipeline. It catches
 verbatim and near-verbatim re-posts via cheap string ops. **Layer 2**
@@ -29,6 +31,8 @@ agent semantic reasoning. Both layers must clear before publish — see
 
 All three checks are mandatory before any publish unless the user explicitly
 disables global dedupe for a pair with `pair.policy.globalDedupeEnabled: false`.
+A candidate skipped by custom rules should not reach this dedupe stage and must
+not be appended to `posted.jsonl` / `global-posted.jsonl`.
 
 ## Layer separation — Layer 1 vs Layer 2
 
@@ -172,6 +176,8 @@ For each candidate, produce one of three verdicts:
 
 ## See also
 
+- `skills/repost-custom-rules/SKILL.md` — user preference skip rules +
+  append-only considered state; runs before this dedupe layer.
 - `skills/repost-dedup-semantic/SKILL.md` — **Layer 2** semantic dedupe (agent
   reasoning over candidate vs. recent destination posts). Runs AFTER this
   skill on Layer-1-clean candidates. Catches paraphrased duplicates.

@@ -9,6 +9,7 @@ the skill workflows.
 ~/.repost-with-agent/
 ├── pairs.json                          # all pair configs (schemaVersion 4)
 ├── global-posted.jsonl                 # append-only cross-pair destination ledger
+├── considered.jsonl                    # append-only custom-rule / not-post-worthy decisions
 ├── pairs.json.bak.<unix-ts>            # backups produced by manual migration / pair-edit
 ├── pairs.json.v3.bak                   # one-time backup of the v3 file
 └── pairs/
@@ -38,6 +39,28 @@ the skill workflows.
     "payloadStyle": "short-human",
     "noRawToolOutput": true
   },
+  "customRules": [
+    {
+      "id": "skip-x-ai-slop-machine-videos",
+      "enabled": true,
+      "action": "skip",
+      "scope": {
+        "sourcePlatform": "x"
+      },
+      "match": {
+        "anyOf": [
+          { "sourceItemIds": ["2051336931150123230"] },
+          {
+            "semanticSimilarToAny": ["vibe coding an ai slop machine #ai #programming #developer"],
+            "mediaTypesAny": ["video", "livestream", "live"],
+            "treatUnknownMediaAsMatch": true
+          }
+        ]
+      },
+      "reason": "Block X video/livestream promos about vibe-coding an AI slop machine.",
+      "examples": []
+    }
+  ],
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -83,6 +106,7 @@ the skill workflows.
 
 - `notification.delivery` — optional but strongly recommended for scheduled/live runs. It records the user-facing notification route the setup agent captured from the current harness/chat. For OpenClaw this maps directly to `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<short payload>)`; other harnesses map the same abstract fields to their own user-message tool. Do not rely on a default account/bot when multiple accounts exist.
 - `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` mean publish pings are concise human summaries, never raw JSON/tool/audit dumps.
+- `customRules` — optional top-level user preference filters that run after source scrape and before dedupe/publish. Enabled `action: "skip"` rules append to `considered.jsonl` + per-pair audit and must NOT append to `posted.jsonl` / `global-posted.jsonl` because a preference skip is not destination proof. Pair-specific `pair.customRules` may also be used for one-off destination rules. See `skills/repost-custom-rules/SKILL.md`.
 - `id` — kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
 - `enabled` — `false` for new pairs by default. Schedulers ignore disabled pairs.
 - `mode`:
@@ -176,6 +200,47 @@ Invariants:
 - The same `contentKey` may have one row per destination platform/account. A
   second row for the same destination is a duplicate and should be skipped.
 
+## `considered.jsonl`
+
+Append-only NDJSON. Each line records a candidate the agent considered and
+rejected for a user-configured custom-rule reason. It is global state because
+custom rules often apply to a source item regardless of destination. It does
+not replace per-pair audit, and it must not be treated as proof that the item
+exists on any destination.
+
+Schema:
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "candidate.custom_rule.skipped",
+  "ruleId": "<customRules[].id>",
+  "pairId": "<optional pair id when destination-specific>",
+  "sourcePlatform": "x",
+  "sourceItemId": "<source platform item id>",
+  "canonicalSourceUrl": "<source post URL>",
+  "destinationPlatform": "<optional destination platform>",
+  "destinationAccountHint": "<optional destination account hint>",
+  "candidateExcerpt": "<first 200 chars of candidate text>",
+  "mediaTypes": ["video"],
+  "status": "skipped-rule",
+  "reason": "<human reason from the rule>",
+  "note": "<optional migration/context note>"
+}
+```
+
+Invariants:
+
+- Append-only. NEVER rewrite existing lines.
+- Read before dedupe; if a candidate is already present with
+  `status: "skipped-rule"`, drop it from the publish set before URL expansion
+  or compose.
+- Do NOT append to `posted.jsonl` or `global-posted.jsonl` for a pure
+  custom-rule skip. Those files mean publish/duplicate proof; this file means
+  user preference / not-post-worthy.
+- Pair runs that newly skip a candidate should also append
+  `pair.custom_rule.skipped` to that pair's `audit.jsonl` for traceability.
+
 ## `pairs/<id>/posted.jsonl`
 
 Append-only NDJSON. Each line is one JSON object representing one successful
@@ -228,6 +293,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.dedupe.global_duplicate`          | Global ledger found the same `contentKey` already posted/caught-up for this destination by any pair. |
 | `pair.dedupe.uncertain`                 | Destination scrape failed; candidates left undecided. Includes reason. |
 | `pair.dedupe.semantic_clean`            | (Optional) Layer 2 semantic dedupe ran and cleared the candidate. Includes `candidateExcerpt`, `windowSize`, `candidatesCompared`. |
+| `pair.custom_rule.skipped`              | Candidate matched a user custom skip rule before dedupe/publish. Includes `ruleId`, `sourceItemId`, `canonicalSourceUrl`, `candidateExcerpt`, `mediaTypes`, and `reason`. Also append a matching `candidate.custom_rule.skipped` line to `considered.jsonl` unless already present. |
 | `pair.preview.success`                  | Preview/draft was prepared without publishing. Includes `sourceItemId`, `canonicalSourceUrl`, `draftChars`, and `wouldPublish`. Scheduler setup may use this as proof a dry run worked before enabling live ticks. |
 | `pair.publish.semantic_duplicate`       | **Layer 2 semantic dedupe match — candidate skipped pre-publish.** Includes `pairId`, `sourceItemId`, `candidateExcerpt` (first 200 chars), `matchedExistingUrl`, `matchedExistingExcerpt` (first 200 chars), `agentReasoning` (1-3 sentence justification), `windowSize` (number of destination posts compared). See `skills/repost-dedup-semantic/SKILL.md`. |
 | `pair.publish.start`                    | About to drive the destination compose flow. |
@@ -262,6 +328,30 @@ Append-only NDJSON. Each line is one audit event. Schema:
   "reason": "same contentKey already posted/caught-up for this destination"
 }
 ```
+
+### `pair.custom_rule.skipped` schema
+
+Custom rule matched before dedupe/publish. The candidate is not published, and
+this event is paired with a `candidate.custom_rule.skipped` line in
+`considered.jsonl` unless that considered record already existed.
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "pair.custom_rule.skipped",
+  "pairId": "<id>",
+  "ruleId": "skip-x-ai-slop-machine-videos",
+  "sourceItemId": "<candidate source id>",
+  "canonicalSourceUrl": "<candidate source URL>",
+  "candidateExcerpt": "<first 200 chars>",
+  "mediaTypes": ["video"],
+  "reason": "<human reason from the rule>",
+  "wouldPublishWithoutRule": false
+}
+```
+
+A pure custom-rule skip is user preference state, not destination proof: do not
+append to `posted.jsonl` or `global-posted.jsonl`.
 
 ### `pair.preview.success` schema
 
@@ -408,6 +498,7 @@ clean completion. Schema:
   bot tokens etc. live in the current harness's message-delivery config,
   not in this plugin.
 - `global-posted.jsonl` mode: `0644`.
+- `considered.jsonl` mode: `0644`.
 - `posted.jsonl` mode: `0644`.
 - `audit.jsonl` mode: `0644`.
 - `learnings.md` mode: `0644`.
@@ -416,7 +507,10 @@ clean completion. Schema:
 
 - `templates/pairs.json.template` — example v4 pair config.
 - `templates/posted.jsonl.template` — example posted history shape.
+- `templates/global-posted.jsonl.template` — example global ledger proof shape.
+- `templates/considered.jsonl.template` — example custom-rule skip state.
 - `skills/repost-global-dedupe/SKILL.md` — global ledger algorithm and schema.
+- `skills/repost-custom-rules/SKILL.md` — custom user rules + considered state.
 - `templates/audit.jsonl.template` — example audit event sequence.
 - `templates/learnings.md.template` — placeholder shape for new pairs.
 - `skills/repost-learnings/SKILL.md` — full spec for the learnings.md

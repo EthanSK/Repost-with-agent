@@ -47,6 +47,7 @@ The directories are created lazily on first run for a pair.
     "payloadStyle": "short-human",
     "noRawToolOutput": true
   },
+  "customRules": [],
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -92,6 +93,7 @@ Field invariants:
 
 - `notification.delivery` records where publish confirmations should go. The setup agent should write it from the current harness/chat metadata (OpenClaw `channel`/`accountId`/`target`, Slack/Discord channel id, etc.) rather than relying on a default bot/account.
 - `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` keep user-facing pings concise and prevent raw tool/JSON dumps.
+- `customRules` is optional top-level user preference filtering. The run/backfill skills apply enabled skip rules after source scrape and before dedupe/publish, logging to `considered.jsonl` instead of publish ledgers. Pair-specific `pair.customRules` may be added when a rule should affect only one route.
 - `id` is kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
 - New pairs default to `mode: "preview-only"` and `enabled: false`. **Never flip to live without explicit user authorization in the current conversation.**
 - `runMode: "listen-for-future"` is the default — tail new posts on a schedule.
@@ -147,7 +149,7 @@ profile; update the pair to the logged-in visible name.
 
 ## Writing the pair
 
-1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "notification": {"delivery": {}, "payloadStyle": "short-human", "noRawToolOutput": true}, "pairs": []}`.
+1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "notification": {"delivery": {}, "payloadStyle": "short-human", "noRawToolOutput": true}, "customRules": [], "pairs": []}`.
 2. **Populate notification route** before enabling scheduled/live pairs: write top-level `notification.delivery` from current harness/chat metadata where available, otherwise ask the user for the delivery destination.
 3. **Validate** that `id` is unique in the existing pairs.
 4. **Append** the new pair object with the fields above. Set `createdAt` and `updatedAt` to the current ISO-8601 UTC timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ` via Bash).

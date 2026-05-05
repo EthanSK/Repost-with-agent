@@ -45,8 +45,9 @@ substitute curl/Playwright/etc.
 2. Find the requested pair by `id`. If not found, list available ids and stop.
 3. Verify `pair.enabled === true`. If false, tell the user the pair is
    disabled and stop.
-4. Note `mode`, `runMode`, `source`, `destination`, `policy.maxItemsPerRun`
-   (default 1), `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
+4. Note `mode`, `runMode`, `source`, `destination`, `customRules` (top-level
+   and pair-level), `policy.maxItemsPerRun` (default 1),
+   `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
    `policy.blockOnUncertainDuplicate` (default true), and
    `policy.globalDedupeEnabled` (default true).
 5. Note optional destination identity fields. These are **UI matching hints**,
@@ -161,6 +162,33 @@ If the page shows a logged-out indicator (login modal, "sign in to continue"
 CTA), STOP and tell the user "needs-login on <platform>". Do not try to log
 in.
 
+When scraping, include `mediaTypes` / `mediaEvidence` if the source platform
+exposes obvious media signals (video player, Live badge, image alt text, link
+card). If media cannot be determined, use `mediaTypes: ["unknown"]` rather than
+pretending the post is text-only; custom rules may depend on this.
+
+## Step 3.5 — Apply custom user rules + considered state
+
+Use `skills/repost-custom-rules/SKILL.md` before any dedupe or publish work.
+
+1. Read top-level `customRules` and optional `pair.customRules` from
+   `~/.repost-with-agent/pairs.json`. Missing arrays mean no custom rules.
+2. Read `~/.repost-with-agent/considered.jsonl` if it exists. Drop candidates
+   already recorded as `status: "skipped-rule"` for this source id/URL and
+   matching global/pair/destination scope.
+3. Evaluate enabled custom skip rules. When a rule matches:
+   - append `candidate.custom_rule.skipped` to `considered.jsonl` unless that
+     exact skip is already present,
+   - append `pair.custom_rule.skipped` to this pair's `audit.jsonl`, and
+   - remove the candidate from the publish set.
+4. Do NOT append to `posted.jsonl` or `global-posted.jsonl` for a pure
+   custom-rule skip. Those files are publish/duplicate proof; custom rules are
+   not-post-worthy preference state.
+
+Current Ethan rule to respect if present in config: X source video/livestream
+promos matching `vibe coding an ai slop machine #ai #programming #developer`
+(rule id `skip-x-ai-slop-machine-videos`) are skipped for future reposts.
+
 ## Step 4 — Layer 1 dedupe (local + global + destination)
 
 Use the `repost-dedup` skill semantics. This is **Layer 1** — cheap string
@@ -168,7 +196,7 @@ ops plus the global cross-pair ledger that catch verbatim, near-verbatim, and
 already-routed reposts.
 
 1. **Local dedupe.** Read `~/.repost-with-agent/pairs/<id>/posted.jsonl`
-   (line-delimited JSON, may be empty). For each candidate from step 3, drop it
+   (line-delimited JSON, may be empty). For each candidate remaining after step 3.5, drop it
    if its `sourceItemId` already appears in any line.
 2. **Global cross-pair dedupe.** Use `skills/repost-global-dedupe/SKILL.md`
    unless `pair.policy.globalDedupeEnabled === false`. Read
@@ -230,9 +258,25 @@ must clear BOTH Layer 1 and Layer 2 before it's eligible for publish.
 
 ## Step 5 — Pick the next item
 
-Filter to items NOT marked as duplicates by step 4. If none remain, write a
-`pair.run.no_new_items` line to `~/.repost-with-agent/pairs/<id>/audit.jsonl`
-and stop. Tell the user "No new posts to repost from <pair>."
+Filter to items NOT removed by custom rules / considered state and NOT marked
+as duplicates by step 4. If none remain, write a `pair.run.no_new_items` line
+to `~/.repost-with-agent/pairs/<id>/audit.jsonl` and stop. Include a `reason`
+such as `"custom-rules"`, `"duplicates"`, or `"no-source-candidates"` when
+known, plus `ruleId`, `sourceItemId`, `canonicalSourceUrl`, and
+`destinationPlatform` when custom rules caused the skip.
+
+Final transcript shape for a no-new-items run:
+
+```text
+No new posts to repost from <pair-id>.
+  Reason:      <custom-rules|duplicates|no-source-candidates>
+  Rule:        <ruleId or n/a>
+  Source item: <sourceItemId or n/a>
+  Source URL:  <canonicalSourceUrl or n/a>
+```
+
+In scheduled runs, always end with this short non-empty transcript summary (not
+a Telegram ping) so the cron run is visibly complete.
 
 If items remain, pick the **newest** one (highest `publishedAt`). For backfill
 runs, see `skills/repost-backfill/SKILL.md`.
@@ -374,8 +418,10 @@ Print to the user (in the agent transcript, NOT Telegram):
 
 ```
 ✅ Reposted from <pair-id>
+  Source item: <sourceItemId>
   Source:      <canonical source URL>
   Destination: <destination URL>
+  Destination ID: <destinationId if available>
   Posted at:   <ts>
   Notify:      delivered
 ```
@@ -449,6 +495,8 @@ which category:
 
 ## See also
 
+- `skills/repost-custom-rules/SKILL.md` — user preference skip rules +
+  append-only considered state (runs before dedupe).
 - `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
 - `skills/repost-global-dedupe/SKILL.md` — global cross-pair content ledger.
 - `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).

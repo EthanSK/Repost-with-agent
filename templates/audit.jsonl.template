@@ -1,6 +1,7 @@
 {"ts":"2026-05-01T12:00:00Z","event":"pair.run.start","pairId":"linkedin-to-x","note":"Manual /repost-run invocation"}
 {"ts":"2026-05-01T12:00:01Z","event":"pair.fetch.start","pairId":"linkedin-to-x","sourceUrl":"https://www.linkedin.com/in/ethansk/recent-activity/all/"}
 {"ts":"2026-05-01T12:00:08Z","event":"pair.fetch.success","pairId":"linkedin-to-x","candidateCount":7}
+{"ts":"2026-05-01T12:00:08Z","event":"pair.custom_rule.skipped","pairId":"x-to-bluesky","ruleId":"skip-x-ai-slop-machine-videos","sourceItemId":"2051336931150123230","canonicalSourceUrl":"https://x.com/REEEthan_YT/status/2051336931150123230","candidateExcerpt":"vibe coding an ai slop machine #ai #programming #developer","mediaTypes":["video"],"reason":"Ethan does not want X video/livestream promo posts about vibe-coding an AI slop machine reposted.","wouldPublishWithoutRule":false}
 {"ts":"2026-05-01T12:00:08Z","event":"pair.dedupe.local","pairId":"linkedin-to-x","duplicates":3,"survivors":4}
 {"ts":"2026-05-01T12:00:14Z","event":"pair.dedupe.remote","pairId":"linkedin-to-x","duplicates":1,"survivors":3}
 {"ts":"2026-05-01T12:00:14Z","event":"pair.preview.success","pairId":"linkedin-to-x","sourceItemId":"urn:li:activity:7000","canonicalSourceUrl":"https://www.linkedin.com/feed/update/urn:li:activity:7000/","draftChars":153,"wouldPublish":true}

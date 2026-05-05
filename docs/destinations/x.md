@@ -66,9 +66,18 @@ the cap explicitly.
     (resolve to absolute URL).
   - **`publishedAt`**: parse the timestamp's `title` or `datetime` attribute.
   - **`sourceItemId`**: the numeric ID from the URL.
+  - **`mediaTypes` / `mediaEvidence`**: inspect the tweet card for obvious
+    media signals. Video/livestream hints include video player containers,
+    play buttons, `aria-label` text mentioning video, visible `LIVE` badges,
+    duration badges, or embedded player/card text. Use `mediaTypes: ["video"]`
+    or `["livestream"]` when clear; use `["unknown"]` when the scrape cannot
+    tell.
 
 Skip retweets (they have a "<user> reposted" indicator above the tweet) when
-fetching as a source. They're not original content.
+fetching as a source. They're not original content. Apply
+`skills/repost-custom-rules/SKILL.md` after scraping; Ethan's current custom
+rule skips X video/livestream promos matching the "vibe coding an ai slop
+machine" example.
 
 ## Destination dedupe
 

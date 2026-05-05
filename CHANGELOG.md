@@ -2,6 +2,12 @@
 
 ## Unreleased — production/OpenClaw readiness audit
 
+### Added
+
+- Added `skills/repost-custom-rules/SKILL.md` for user-configured skip rules that run after source scrape and before dedupe/publish.
+- Added append-only `~/.repost-with-agent/considered.jsonl` state for not-post-worthy/custom-rule decisions, plus `templates/considered.jsonl.template` and `pair.custom_rule.skipped` audit schema.
+- Seeded docs/schema support for Ethan's current `skip-x-ai-slop-machine-videos` rule: skip future X video/livestream candidates matching `vibe coding an ai slop machine #ai #programming #developer` without rewriting historical publish/global ledgers.
+
 ### Changed
 
 - Added `policy.overlengthStrategy: "compact"` guidance/default for Ethan/OpenClaw: over-limit drafts should be rewritten shorter while preserving the original voice/essence before skipping.

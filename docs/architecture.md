@@ -85,15 +85,19 @@ Concretely, when `/repost-run linkedin-to-x` is invoked:
 4. **Agent navigates with current-harness browser automation.** OpenClaw uses
    its built-in browser; Claude Code uses `chrome-devtools-mcp`; other harnesses
    use their explicit browser adapter.
-5. **Agent reasons about dedupe.** Reads `posted.jsonl`, scrapes destination
+5. **Agent applies custom rules.** Reads optional `customRules` and
+   `considered.jsonl` to drop user-blocked / not-post-worthy candidates before
+   dedupe.
+6. **Agent reasons about dedupe.** Reads `posted.jsonl`, scrapes destination
    recent posts, runs Layer 1 string matching, then Layer 2 semantic judgment.
-6. **Agent expands URLs.** Native Bash `curl -sIL --max-time 5` per shortened
+7. **Agent expands URLs.** Native Bash `curl -sIL --max-time 5` per shortened
    URL.
-7. **Agent drives the destination.** Uses current-harness browser click/fill
+8. **Agent drives the destination.** Uses current-harness browser click/fill
    tools, then reads the resulting destination URL after submit.
-8. **Agent appends history.** Native Bash `echo '<json>' >> posted.jsonl` and
-   `echo '<json>' >> global-posted.jsonl` for publish/catch-up proof.
-9. **Agent notifies.** Uses `notification.delivery` with the current-harness
+9. **Agent appends history.** Native Bash `echo '<json>' >> posted.jsonl` and
+   `echo '<json>' >> global-posted.jsonl` for publish/catch-up proof. Pure
+   custom-rule skips append only to `considered.jsonl` + pair audit.
+10. **Agent notifies.** Uses `notification.delivery` with the current-harness
    message tool (OpenClaw `message`, Claude Code's configured channel tool, Slack/Discord/etc. equivalents).
 
 
@@ -143,10 +147,12 @@ idempotent.
 This matches Ethan's intent in voice 6026: "yeah, I guess don't follow Agent
 Bridge then. So yeah, skip the MCP. Subagent."
 
-## Where the dedupe + URL-expand / etc. logic *lives*
+## Where the custom rules + dedupe + URL-expand / etc. logic *lives*
 
 Not in code. In Markdown:
 
+- `skills/repost-custom-rules/SKILL.md` describes user preference skip rules
+  and append-only `considered.jsonl` state.
 - `skills/repost-dedup/SKILL.md` describes the Layer 1 fuzzy-match algorithm.
 - `skills/repost-dedup-semantic/SKILL.md` describes Layer 2 semantic dedupe.
 - `skills/repost-url-expand/SKILL.md` describes the redirect-following procedure.
@@ -174,6 +180,9 @@ the typical case) or shell out to `sed` / `awk` if the candidate set is large
 - **Scheduled tick raced with a manual run** → both runs share `posted.jsonl`
   and the global cross-pair ledger (file appends are atomic in practice for
   sub-line writes); the second run hits local/global dedupe and skips.
+- **User blocks a category after it was already posted once** → add a custom
+  skip rule + considered entry going forward. Do not rewrite historical
+  `posted.jsonl` / `global-posted.jsonl` proof lines.
 - **Alternate pair route would double-post** → the global ledger's inherited
   `contentKey` is the guardrail; every pair checks destination-platform/account
   rows before compose.

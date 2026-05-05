@@ -20,7 +20,9 @@ automation, and configured current-harness user-message delivery.
 
 ## Step 1 — Load pair config + backfill options
 
-1. Read `~/.repost-with-agent/pairs.json` and find the pair.
+1. Read `~/.repost-with-agent/pairs.json` and find the pair. Note any
+   top-level `customRules` and pair-level `pair.customRules`; they run before
+   backfill dedupe/publish.
 2. Verify `pair.enabled === true` and either:
    - `pair.runMode === "backfill"`, OR
    - The user explicitly asks for a one-shot backfill on a different runMode (in which case just remind them this is one-shot, not a permanent runMode change).
@@ -104,11 +106,32 @@ For X / Bluesky / Threads / Facebook: see per-platform docs.
 Collect candidates UNTIL you have at least `max` non-duplicate items (after
 running step 4 dedupe), or you exhaust the platform's pagination.
 
+## Step 3.5 — Apply custom user rules + considered state
+
+Before Layer 1 dedupe, use `skills/repost-custom-rules/SKILL.md` on the full
+collected source set.
+
+1. Read `~/.repost-with-agent/considered.jsonl` if it exists and drop candidates
+   already recorded as `status: "skipped-rule"` for this source id/URL and
+   matching global/pair/destination scope.
+2. Evaluate top-level `customRules` and pair-level `pair.customRules`.
+3. For each new custom-rule skip, append `candidate.custom_rule.skipped` to
+   `considered.jsonl` unless already present, append `pair.custom_rule.skipped`
+   to this pair's `audit.jsonl`, record the item in `backfill-state.json` as
+   skipped, and remove it from the publish set.
+4. Do NOT append custom-rule skips to `posted.jsonl` or
+   `global-posted.jsonl`; no destination state was proven.
+
+Current Ethan rule to respect if present in config: X source video/livestream
+promos matching `vibe coding an ai slop machine #ai #programming #developer`
+(rule id `skip-x-ai-slop-machine-videos`) are skipped for future reposts.
+
 ## Step 4 — Layer 1 dedupe (full set: local + global + destination)
 
 Same algorithm as `repost-run` step 4 (see `skills/repost-dedup/SKILL.md`),
-applied to the full collected set. **Layer 1** = cheap string ops over local
-history, the global cross-pair content ledger, and the destination scrape.
+applied to the full collected set after custom-rule filtering. **Layer 1** =
+cheap string ops over local history, the global cross-pair content ledger, and
+the destination scrape.
 
 1. **Local dedupe.** Drop any item whose `sourceItemId` is in this pair's
    `posted.jsonl`.
@@ -172,19 +195,23 @@ For each candidate in order:
 
 1. Tell the user what we're about to publish (`#<n>/<max>`: text preview + source URL).
 2. If `pair.mode === "approval-required"`: ask the user to approve. Skip on no.
-3. **Run Layer 2 semantic dedupe** (step 5.5 above) on this candidate
+3. **Re-apply custom rules / considered state** to this candidate using
+   `skills/repost-custom-rules/SKILL.md`; a long backfill may have new rules or
+   considered lines from another run by the time this iteration starts. If it
+   matches, log + skip + continue to the next iteration.
+4. **Run Layer 2 semantic dedupe** (step 5.5 above) on this candidate
    against the freshest destination scrape. If it returns
    `semantic-duplicate`, log audit + skip + continue to next iteration.
-4. If dry-run (no `--allow-publish`): just record the candidate in the audit
+5. If dry-run (no `--allow-publish`): just record the candidate in the audit
    log as `pair.backfill.would_publish` and continue to the next.
-5. If publishing:
+6. If publishing:
    - Run the URL expansion + length check from `repost-run` steps 6–7.
    - Drive the destination compose flow from `repost-run` step 8.
    - On success: append to `posted.jsonl` and
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
    - **Notify the user immediately** (step 10 of `repost-run`).
-6. **Sleep** `effectiveIntervalMinutes * 60` seconds before the next candidate
+7. **Sleep** `effectiveIntervalMinutes * 60` seconds before the next candidate
    (use `sleep` via Bash). This is mandatory — destinations rate-limit
    aggressively on rapid-fire posts, and the per-pair policy floor prevents
    accidental spam bursts.
@@ -204,7 +231,8 @@ After the loop, print + (optionally) Telegram a summary:
 ```
 ✅ Backfill complete: <pair-id>
   Published: <N>
-  Skipped:   <M> (duplicates: X, errors: Y)
+  Skipped:   <M> (duplicates: X, custom-rules: C, errors: Y)
+  Rule IDs:  <comma-separated custom-rule ids or n/a>
   Duration:  <H>h<M>m
 ```
 
@@ -277,6 +305,8 @@ default delivery accounts, and never paste raw JSON/tool output into user-facing
 ## See also
 
 - `skills/repost-run/SKILL.md` — single-post version.
+- `skills/repost-custom-rules/SKILL.md` — user preference skip rules +
+  append-only considered state (runs before dedupe).
 - `skills/repost-dedup/SKILL.md` — Layer 1 dedupe (exact + fuzzy string match).
 - `skills/repost-global-dedupe/SKILL.md` — global cross-pair content ledger.
 - `skills/repost-dedup-semantic/SKILL.md` — Layer 2 dedupe (agent semantic reasoning).

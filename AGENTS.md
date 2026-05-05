@@ -47,7 +47,9 @@ agent owns the run unless Ethan explicitly asks for a different harness.
 
 | Path | Purpose |
 | --- | --- |
-| `~/.repost-with-agent/pairs.json` | Array of pair configs (schemaVersion 4) |
+| `~/.repost-with-agent/pairs.json` | Array of pair configs (schemaVersion 4), including optional `customRules` |
+| `~/.repost-with-agent/global-posted.jsonl` | Append-only cross-pair publish/duplicate proof ledger |
+| `~/.repost-with-agent/considered.jsonl` | Append-only custom-rule / not-post-worthy decisions |
 | `~/.repost-with-agent/pairs/<id>/posted.jsonl` | Append-only NDJSON history |
 | `~/.repost-with-agent/pairs/<id>/audit.jsonl` | Append-only NDJSON audit |
 | `~/.repost-with-agent/pairs/<id>/learnings.md` | Per-pair institutional memory (free-form prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections; try cached selectors FIRST, fall back to `docs/destinations/<platform>.md`) |
@@ -68,6 +70,8 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 | `repost-listen-for-future-setup` | User wants to install scheduler |
 | `repost-history` | User wants to tail posted.jsonl |
 | `repost-dedup` | Reference for Layer 1 fuzzy-match algorithm (exact + string match) |
+| `repost-global-dedupe` | Reference for the cross-pair contentKey ledger |
+| `repost-custom-rules` | User preference skip rules + considered state (runs before dedupe) |
 | `repost-dedup-semantic` | Reference for Layer 2 semantic-similarity check (agent reasoning over candidate vs. recent destination posts; default 30-post window) |
 | `repost-url-expand` | Reference for shortener resolution |
 | `repost-notify` | The Telegram-confirm payload + non-negotiable rule |
@@ -100,6 +104,10 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
 - Live publishes need `mode: "live-approved"` (scheduled ticks) or explicit per-post
   authorization (`mode: "approval-required"`).
+- **Custom rules run before dedupe.** Apply top-level/pair `customRules` and
+  `~/.repost-with-agent/considered.jsonl` immediately after source scrape. A
+  rule skip appends considered + audit state only; do NOT append to publish/global
+  ledgers because no destination proof exists.
 - **Global + two-layer dedupe — everything must clear.** First run
   `repost-global-dedupe`: read `~/.repost-with-agent/global-posted.jsonl`,
   resolve/inherit the cross-pair `contentKey`, and skip if any pair has already
@@ -112,7 +120,7 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
   explicit per-pair policy fields.
 - No stealth, no CAPTCHA / 2FA bypass, no hidden posting.
 - You CANNOT log in for the user. `category: "needs-login"` on session expiry.
-- `posted.jsonl` / `audit.jsonl` / `global-posted.jsonl` are append-only.
+- `posted.jsonl` / `audit.jsonl` / `global-posted.jsonl` / `considered.jsonl` are append-only.
 
 ## See also
 

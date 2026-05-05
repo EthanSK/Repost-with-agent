@@ -111,6 +111,17 @@ on the threshold — when on the fence between "proceed" and "skip", it
 skips, since a missed post is much cheaper than an embarrassing
 duplicate.
 
+## Custom user skip rules
+
+Before dedupe/publish, the agent also applies optional `customRules` from
+`~/.repost-with-agent/pairs.json` plus append-only
+`~/.repost-with-agent/considered.jsonl`. This is for user preference filters
+that are not duplicate proof, e.g. “never repost X video/livestream promos
+matching this topic.” A custom-rule skip appends `candidate.custom_rule.skipped`
+to `considered.jsonl` and `pair.custom_rule.skipped` to the pair audit, but it
+MUST NOT append to `posted.jsonl` or `global-posted.jsonl`. Those ledgers remain
+reserved for successful publish / destination duplicate proof.
+
 (See [`docs/architecture.md`](docs/architecture.md) for the long version.)
 
 ## Required harness toolkit
@@ -145,20 +156,23 @@ When you invoke `/repost-run linkedin-to-x`:
 2. Agent reads the skill (Markdown).
 3. Agent reads `~/.repost-with-agent/pairs.json` to find the pair.
 4. Agent uses its current-harness browser automation to navigate to the LinkedIn profile, scroll to
-   load recent posts, scrape text + URLs.
-5. Agent reads `~/.repost-with-agent/pairs/linkedin-to-x/posted.jsonl` to
-   check local dedupe.
-6. Agent navigates to the X profile and scrapes recent posts to check
+   load recent posts, scrape text + URLs + obvious media hints.
+5. Agent applies custom user skip rules from `pairs.json` and
+   `considered.jsonl`; preference skips do not touch publish ledgers.
+6. Agent reads `~/.repost-with-agent/pairs/linkedin-to-x/posted.jsonl` and
+   `global-posted.jsonl` to check local/global dedupe.
+7. Agent navigates to the X profile and scrapes recent posts to check
    destination dedupe (fuzzy match: normalize whitespace, lowercase, strip
-   URLs, ≥80-char prefix overlap).
-7. Agent picks the newest non-duplicate item.
-8. Agent expands shortened URLs (`lnkd.in`, `t.co`, `bit.ly`, etc.) via
+   URLs, ≥80-char prefix overlap), then runs Layer 2 semantic dedupe.
+8. Agent picks the newest non-duplicate, non-rule-skipped item.
+9. Agent expands shortened URLs (`lnkd.in`, `t.co`, `bit.ly`, etc.) via
    `curl -sIL` in Bash, and does **not** add the source platform permalink to
    the destination post body. Source URLs stay in state/audit/Telegram only.
-9. Agent navigates to `x.com/compose/post`, fills the textarea, clicks Post.
-10. Agent reads the resulting URL from the page.
-11. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`.
-12. Agent uses the current harness's primary message delivery tool to send the publish-confirmation:
+10. Agent navigates to `x.com/compose/post`, fills the textarea, clicks Post.
+11. Agent reads the resulting URL from the page.
+12. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`
+    and a publish proof to `global-posted.jsonl`.
+13. Agent uses the current harness's primary message delivery tool to send the publish-confirmation:
 
     ```
     [Repost-with-agent] ✅ Posted: linkedin-to-x
@@ -202,6 +216,8 @@ MUST also fire a publish confirmation.
 - `skills/repost-listen-for-future-setup/` — install scheduler.
 - `skills/repost-history/` — tail posted.jsonl.
 - `skills/repost-dedup/` — Layer 1 fuzzy-match algorithm reference.
+- `skills/repost-global-dedupe/` — cross-pair contentKey ledger.
+- `skills/repost-custom-rules/` — custom user skip rules + considered state.
 - `skills/repost-dedup-semantic/` — Layer 2 semantic-similarity check (agent reasoning).
 - `skills/repost-url-expand/` — shortener resolution.
 - `skills/repost-notify/` — Telegram payload spec + non-negotiable rule.
@@ -212,7 +228,9 @@ MUST also fire a publish confirmation.
 
 All state lives at `~/.repost-with-agent/`:
 
-- `pairs.json` — array of pair configs (schemaVersion 4).
+- `pairs.json` — array of pair configs (schemaVersion 4), including optional `customRules`.
+- `global-posted.jsonl` — append-only cross-pair publish/duplicate proof ledger.
+- `considered.jsonl` — append-only custom-rule / not-post-worthy decisions.
 - `pairs/<id>/posted.jsonl` — append-only history of successful publishes.
 - `pairs/<id>/audit.jsonl` — append-only audit events.
 - `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
@@ -232,6 +250,7 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
 ```json
 {
   "schemaVersion": 4,
+  "customRules": [],
   "pairs": [
     {
       "id": "linkedin-to-x",

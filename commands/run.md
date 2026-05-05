@@ -22,12 +22,13 @@ current-harness primary message delivery) to:
 1. Load the pair config from `~/.repost-with-agent/pairs.json`.
 2. Refuse if `pair.enabled === false` or `pair.mode === "preview-only"` (unless explicitly previewing).
 3. Use current-harness browser automation to navigate to the source profile and scrape recent posts.
-4. Run dedupe (local: `posted.jsonl`; global: `global-posted.jsonl`; remote: scrape destination profile).
-5. Pick the newest non-duplicate item.
-6. Expand shortened URLs in the draft body (`lnkd.in`, `t.co`, `bit.ly`, ...).
-7. Drive the destination compose flow via current-harness browser automation.
-8. Append to `~/.repost-with-agent/pairs/<id>/posted.jsonl`.
-9. confirm Ethan via the current harness's primary message delivery tool.
+4. Apply custom user skip rules + `considered.jsonl` before dedupe.
+5. Run dedupe (local: `posted.jsonl`; global: `global-posted.jsonl`; remote: scrape destination profile) plus Layer 2 semantic dedupe.
+6. Pick the newest non-duplicate, non-rule-skipped item.
+7. Expand shortened URLs in the draft body (`lnkd.in`, `t.co`, `bit.ly`, ...).
+8. Drive the destination compose flow via current-harness browser automation.
+9. Append to `~/.repost-with-agent/pairs/<id>/posted.jsonl` and `global-posted.jsonl`.
+10. confirm Ethan via the current harness's primary message delivery tool.
 
 ## Mode rules
 

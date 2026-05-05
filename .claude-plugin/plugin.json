@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "repost-with-agent",
   "version": "4.4.0",
-  "description": "Skill-only agent/OpenClaw-compatible plugin for browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. The running agent uses its existing tools (Read, Edit, Write, Bash, current-harness browser automation, and the current harness's Telegram/message tool — OpenClaw message tool or Claude Code plugin:telegram:telegram) to scrape, dedupe (Layer 1 strings + Layer 2 agent semantic check), post, log history, and notify. Maintains per-pair learnings.md so the agent does not re-figure platform quirks every scheduled tick. No CLI, no MCP server, no platform SDKs.",
+  "description": "Skill-only agent/OpenClaw-compatible plugin for browser-based reposting across LinkedIn, X, Bluesky, Threads, and Facebook. The running agent uses its existing tools (Read, Edit, Write, Bash, current-harness browser automation, and the current harness's Telegram/message tool — OpenClaw message tool or Claude Code plugin:telegram:telegram) to scrape, dedupe (Layer 1 strings + Layer 2 agent semantic check), apply custom user skip rules, post, log history, and notify. Maintains per-pair learnings.md so the agent does not re-figure platform quirks every scheduled tick. No CLI, no MCP server, no platform SDKs.",
   "skills": [
     "skills/repost-pair-setup",
     "skills/repost-pair-list",
@@ -13,6 +13,7 @@
     "skills/repost-history",
     "skills/repost-dedup",
     "skills/repost-global-dedupe",
+    "skills/repost-custom-rules",
     "skills/repost-dedup-semantic",
     "skills/repost-url-expand",
     "skills/repost-notify",

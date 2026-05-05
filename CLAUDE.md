@@ -61,7 +61,9 @@ stops. There's no fallback.
 All state lives at `~/.repost-with-agent/`. You read/write via native Read,
 Edit, Write tools.
 
-- `pairs.json` — array of pair configs (schemaVersion 4).
+- `pairs.json` — array of pair configs (schemaVersion 4), including optional `customRules`.
+- `global-posted.jsonl` — append-only cross-pair publish/duplicate proof ledger.
+- `considered.jsonl` — append-only custom-rule / not-post-worthy decisions.
 - `pairs/<id>/posted.jsonl` — append-only NDJSON history. Append via `>>` in
   Bash. NEVER rewrite existing lines.
 - `pairs/<id>/audit.jsonl` — append-only NDJSON audit events.
@@ -101,9 +103,16 @@ links, resolve them to the underlying non-LinkedIn URL before posting to X.
 
 See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 
-## Global + two-layer dedupe (v4.4.0+)
+## Custom rules + global/two-layer dedupe (v4.4.0+)
 
-Every publish must clear the global ledger and BOTH layers:
+Every publish first applies user custom rules, then must clear the global ledger and BOTH layers:
+
+- **Custom rules.** Immediately after source scrape, read top-level/pair
+  `customRules` from `~/.repost-with-agent/pairs.json` and
+  `~/.repost-with-agent/considered.jsonl` via
+  `skills/repost-custom-rules/SKILL.md`. A custom-rule skip appends considered
+  + per-pair audit state only. Do NOT append to `posted.jsonl` or
+  `global-posted.jsonl` because no destination proof exists.
 
 - **Global cross-pair ledger.** Read
   `~/.repost-with-agent/global-posted.jsonl`, resolve/inherit the candidate
@@ -142,6 +151,7 @@ threshold — when on the fence, skip.
 - `pair.publish.notify_skipped_unconfigured` — silent publish. **Treat as a
   project bug.** Fix immediately.
 - `pair.publish.url_expanded` — one URL was successfully expanded.
+- `pair.custom_rule.skipped` — user custom skip rule matched before dedupe/publish; considered state appended, no publish ledger append.
 - `pair.publish.semantic_duplicate` — Layer 2 dedupe match; candidate skipped pre-publish. Includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.global_duplicate` — global ledger found this content already on this destination from another pair/path.
 - `pair.dedupe.uncertain` — destination scrape failed; candidates skipped.
@@ -164,10 +174,12 @@ ticks.
 - Live publishes always need either `mode: "live-approved"` (for scheduled
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.
-- Dedupe is re-checked at every publish — both layers (Layer 1 string
-  match: local `posted.jsonl` + remote fuzzy-match with normalize +
-  ≥80-char prefix overlap; Layer 2 agent semantic check over the
-  destination's last 30 posts) must clear.
+- Custom rules are checked before dedupe/publish. A custom-rule skip appends
+  `considered.jsonl` + pair audit only; it never appends publish/global ledgers.
+- Dedupe is re-checked at every publish — global ledger plus both layers (Layer
+  1 string match: local `posted.jsonl` + remote fuzzy-match with normalize +
+  ≥80-char prefix overlap; Layer 2 agent semantic check over the destination's
+  last 30 posts) must clear.
 - Uncertain matches are skipped unless `policy.blockOnUncertainDuplicate` is
   `false`. Layer 2 can be turned off per-pair via
   `policy.semanticDedupeEnabled: false`.

@@ -27,7 +27,9 @@ Flags:
 
 ## What it does
 
-Dispatches to `skills/repost-backfill/SKILL.md`. Newest-first ordering is
+Dispatches to `skills/repost-backfill/SKILL.md`. It applies custom user skip
+rules + `considered.jsonl` before dedupe and again inside the publish loop.
+Newest-first ordering is
 intentional — if interrupted, the destination ends up with a contiguous recent
 history rather than a gap-bounded historical block. (Ethan voice 6021.)
 
