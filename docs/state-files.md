@@ -49,8 +49,8 @@ the skill workflows.
       "schedule": {
         "kind": "manual | cron",
         "tz": "Europe/London",
-        "expression": "0 */5 * * *",
-        "everyHours": 5
+        "expression": "0 10 * * *",
+        "everyHours": 24
       },
       "policy": {
         "maxItemsPerRun": 1,
@@ -106,7 +106,7 @@ the skill workflows.
   produced. Tune up for high-volume destinations (X power-users) and
   down for low-volume destinations (Substack-style); 30 is a sweet spot
   for most accounts.
-- `schedule.everyHours` — positive integer; used by `repost-listen-for-future-setup` to set OpenClaw `--every "<N>h"` or a fallback scheduler interval.
+- `schedule.everyHours` — positive integer; defaults to `24` (daily) for listen-for-future pairs. Used by `repost-listen-for-future-setup` to set OpenClaw `--every "<N>h"` or a fallback scheduler interval.
 
 ### Migration from v3
 
@@ -121,7 +121,7 @@ doesn't use anymore:
 
 The migration is a one-shot transformation: change `schemaVersion` from 3 to 4,
 ensure `runMode` exists (default `"listen-for-future"`), add `schedule.everyHours`
-if missing (default 5), drop the deprecated fields. The original v3 file is
+if missing (default 24), drop the deprecated fields. The original v3 file is
 backed up to `~/.repost-with-agent/pairs.json.v3.bak`.
 
 ## `global-posted.jsonl`
@@ -214,6 +214,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.dedupe.global_duplicate`          | Global ledger found the same `contentKey` already posted/caught-up for this destination by any pair. |
 | `pair.dedupe.uncertain`                 | Destination scrape failed; candidates left undecided. Includes reason. |
 | `pair.dedupe.semantic_clean`            | (Optional) Layer 2 semantic dedupe ran and cleared the candidate. Includes `candidateExcerpt`, `windowSize`, `candidatesCompared`. |
+| `pair.preview.success`                  | Preview/draft was prepared without publishing. Includes `sourceItemId`, `canonicalSourceUrl`, `draftChars`, and `wouldPublish`. Scheduler setup may use this as proof a dry run worked before enabling live ticks. |
 | `pair.publish.semantic_duplicate`       | **Layer 2 semantic dedupe match — candidate skipped pre-publish.** Includes `pairId`, `sourceItemId`, `candidateExcerpt` (first 200 chars), `matchedExistingUrl`, `matchedExistingExcerpt` (first 200 chars), `agentReasoning` (1-3 sentence justification), `windowSize` (number of destination posts compared). See `skills/repost-dedup-semantic/SKILL.md`. |
 | `pair.publish.start`                    | About to drive the destination compose flow. |
 | `pair.publish.url_expanded`             | One shortened URL was expanded. Includes `from`, `to`. |
@@ -221,7 +222,7 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.truncated`                | Draft exceeded char cap; truncate strategy applied. |
 | `pair.publish.skipped_overlength`       | Draft exceeded char cap; skip strategy applied. |
 | `pair.publish.success`                  | Destination confirmed the post. Includes `sourceItemId`, `destinationUrl`. |
-| `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. |
+| `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. Categories include `needs-login`, `needs-config`, `needs-account-switch`, `rate-limit`, `platform-error`, and `unknown`. |
 | `pair.publish.notify.success`           | Telegram-confirm delivered. |
 | `pair.publish.notify.failure`           | Telegram-confirm failed. Includes error. **The post itself stayed up.** |
 | `pair.publish.notify_skipped_unconfigured` | Telegram/message delivery not loaded. **Treat as a silent-publish alert.** |
@@ -244,6 +245,24 @@ Append-only NDJSON. Each line is one audit event. Schema:
   "matchedDestinationPlatform": "<destination platform>",
   "matchedDestinationUrl": "<existing destination URL>",
   "reason": "same contentKey already posted/caught-up for this destination"
+}
+```
+
+### `pair.preview.success` schema
+
+Preview/draft prepared without publishing. Useful as the pre-flight proof that
+source scrape, dedupe, URL expansion, and length checks worked before a pair is
+armed for scheduled live ticks.
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "pair.preview.success",
+  "pairId": "<id>",
+  "sourceItemId": "<candidate source id>",
+  "canonicalSourceUrl": "<candidate source URL>",
+  "draftChars": 153,
+  "wouldPublish": true
 }
 ```
 
@@ -362,7 +381,7 @@ clean completion. Schema:
 {
   "startedAt": "<ISO-8601>",
   "max": 10,
-  "intervalMinutes": 10,
+  "intervalMinutes": 60,
   "completedSourceItemIds": ["urn:li:activity:7000", "..."],
   "skippedSourceItemIds": ["urn:li:activity:6999"]
 }

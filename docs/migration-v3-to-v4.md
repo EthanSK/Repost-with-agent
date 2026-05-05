@@ -104,8 +104,8 @@ Use this transformation for the one-time migration:
          "kind": "manual",
          "tz": "Europe/London",
 -        "expression": "0 10 * * *"
-+        "expression": "0 */5 * * *",
-+        "everyHours": 5
++        "expression": "0 10 * * *",
++        "everyHours": 24
        },
        "policy": {
 -        "requirePreviewBeforeFirstLiveRun": true,
@@ -153,7 +153,7 @@ the v3 install survive the migration unchanged.
 6. Run `/repost-run <pair-id>` to do a manual tick. Confirm a Telegram
    confirmation lands.
 7. Run `/repost-setup-cron <pair-id>` to install the current-harness scheduler
-   entry for recurring listen-for-future ticks (default every 5 hours).
+   entry for recurring listen-for-future ticks (default daily / every 24 hours).
 
 ## Rollback
 

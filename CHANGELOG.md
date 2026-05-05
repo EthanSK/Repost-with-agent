@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — production/OpenClaw readiness audit
+
+### Changed
+
+- Aligned README, templates, pair setup/list docs, migration notes, and state schema on the current conservative daily/default-24h cadence instead of stale every-5h examples.
+- Documented clean marketplace packaging guidance so local ignored/private state is not bundled.
+- Clarified preview proof logging with `pair.preview.success`, including schema and template sample, because scheduler setup checks for it before arming live ticks.
+- Clarified `needs-account-switch` as a first-class publish failure category so account/profile mismatch blocks safely instead of posting from the wrong identity.
+- Clarified backfill publish pacing so `policy.minDelayBetweenPostsMinutes` floors requested intervals and prevents accidental spam bursts.
+
 ## v4.4.0 — 2026-05-04 — Global cross-pair dedupe ledger
 
 **Safety/dedupe fix.** Pairs no longer think only in their own `posted.jsonl`. Every publish-capable path now has an explicit global cross-pair ledger step so alternate routes do not double-post the same underlying content to the same destination.

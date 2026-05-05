@@ -58,8 +58,8 @@ The directories are created lazily on first run for a pair.
       "schedule": {
         "kind": "manual | cron",
         "tz": "Europe/London",
-        "expression": "0 */5 * * *",
-        "everyHours": 5
+        "expression": "0 10 * * *",
+        "everyHours": 24
       },
       "policy": {
         "maxItemsPerRun": 1,
@@ -89,7 +89,7 @@ Field invariants:
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.
-- `schedule.everyHours` defaults to 5 when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill).
+- `schedule.everyHours` defaults to 24 (daily) when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill).
 
 ## Conversation flow
 
@@ -108,7 +108,7 @@ Field invariants:
 3. **Pair name + id.** Suggest `<source>-to-<destination>` as the id; let the user override the human-readable name.
 4. **Run mode.** "`listen-for-future` (tail new posts on a schedule) or `backfill` (one-shot walk back through history)?" Default to `listen-for-future` if unsure.
 5. **Safety mode.** Default to `preview-only`. Only set `approval-required` or `live-approved` if the user explicitly asks for live posting now.
-6. **Schedule (if listen-for-future).** Ask for cadence in hours. Default 5.
+6. **Schedule (if listen-for-future).** Ask for cadence in hours. Default 24 (daily).
 
 ## Destination account / page switching
 

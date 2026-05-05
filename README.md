@@ -24,7 +24,7 @@ profile (`openclaw`, CDP port `18800`), not Ethan's personal browser/profile.
    this directory by fresh agent runs.
 4. In a fresh session: `/pair create` to set up a source → destination pair.
 5. `/repost-run <pair-id>` to do a manual end-to-end repost.
-6. `/repost-setup-cron <pair-id>` to schedule recurring ticks (default every 5h).
+6. `/repost-setup-cron <pair-id>` to schedule recurring ticks (default daily / every 24h).
 
 That's it. The agent does everything else.
 
@@ -48,6 +48,13 @@ helper.
   safest after manifest or slash-command additions/removals. Existing
   long-running agent sessions may keep old startup context; start a fresh
   run/session for newly edited skill text.
+
+## Marketplace / packaging sanity check
+
+Before publishing or sharing a bundle, package only the tracked repo files
+(for example via `git archive` or a clean checkout). Do not zip the live
+working directory if it contains ignored local files such as `.env`,
+`.claude/`, browser/cache artefacts, or `~/.repost-with-agent` state.
 
 ## Architecture in one sentence
 
@@ -247,8 +254,8 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
       "schedule": {
         "kind": "cron",
         "tz": "Europe/London",
-        "expression": "0 */5 * * *",
-        "everyHours": 5
+        "expression": "0 10 * * *",
+        "everyHours": 24
       },
       "policy": {
         "maxItemsPerRun": 1,

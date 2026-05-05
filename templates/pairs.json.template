@@ -15,13 +15,15 @@
       "destination": {
         "platform": "x",
         "accountHint": "@<your-handle>",
+        "accountDisplayName": "<visible account/profile name>",
+        "targetType": "profile",
         "profileUrl": "https://x.com/<your-handle>"
       },
       "schedule": {
         "kind": "cron",
         "tz": "Europe/London",
-        "expression": "0 */5 * * *",
-        "everyHours": 5
+        "expression": "0 10 * * *",
+        "everyHours": 24
       },
       "policy": {
         "maxItemsPerRun": 1,

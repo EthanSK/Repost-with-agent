@@ -1,0 +1,24 @@
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+*.log
+
+# Local/private config and state
+.env
+.env.*
+.repost-with-agent/
+/.repost-with-agent/
+
+# Agent/runtime scratch
+.claude/worktrees/
+
+# Build/dependency artefacts (this repo is skill/docs-only)
+node_modules/
+dist/
+*.js.map
+*.d.ts
+
+# Local backups / generated package archives
+*.bak.*
+*.tgz

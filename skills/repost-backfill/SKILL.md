@@ -26,9 +26,10 @@ automation, and current-harness Telegram/message delivery.
    - The user explicitly asks for a one-shot backfill on a different runMode (in which case just remind them this is one-shot, not a permanent runMode change).
 3. Ask the user (or accept from the slash command args):
    - `--max <N>` how many posts to backfill (default 10, hard cap 50 unless user explicitly says larger).
-   - `--interval <minutes>` delay between publishes (default 10, minimum 2 to avoid platform rate-limits).
+   - `--interval <minutes>` requested delay between publishes (default 10 for planning; actual publish delay is floored by `policy.minDelayBetweenPostsMinutes`, normally 60).
    - `--allow-publish` (boolean — default false). Without this flag, do a dry-run preview of every candidate but DON'T publish. With this flag, actually publish.
-4. Verify `pair.mode !== "preview-only"` if `--allow-publish` is set. If `preview-only`, refuse and tell the user to flip the pair to `approval-required` or `live-approved` first.
+4. Compute `effectiveIntervalMinutes = max(--interval or 10, pair.policy.minDelayBetweenPostsMinutes or 60)` for any publish-capable backfill. If the user supplied a lower interval, tell them the pair policy floor won; never rapid-fire publishes below the configured floor.
+5. Verify `pair.mode !== "preview-only"` if `--allow-publish` is set. If `preview-only`, refuse and tell the user to flip the pair to `approval-required` or `live-approved` first.
 
 ## Step 1.5 — Read pair learnings (institutional memory)
 
@@ -77,7 +78,7 @@ Backfill is interruptible. Keep an idempotent state file at
 {
   "startedAt": "<ISO-8601>",
   "max": 10,
-  "intervalMinutes": 10,
+  "intervalMinutes": 60,
   "completedSourceItemIds": ["urn:li:activity:7000", "..."],
   "skippedSourceItemIds": ["urn:li:activity:6999"]
 }
@@ -183,9 +184,10 @@ For each candidate in order:
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
    - **Telegram-confirm Ethan immediately** (step 10 of `repost-run`).
-6. **Sleep** `intervalMinutes * 60` seconds before the next candidate (use
-   `sleep` via Bash). This is mandatory — destinations rate-limit aggressively
-   on rapid-fire posts.
+6. **Sleep** `effectiveIntervalMinutes * 60` seconds before the next candidate
+   (use `sleep` via Bash). This is mandatory — destinations rate-limit
+   aggressively on rapid-fire posts, and the per-pair policy floor prevents
+   accidental spam bursts.
 
 ## Step 7 — Re-check destination dedupe between publishes
 

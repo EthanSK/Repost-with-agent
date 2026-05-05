@@ -182,7 +182,7 @@ and ships only skills + commands. The `pairs.json` schema bumps from 3 to 4 —
 deprecated fields (`policy.requirePreviewBeforeFirstLiveRun`,
 `policy.preferOfficialApi`, `dedupe.strategy`, `*.authRef`, `source.type`,
 `destination.type`) are dropped; `runMode` (default `"listen-for-future"`) and
-`schedule.everyHours` (default 5) are added. The v3 file is backed up to
+`schedule.everyHours` (default 24 / daily) are added. The v3 file is backed up to
 `~/.repost-with-agent/pairs.json.v3.bak`.
 
 The 11 entries in `~/.repost-with-agent/pairs/linkedin-to-x/posted.jsonl`

@@ -128,10 +128,12 @@ crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 ## Step 2 — Decide what we're allowed to do
 
 - If `mode === "preview-only"`: do steps 3–5 (scrape + show draft) but STOP
-  before publish. Tell the user what we would have published.
-- If `mode === "approval-required"`: do steps 3–6, then ASK the user to
-  authorize the post explicitly in chat. Only proceed if they say yes in this
-  same conversation.
+  before publish. Tell the user what we would have published, and append
+  `pair.preview.success` to `audit.jsonl` with the candidate id, canonical
+  source URL, draft character count, and `wouldPublish: true`.
+- If `mode === "approval-required"`: do steps 3–6, append
+  `pair.preview.success`, then ASK the user to authorize the post explicitly
+  in chat. Only proceed if they say yes in this same conversation.
 - If `mode === "live-approved"`: do everything end-to-end. This is the only
   mode the scheduled agent should encounter (the install skill refuses
   to schedule non-live-approved pairs).
@@ -302,9 +304,9 @@ This is where the running agent drives the user's logged-in browser.
      profile and grab the topmost post URL.
    - For LinkedIn / Threads / Facebook: see per-platform docs.
 
-If publish fails (login expired, rate limit, platform error):
+If publish fails (login expired, account mismatch, missing config, rate limit, platform error):
 
-- Append `pair.publish.failed` audit with `category: "needs-login" | "rate-limit" | "platform-error" | "unknown"`.
+- Append `pair.publish.failed` audit with `category: "needs-login" | "needs-config" | "needs-account-switch" | "rate-limit" | "platform-error" | "unknown"`.
 - Tell the user what happened.
 - Telegram Ethan with the failure using the current harness's Telegram/message delivery tool.
 - DO NOT append to `posted.jsonl` (we did not actually post).
@@ -432,6 +434,8 @@ which category:
 - `needs-login` — destination or source session expired. User must log in via
   the current harness browser profile, then re-run.
 - `needs-config` — Telegram not configured, pair config missing required field, etc.
+- `needs-account-switch` — login exists, but the visible posting identity does
+  not match `destination.accountDisplayName` / target profile/page/group.
 - `rate-limit` — destination platform rejected with a 429 or rate-limit modal.
   Wait and retry later.
 - `platform-error` — destination platform error not in the above categories.

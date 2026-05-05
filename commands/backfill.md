@@ -17,8 +17,9 @@ Flags:
 
 - `--max <N>` — cap the number of publishes (default 10, hard cap 50 unless
   the user explicitly asks for higher).
-- `--interval <minutes>` — delay between publishes (default 10, minimum 2 to
-  avoid platform rate-limits).
+- `--interval <minutes>` — requested delay between publishes (default 10 for
+  planning; actual publish delay is floored by `policy.minDelayBetweenPostsMinutes`,
+  normally 60).
 - `--allow-publish` — actually publish. Default behaviour without this flag is
   a dry-run that scrapes + dedupes + shows what would publish.
 - `--resume` — load `~/.repost-with-agent/pairs/<id>/backfill-state.json` from

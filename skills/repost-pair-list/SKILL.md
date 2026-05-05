@@ -21,7 +21,7 @@ Read `~/.repost-with-agent/pairs.json` and summarize each configured pair.
 **linkedin-to-x**  (enabled · live-approved · listen-for-future)
   Source:      linkedin · https://www.linkedin.com/in/ethansk
   Destination: x · @REEEthan_YT
-  Schedule:    cron · every 5h (0 */5 * * *) · Europe/London
+  Schedule:    cron · daily / every 24h (0 10 * * *) · Europe/London
   History:     11 posts · last 2026-04-30T22:53:11Z → https://x.com/REEEthan_YT/status/...
 
 **bluesky-to-threads** (disabled · preview-only · backfill)

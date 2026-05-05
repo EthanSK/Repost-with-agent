@@ -3,6 +3,7 @@
 {"ts":"2026-05-01T12:00:08Z","event":"pair.fetch.success","pairId":"linkedin-to-x","candidateCount":7}
 {"ts":"2026-05-01T12:00:08Z","event":"pair.dedupe.local","pairId":"linkedin-to-x","duplicates":3,"survivors":4}
 {"ts":"2026-05-01T12:00:14Z","event":"pair.dedupe.remote","pairId":"linkedin-to-x","duplicates":1,"survivors":3}
+{"ts":"2026-05-01T12:00:14Z","event":"pair.preview.success","pairId":"linkedin-to-x","sourceItemId":"urn:li:activity:7000","canonicalSourceUrl":"https://www.linkedin.com/feed/update/urn:li:activity:7000/","draftChars":153,"wouldPublish":true}
 {"ts":"2026-05-01T12:00:15Z","event":"pair.publish.url_expanded","pairId":"linkedin-to-x","from":"https://lnkd.in/abc","to":"https://example.com/article"}
 {"ts":"2026-05-01T12:00:18Z","event":"pair.publish.success","pairId":"linkedin-to-x","sourceItemId":"urn:li:activity:7000","destinationUrl":"https://x.com/REEEthan_YT/status/123"}
 {"ts":"2026-05-01T12:00:19Z","event":"pair.publish.notify.success","pairId":"linkedin-to-x","destinationUrl":"https://x.com/REEEthan_YT/status/123"}
