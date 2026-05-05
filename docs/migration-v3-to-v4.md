@@ -152,8 +152,9 @@ the v3 install survive the migration unchanged.
    v4.
 6. Run `/repost-run <pair-id>` to do a manual tick. Confirm a Telegram
    confirmation lands.
-7. Run `/repost-setup-cron <pair-id>` to install the current-harness scheduler
-   entry for recurring listen-for-future ticks (default daily / every 24 hours).
+7. Run `/repost-setup-cron` to install the default current-harness scheduler
+   entry for recurring listen-for-future ticks (daily all-enabled sweep), or ask
+   for a per-pair/subset/custom schedule if that better matches your workflow.
 
 ## Rollback
 

@@ -84,7 +84,7 @@ Full schemas + audit-event taxonomy: `docs/state-files.md`.
 
 ## Two run-modes
 
-- **`listen-for-future`**: tail new posts on a current-harness scheduler (OpenClaw cron preferred for OpenClaw workflows).
+- **`listen-for-future`**: tail new posts on a current-harness scheduler (OpenClaw cron preferred for OpenClaw workflows). Default is one daily all-enabled sweep, but users may configure per-pair jobs, subset jobs, preview-only jobs, or custom cadences.
   Default. Each tick spawns a fresh subagent which runs `skills/repost-run/SKILL.md`.
 - **`backfill`**: one-shot walk back through historical source posts,
   newest-first (Ethan voice 6021). Use `skills/repost-backfill/SKILL.md`.
@@ -174,6 +174,7 @@ ticks.
 ## Project rules in one paragraph
 
 - New pairs default to `mode: "preview-only"` and `enabled: false`. Intentional.
+- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
 - Live publishes always need either `mode: "live-approved"` (for scheduled
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.

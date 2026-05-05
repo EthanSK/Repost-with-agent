@@ -48,6 +48,7 @@ The directories are created lazily on first run for a pair.
     "noRawToolOutput": true
   },
   "customRules": [],
+  "schedulerJobs": [],
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -68,10 +69,11 @@ The directories are created lazily on first run for a pair.
         "profileUrl": "https://x.com/<handle>"
       },
       "schedule": {
-        "kind": "manual | cron",
+        "kind": "manual | cron | every",
         "tz": "Europe/London",
         "expression": "0 10 * * *",
-        "everyHours": 24
+        "everyHours": 24,
+        "everyMinutes": 1440
       },
       "policy": {
         "maxItemsPerRun": 1,
@@ -98,13 +100,16 @@ Field invariants:
 - New pairs default to `mode: "preview-only"` and `enabled: false`. **Never flip to live without explicit user authorization in the current conversation.**
 - `runMode: "listen-for-future"` is the default — tail new posts on a schedule.
 - `runMode: "backfill"` is for one-shot historical walks (newest-first).
-- `mode: "live-approved"` is the only mode that allows scheduled live publishes.
+- `mode: "live-approved"` is the only mode that allows unattended scheduled live publishes; scheduled dry/preview jobs may inspect pairs without publishing.
+- Optional top-level `schedulerJobs` records human/agent-readable scheduler intent (all-enabled sweep, per-pair jobs, subsets, preview-only jobs). The host scheduler remains the operational source of truth.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
 - `policy.overlengthStrategy: "compact"` is the Ethan/OpenClaw default for tight destinations: if a draft is over the cap, rewrite it shorter while preserving the original voice, intent, links, and meaning as much as possible. Use `"skip"` only when Ethan wants overlength drafts dropped; use `"truncate"` only if he explicitly asks for mechanical shortening.
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.
-- `schedule.everyHours` defaults to 24 (daily) when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill).
+- `schedule.kind: "manual"` means no scheduler should be installed for that pair unless a separate custom job explicitly names it.
+- `schedule.kind: "cron"` uses `schedule.expression`; `schedule.kind: "every"` uses `everyHours` or `everyMinutes`. These per-pair values are advisory metadata for custom per-pair scheduler jobs.
+- `schedule.everyHours` defaults to 24 (daily) when `runMode = "listen-for-future"` (see `repost-listen-for-future-setup` skill). The default all-pairs sweep may use its own global cadence instead.
 
 ## Conversation flow
 
@@ -123,7 +128,7 @@ Field invariants:
 3. **Pair name + id.** Suggest `<source>-to-<destination>` as the id; let the user override the human-readable name.
 4. **Run mode.** "`listen-for-future` (tail new posts on a schedule) or `backfill` (one-shot walk back through history)?" Default to `listen-for-future` if unsure.
 5. **Safety mode.** Default to `preview-only`. Only set `approval-required` or `live-approved` if the user explicitly asks for live posting now.
-6. **Schedule (if listen-for-future).** Ask for cadence in hours. Default 24 (daily).
+6. **Schedule (if listen-for-future).** Default to the global all-enabled daily sweep. If the user wants something else, capture it literally: manual-only, custom cron expression, every-N-hours/minutes, per-pair job, subset job, preview-only dry job, or multiple jobs. Store per-pair intent in `pair.schedule`; store cross-pair/subset intent in optional top-level `schedulerJobs` when useful.
 7. **Notification route.** Capture or confirm the current user-facing delivery route and write it to top-level `notification.delivery` in `~/.repost-with-agent/pairs.json`. Prefer harness metadata over asking: e.g. OpenClaw can use its current `channel`, `account_id`, and chat target; Slack/Discord equivalents should record channel/user ids; Claude Code should record its configured user channel. If the route is unavailable, block scheduled/live setup until the user provides it.
 
 ## Destination account / page switching
@@ -149,7 +154,7 @@ profile; update the pair to the logged-in visible name.
 
 ## Writing the pair
 
-1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "notification": {"delivery": {}, "payloadStyle": "short-human", "noRawToolOutput": true}, "customRules": [], "pairs": []}`.
+1. **Read** `~/.repost-with-agent/pairs.json` if it exists. If not, initialise with `{"schemaVersion": 4, "notification": {"delivery": {}, "payloadStyle": "short-human", "noRawToolOutput": true}, "customRules": [], "schedulerJobs": [], "pairs": []}`.
 2. **Populate notification route** before enabling scheduled/live pairs: write top-level `notification.delivery` from current harness/chat metadata where available, otherwise ask the user for the delivery destination.
 3. **Validate** that `id` is unique in the existing pairs.
 4. **Append** the new pair object with the fields above. Set `createdAt` and `updatedAt` to the current ISO-8601 UTC timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ` via Bash).
@@ -208,7 +213,7 @@ After writing the pair, print a short summary to the user:
 Next steps:
   1. Verify you're logged into both platforms in the current harness browser profile.
   2. Run /repost-run <id> to do one preview + (if safety mode allows) one live publish.
-  3. Run /repost-setup-cron <id> to install a current-harness scheduler entry that runs every <N> hours.
+  3. Run /repost-setup-cron for the default daily all-enabled sweep, or ask for a per-pair/subset/custom scheduler entry if you want different timing.
 ```
 
 ## Safety

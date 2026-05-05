@@ -69,6 +69,7 @@ the full lifecycle + good/bad-entry guidance.
 3. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
+   Scheduling itself is flexible: the starter path is one daily all-enabled sweep, but per-pair jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
 4. **Custom user rules run before dedupe.** After source scrape, apply
    top-level/pair `customRules` and `considered.jsonl` using
    `skills/repost-custom-rules/SKILL.md`. Skip matching not-post-worthy
@@ -169,12 +170,13 @@ If the user runs `/repost-run <id>`:
    the structured shape (prose + optional `### Selectors` / `### Step
    playbook` / `### Quirks`).
 
-If the scheduler spawned you fresh with `/repost-run all`:
+If the scheduler spawned you fresh with `/repost-run all` or another Repost-with-agent scheduled prompt:
 
 1. Read `~/.repost-with-agent/pairs.json`.
-2. For each pair where `enabled === true && mode === "live-approved" && runMode === "listen-for-future"`, run `skills/repost-run/SKILL.md` end-to-end.
-3. Sleep 30–60s between pairs to avoid rate-limit thrashing.
-4. Exit cleanly.
+2. Resolve the requested scope literally: default `all` means enabled `listen-for-future` pairs; custom jobs may name one pair or an explicit subset.
+3. Live jobs publish only pairs where `mode === "live-approved"`; preview/dry jobs never publish, even if a pair is live-approved.
+4. Sleep 30–60s between pairs to avoid rate-limit thrashing.
+5. Exit cleanly.
 
 ## See also
 

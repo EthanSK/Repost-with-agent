@@ -11,7 +11,8 @@ user's logged-in browser, append history, and confirm Ethan.
 ## Usage
 
 - `/repost-run <pair-id>` — run that one pair.
-- `/repost-run all` — iterate over every enabled `live-approved` `listen-for-future` pair (this is what a scheduled agent may invoke).
+- `/repost-run all` — default scheduled live sweep: iterate over every enabled `live-approved` `listen-for-future` pair.
+- Natural-language/custom scheduler variants may ask for a subset, a single-pair job, or a preview-only/dry sweep. The agent should honor the requested scope/mode while still enforcing each pair's safety mode.
 
 ## What it does
 
@@ -20,7 +21,7 @@ tools (Read, Edit, Write, Bash, current-harness browser automation, and
 current-harness primary message delivery) to:
 
 1. Load the pair config from `~/.repost-with-agent/pairs.json`.
-2. Refuse if `pair.enabled === false` or `pair.mode === "preview-only"` (unless explicitly previewing).
+2. Refuse if `pair.enabled === false`. If the requested mode is live publish, also refuse pairs whose `mode` is not `live-approved`; if the requested mode is preview/dry, stop before publish regardless of pair mode.
 3. Use current-harness browser automation to navigate to the source profile and scrape recent posts.
 4. Apply custom user skip rules + `considered.jsonl` before dedupe.
 5. Run dedupe (local: `posted.jsonl`; global: `global-posted.jsonl`; remote: scrape destination profile) plus Layer 2 semantic dedupe.
@@ -34,7 +35,9 @@ current-harness primary message delivery) to:
 
 - `preview-only`: scrape + dedupe + show draft only. Never publishes.
 - `approval-required`: scrape + dedupe + ask user per-post. Publishes only on user's "yes".
-- `live-approved`: end-to-end without prompting. Required for scheduled live ticks.
+- `live-approved`: end-to-end without prompting. Required for unattended scheduled live ticks.
+
+Scheduled preview/dry ticks are allowed for enabled `listen-for-future` pairs, but the scheduler prompt must explicitly say not to publish.
 
 ## Confirm every successful publish — non-negotiable
 

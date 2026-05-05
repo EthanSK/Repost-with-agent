@@ -17,6 +17,7 @@
 - Clarified preview proof logging with `pair.preview.success`, including schema and template sample, because scheduler setup checks for it before arming live ticks.
 - Clarified `needs-account-switch` as a first-class publish failure category so account/profile mismatch blocks safely instead of posting from the wrong identity.
 - Clarified backfill publish pacing so `policy.minDelayBetweenPostsMinutes` floors requested intervals and prevents accidental spam bursts.
+- Clarified the scheduling product model: default remains one daily all-enabled-pairs sweep, but docs/skills/templates now explicitly support per-pair jobs, subset jobs, dry/preview scheduled checks, custom cadences, manual-only pairs, and optional `schedulerJobs` metadata.
 
 ## v4.4.0 — 2026-05-04 — Global cross-pair dedupe ledger
 

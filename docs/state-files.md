@@ -61,6 +61,27 @@ the skill workflows.
       "examples": []
     }
   ],
+  "schedulerJobs": [
+    {
+      "id": "all-enabled-daily",
+      "enabled": true,
+      "scope": "all-enabled | pair | subset | custom",
+      "pairIds": [],
+      "message": "/repost-run all",
+      "publishMode": "live-approved-only | preview-only",
+      "schedule": {
+        "kind": "manual | cron | every",
+        "tz": "Europe/London",
+        "expression": "0 10 * * *",
+        "everyHours": 24,
+        "everyMinutes": 1440
+      },
+      "host": {
+        "kind": "openclaw-cron | launchd | crontab | other",
+        "jobName": "repost-with-agent.all.daily"
+      }
+    }
+  ],
   "pairs": [
     {
       "id": "linkedin-to-x",
@@ -81,10 +102,11 @@ the skill workflows.
         "profileUrl": "https://x.com/<handle>"
       },
       "schedule": {
-        "kind": "manual | cron",
+        "kind": "manual | cron | every",
         "tz": "Europe/London",
         "expression": "0 10 * * *",
-        "everyHours": 24
+        "everyHours": 24,
+        "everyMinutes": 1440
       },
       "policy": {
         "maxItemsPerRun": 1,
@@ -107,12 +129,20 @@ the skill workflows.
 - `notification.delivery` — optional but strongly recommended for scheduled/live runs. It records the user-facing notification route the setup agent captured from the current harness/chat. For OpenClaw this maps directly to `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<short payload>)`; other harnesses map the same abstract fields to their own user-message tool. Do not rely on a default account/bot when multiple accounts exist.
 - `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` mean publish pings are concise human summaries, never raw JSON/tool/audit dumps.
 - `customRules` — optional top-level user preference filters that run after source scrape and before dedupe/publish. Enabled `action: "skip"` rules append to `considered.jsonl` + per-pair audit and must NOT append to `posted.jsonl` / `global-posted.jsonl` because a preference skip is not destination proof. Pair-specific `pair.customRules` may also be used for one-off destination rules. See `skills/repost-custom-rules/SKILL.md`.
+- `schedulerJobs` — optional top-level scheduler metadata for humans/agents. It can describe the default all-enabled sweep, separate per-pair jobs, subset jobs, preview/dry jobs, or custom current-harness scheduled prompts. It is **advisory**: the installed host scheduler entry (OpenClaw cron, launchd, crontab, etc.) remains the operational source of truth for timing. If absent, scheduling still works via `/repost-setup-cron`. Suggested fields:
+  - `id` — stable human/job id, e.g. `all-enabled-daily` or `linkedin-to-x-hourly`.
+  - `scope` — `all-enabled`, `pair`, `subset`, or `custom`.
+  - `pairIds` — explicit ids for `pair`/`subset` scopes; empty for `all-enabled`.
+  - `message` — the current-harness prompt/slash command the scheduler runs, e.g. `/repost-run all` or `/repost-run linkedin-to-x`.
+  - `publishMode` — `live-approved-only` for unattended live jobs, or `preview-only` for dry jobs that must never publish.
+  - `schedule` — same shape as pair schedules (`manual`, `cron`, or `every`).
+  - `host` — optional installed scheduler hint (`kind`, `jobName`, `jobId`) for later inspection/removal.
 - `id` — kebab-case, unique. Default form: `<source-platform>-to-<destination-platform>`.
 - `enabled` — `false` for new pairs by default. Schedulers ignore disabled pairs.
 - `mode`:
-  - `preview-only` — never publishes. Default.
-  - `approval-required` — agent asks user per-post before publishing.
-  - `live-approved` — agent publishes without per-post prompting. Required for scheduled live ticks.
+  - `preview-only` — never publishes. Default. Scheduled preview/dry jobs may still inspect and draft.
+  - `approval-required` — agent asks user per-post before publishing; unattended schedulers treat it as preview-only.
+  - `live-approved` — agent publishes without per-post prompting. Required for unattended scheduled live ticks.
 - `runMode`:
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — one-shot historical walk (newest-first).
@@ -144,7 +174,7 @@ the skill workflows.
   produced. Tune up for high-volume destinations (X power-users) and
   down for low-volume destinations (Substack-style); 30 is a sweet spot
   for most accounts.
-- `schedule.everyHours` — positive integer; defaults to `24` (daily) for listen-for-future pairs. Used by `repost-listen-for-future-setup` to set OpenClaw `--every "<N>h"` or a fallback scheduler interval.
+- `schedule` — advisory per-pair schedule intent. `kind: "manual"` means no automatic pair-specific job should be installed unless another custom job explicitly includes the pair. `kind: "cron"` uses `expression`; `kind: "every"` uses `everyHours` or `everyMinutes`. Defaults to daily (`everyHours: 24`) for listen-for-future pairs. The default all-enabled sweep may ignore per-pair cadence in favor of its own global schedule; custom per-pair jobs should honor the pair schedule. The host scheduler is the source of truth for actual timing.
 
 ### Migration from v3
 
@@ -159,7 +189,7 @@ doesn't use anymore:
 
 The migration is a one-shot transformation: change `schemaVersion` from 3 to 4,
 ensure `runMode` exists (default `"listen-for-future"`), add `schedule.everyHours`
-if missing (default 24), drop the deprecated fields. The original v3 file is
+if missing (default 24), optionally add `schedulerJobs: []`, and drop the deprecated fields. The original v3 file is
 backed up to `~/.repost-with-agent/pairs.json.v3.bak`.
 
 ## `global-posted.jsonl`

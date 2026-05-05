@@ -85,13 +85,13 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - `/pair list|show|create|edit`
 - `/repost-run <pair-id|all>`
 - `/repost-backfill <pair-id> [--max --interval --allow-publish --resume]`
-- `/repost-setup-cron <pair-id>`
+- `/repost-setup-cron` (default all-enabled sweep; may install per-pair/subset/custom jobs on request)
 
 ## Pre-flight before flipping a pair to live
 
 1. `pair.enabled === true`
 2. `pair.mode === "live-approved"` (or `"approval-required"`)
-3. `pair.runMode === "listen-for-future"` (for scheduled ticks) or `"backfill"` (one-shot)
+3. `pair.runMode === "listen-for-future"` (for scheduled ticks) or `"backfill"` (one-shot); scheduled preview/dry jobs may inspect enabled listen-for-future pairs without publishing
 4. User logged into source + destination platforms in current harness browser profile
 5. At least one preview run has succeeded (audit shows `pair.publish.success` or `pair.preview.success`)
 6. Telegram is configured (run `repost-notify` test once)
@@ -105,6 +105,7 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 ## Other project rules in one paragraph
 
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
+- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
 - Live publishes need `mode: "live-approved"` (scheduled ticks) or explicit per-post
   authorization (`mode: "approval-required"`).
 - **Custom rules run before dedupe.** Apply top-level/pair `customRules` and

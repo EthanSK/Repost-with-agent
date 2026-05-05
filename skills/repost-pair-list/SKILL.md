@@ -15,7 +15,8 @@ Read `~/.repost-with-agent/pairs.json` and summarize each configured pair.
 3. For each pair in `pairs.pairs`:
    - Note the `id`, `name`, `enabled`, `mode`, `runMode`, `source.platform`, `source.url`, `destination.platform`, `destination.accountHint`, `schedule`.
    - Tail the per-pair `posted.jsonl` to count entries and grab the most-recent timestamp + destination URL: `tail -1 ~/.repost-with-agent/pairs/<id>/posted.jsonl` (Bash). If the file doesn't exist, "No posts yet."
-4. Format each pair as a compact bullet list. Use bold for the id and key fields. Example output:
+4. If top-level `schedulerJobs` exists, summarize active/inactive jobs after the pair list (id, enabled, scope, pairIds, publishMode, schedule, host jobName). This is advisory metadata; do not treat it as proof the host scheduler is installed.
+5. Format each pair as a compact bullet list. Use bold for the id and key fields. Example output:
 
 ```
 **linkedin-to-x**  (enabled · live-approved · listen-for-future)
@@ -36,6 +37,7 @@ Read `~/.repost-with-agent/pairs.json` and summarize each configured pair.
 - Always show `enabled` first in the parenthesized status line so the user can
   see at a glance which pairs are armed.
 - Include the count of `posted.jsonl` entries and the most-recent destination URL.
+- If `schedulerJobs` exists, include a short `Scheduler jobs:` block so custom all-pairs/per-pair/subset/dry configurations are visible.
 - Don't dump the full pairs.json — just the human summary.
 
 ## Telegram

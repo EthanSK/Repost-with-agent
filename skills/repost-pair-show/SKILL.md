@@ -15,12 +15,13 @@ recent audit events, and free-form learnings.
 2. **Find** the pair by `id`. If not found, list available ids and stop.
 3. Pretty-print the pair config (use `jq` via Bash for clean output:
    `jq '.pairs[] | select(.id == "<id>")' ~/.repost-with-agent/pairs.json`).
-4. **Tail** the last 10 entries of `~/.repost-with-agent/pairs/<id>/posted.jsonl`
+4. If top-level `schedulerJobs` exists, show jobs whose `scope` is `all-enabled` or whose `pairIds` includes this pair id. Label these as advisory scheduler metadata, not proof the host job is installed.
+5. **Tail** the last 10 entries of `~/.repost-with-agent/pairs/<id>/posted.jsonl`
    via `tail -10` (Bash). For each entry, format as:
    `<ts>  <sourceItemId>  →  <destinationUrl>`.
-5. **Tail** the last 20 entries of `~/.repost-with-agent/pairs/<id>/audit.jsonl`
+6. **Tail** the last 20 entries of `~/.repost-with-agent/pairs/<id>/audit.jsonl`
    via `tail -20` (Bash). Include only `event` + `ts` + a short reason.
-6. **Read** `~/.repost-with-agent/pairs/<id>/learnings.md` (if exists, may be
+7. **Read** `~/.repost-with-agent/pairs/<id>/learnings.md` (if exists, may be
    empty).
    - Print the **last 5** `## …` entries verbatim under a "Recent learnings"
      heading (newest at the bottom — the file is append-only so the last 5
@@ -45,6 +46,7 @@ recent audit events, and free-form learnings.
   Source:      <platform> · <url>
   Destination: <platform> · <accountHint>
   Schedule:    <schedule>
+  Scheduler:   <matching schedulerJobs summary, if any>
   Created:     <createdAt>
   Updated:     <updatedAt>
 

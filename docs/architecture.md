@@ -129,9 +129,9 @@ to do; the agent does it.
 The scheduler doesn't run any plugin code — there is no plugin code to run.
 Instead, it invokes the **same harness chosen for the workflow**.
 
-- **OpenClaw workflows:** use `openclaw cron add ... --message "/repost-run <pair-id>"`.
+- **OpenClaw workflows:** default to `openclaw cron add ... --message "/repost-run all"` for one all-enabled-pairs sweep. If the user wants more control, install separate entries such as `--message "/repost-run <pair-id>"`, named subset prompts, or preview-only dry sweeps.
 - **Claude Code / other explicit workflows:** use that harness's scheduler or a
-  shell-invoked launchd/crontab fallback only when Ethan chose that harness.
+  shell-invoked launchd/crontab fallback only when the user chose that harness.
 
 The fresh scheduled agent:
 
@@ -142,7 +142,10 @@ The fresh scheduled agent:
 
 The next scheduled tick spawns a fresh agent/subagent. There is no daemon, no
 long-running process, no leftover state in memory. Each tick is independent and
-idempotent.
+idempotent. The default one-sweep job is only the starter architecture; host
+schedulers can run per-pair jobs, subsets, custom cadences, or dry/preview jobs
+as long as each tick still reads the shared `~/.repost-with-agent` state and
+obeys the same safety/dedupe/notification rules.
 
 This matches Ethan's intent in voice 6026: "yeah, I guess don't follow Agent
 Bridge then. So yeah, skip the MCP. Subagent."

@@ -12,6 +12,26 @@
     "noRawToolOutput": true
   },
   "customRules": [],
+  "schedulerJobs": [
+    {
+      "id": "all-enabled-daily",
+      "enabled": false,
+      "scope": "all-enabled",
+      "pairIds": [],
+      "message": "/repost-run all",
+      "publishMode": "live-approved-only",
+      "schedule": {
+        "kind": "cron",
+        "tz": "Europe/London",
+        "expression": "0 10 * * *",
+        "everyHours": 24
+      },
+      "host": {
+        "kind": "openclaw-cron",
+        "jobName": "repost-with-agent.all.daily"
+      }
+    }
+  ],
   "pairs": [
     {
       "id": "linkedin-to-x",

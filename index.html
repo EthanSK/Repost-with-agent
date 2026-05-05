@@ -12,7 +12,7 @@
       --panel: #fffaf1;
       --panel-2: #f0eadc;
       --ink: #18140f;
-      --muted: #62594d;
+      --muted: #574c3f;
       --line: #ded2bd;
       --accent: #d85f3f;
       --accent-2: #236a7c;
@@ -204,7 +204,7 @@
     ul, ol { margin: 0; padding-left: 1.2rem; }
     li + li { margin-top: 8px; }
 
-    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
     .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
     .tile {
@@ -312,11 +312,26 @@
 
     footer { padding: 30px 0 52px; color: var(--muted); font-size: 0.94rem; }
 
+    @media (max-width: 1080px) {
+      .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     @media (max-width: 860px) {
-      .hero { grid-template-columns: 1fr; padding-top: 44px; }
+      header { padding-top: 22px; }
+      .hero { grid-template-columns: 1fr; padding-top: 42px; gap: 24px; }
       .grid, .grid.two, .links { grid-template-columns: 1fr; }
       section { padding: 22px; }
       .status-row { grid-template-columns: 1fr; gap: 3px; }
+    }
+
+    @media (max-width: 520px) {
+      .wrap { width: min(100% - 28px, 1120px); }
+      .navlinks { gap: 10px; font-size: 0.88rem; }
+      h1 { font-size: clamp(2.28rem, 10.8vw, 3rem); letter-spacing: -0.058em; }
+      .lead { font-size: 1.02rem; }
+      .actions { display: grid; grid-template-columns: 1fr; align-items: stretch; }
+      .button { width: 100%; }
+      .hero-card { padding: 18px; }
     }
   </style>
 </head>
@@ -339,8 +354,8 @@
     <div class="hero">
       <div>
         <span class="eyebrow">v4.4.0 · skill-only · OpenClaw-compatible</span>
-        <h1>Website reposting run by the agent you already use.</h1>
-        <p class="lead">A practical plugin of Markdown skills, slash commands, templates, and state-file rules. The current harness uses its logged-in browser automation to repost between websites it can safely operate; the repo ships no posting runtime of its own.</p>
+        <h1>Run website reposting with the agent you already use.</h1>
+        <p class="lead">A practical plugin of Markdown skills, slash commands, templates, and state-file rules. The current harness uses its logged-in browser automation to repost between websites it can safely operate, with a simple default scheduler and room for custom pair/job layouts.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/EthanSK/Repost-with-agent#readme">Read the README</a>
           <a class="button" href="https://github.com/EthanSK/Repost-with-agent/tree/main/skills">Browse skills</a>
@@ -363,6 +378,7 @@
           <div class="status-row"><strong>It avoids</strong><span>CLI runtime, MCP server, SDKs, Playwright</span></div>
           <div class="status-row"><strong>It requires</strong><span>Transparent logged-in sessions</span></div>
           <div class="status-row"><strong>It confirms</strong><span>Every successful publish</span></div>
+          <div class="status-row"><strong>It schedules</strong><span>Default sweep; custom jobs when wanted</span></div>
         </div>
       </aside>
     </div>
@@ -383,8 +399,8 @@
           <p>Works with any website the agent can safely operate through the logged-in browser. LinkedIn, X, Bluesky, Threads, and Facebook are documented example surfaces, not a closed list.</p>
         </div>
         <div class="tile">
-          <h3>State, not memory</h3>
-          <p>Pair configs, posted history, dedupe proofs, custom-rule decisions, audits, and learnings live under <code>~/.repost-with-agent/</code>.</p>
+          <h3>State and schedules</h3>
+          <p>Pair configs, posted history, dedupe proofs, custom-rule decisions, audits, learnings, and optional scheduler intent live under <code>~/.repost-with-agent/</code>.</p>
         </div>
       </div>
     </section>
@@ -396,9 +412,10 @@
         <li><div><strong>Create a source → destination pair.</strong><br>Run <code>/pair create</code>. New pairs start safe: <code>preview-only</code> and disabled until explicitly approved.</div></li>
         <li><div><strong>Validate in the logged-in browser profile.</strong><br>The agent checks source and destination sessions, account identity, candidate text, URLs, and preview/publish readiness.</div></li>
         <li><div><strong>Run one pair manually.</strong><br><code>/repost-run &lt;pair-id&gt;</code> scrapes, applies custom rules, dedupes, expands URLs, drafts/posts, writes state, and sends a confirmation.</div></li>
-        <li><div><strong>Schedule the all-pairs sweep.</strong><br><code>/repost-setup-cron</code> installs one current-harness scheduler job that invokes <code>/repost-run all</code> sequentially.</div></li>
+        <li><div><strong>Schedule the default sweep, or customize it.</strong><br><code>/repost-setup-cron</code> installs one daily all-enabled-pairs job that invokes <code>/repost-run all</code> sequentially by default. Users can also ask for per-pair jobs, subset jobs, dry/preview jobs, or custom cadences.</div></li>
       </ol>
       <div class="callout"><strong>Important:</strong> scheduled live posting requires <code>mode: "live-approved"</code>, a successful preview/publish proof, and a configured <code>notification.delivery</code> route. Silent publishes are treated as bugs.</div>
+      <div class="callout"><strong>Flexible scheduling:</strong> the all-pairs sweep is the starter configuration, not the only architecture. The host scheduler can run one pair, named subsets, dry preview checks, or multiple custom cadences while reusing the same state and safety rules.</div>
     </section>
 
     <section id="workflow">
@@ -454,9 +471,9 @@
           <h3>Running and scheduling</h3>
           <ul>
             <li><code>/repost-run &lt;pair-id&gt;</code> — run one pair end-to-end.</li>
-            <li><code>/repost-run all</code> — run every enabled live-approved listen-for-future pair sequentially.</li>
+            <li><code>/repost-run all</code> — default live sweep for every enabled live-approved listen-for-future pair; preview/dry sweeps and subsets are supported by scheduler prompt.</li>
             <li><code>/repost-backfill &lt;pair-id&gt; [--max N --interval M --allow-publish --resume]</code> — historical walk.</li>
-            <li><code>/repost-setup-cron</code> — install the single scheduled all-pairs sweep.</li>
+            <li><code>/repost-setup-cron</code> — install the default all-pairs sweep or a custom per-pair/subset/dry schedule.</li>
           </ul>
         </div>
       </div>

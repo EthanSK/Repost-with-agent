@@ -36,7 +36,10 @@ personal browser/profile.
    this directory by fresh agent runs.
 4. In a fresh session: `/pair create` to set up a source → destination pair.
 5. `/repost-run <pair-id>` to do a manual end-to-end repost.
-6. `/repost-setup-cron` to schedule one daily all-pairs sweep (`/repost-run all`).
+6. `/repost-setup-cron` to install the default daily all-enabled-pairs sweep
+   (`/repost-run all`). If you want something else, say so: per-pair jobs,
+   subset jobs, dry/preview sweeps, custom cron expressions, and manual-only
+   pairs are all valid user-owned configurations.
 
 That's it. The agent does everything else.
 
@@ -214,9 +217,43 @@ MUST also fire a publish confirmation.
 - `/pair create` — walk through creating a new pair.
 - `/pair edit <id>` — edit an existing pair.
 - `/repost-run <pair-id>` — run a single pair end-to-end (single post).
-- `/repost-run all` — iterate over every enabled live-approved listen-for-future pair.
+- `/repost-run all` — iterate over every enabled listen-for-future pair that is
+  eligible for the requested mode. The default scheduled live sweep publishes
+  only `live-approved` pairs; preview/dry sweeps may include preview-only pairs.
 - `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — multi-post historical walk, newest-first.
-- `/repost-setup-cron` — install one current-harness scheduler entry (OpenClaw cron preferred for OpenClaw workflows) that runs `/repost-run all` as a single sequential all-pairs sweep.
+- `/repost-setup-cron` — by default, install one current-harness scheduler entry
+  (OpenClaw cron preferred for OpenClaw workflows) that runs `/repost-run all`
+  as a single sequential all-pairs sweep. On request, install separate per-pair
+  jobs, named subset jobs, preview/dry jobs, or any custom current-harness
+  schedule the user wants.
+
+## Scheduling model: default, not a cage
+
+The out-of-box scheduler shape is intentionally simple: one daily OpenClaw cron
+job (or equivalent in the current harness) launches a fresh agent turn with
+`/repost-run all`, and that agent sweeps enabled `listen-for-future` pairs
+sequentially. For Ethan's current install, that is the intended default.
+
+That default is **not** the product boundary. Repost-with-agent is a skill layer
+over user-owned JSON state plus the host harness scheduler, so users may choose
+any layout their harness can express:
+
+- one all-enabled-pairs sweep daily, hourly, weekdays only, etc.;
+- one cron job per pair, each using that pair's own cadence/timezone;
+- subset jobs such as “professional accounts at 09:00” and “personal accounts
+  at 18:00”;
+- dry/preview scheduled checks that never publish, plus separate live jobs for
+  explicitly `live-approved` pairs;
+- manual-only pairs with `schedule.kind: "manual"` and no installed scheduler;
+- custom natural-language scheduled prompts, as long as they still invoke the
+  current harness, read the same `~/.repost-with-agent` state, and obey the
+  publish-confirmation/dedupe rules.
+
+`pair.schedule` and optional top-level `schedulerJobs` metadata are advisory
+configuration for agents and humans. The actual source of truth for timing is
+the installed host scheduler entry (OpenClaw cron, launchd, system cron, or the
+equivalent scheduler in the chosen harness). When the two disagree, inspect the
+host scheduler before changing live behaviour.
 
 ## Skills
 
@@ -243,6 +280,7 @@ All state lives at `~/.repost-with-agent/`:
 - `pairs.json` — array of pair configs (schemaVersion 4), including optional `customRules`.
 - `global-posted.jsonl` — append-only cross-pair publish/duplicate proof ledger.
 - `considered.jsonl` — append-only custom-rule / not-post-worthy decisions.
+- `schedulerJobs` (inside `pairs.json`, optional) — human/agent-readable scheduler intent for all-enabled, per-pair, subset, preview/dry, or custom jobs. The host scheduler remains the timing source of truth.
 - `pairs/<id>/posted.jsonl` — append-only history of successful publishes.
 - `pairs/<id>/audit.jsonl` — append-only audit events.
 - `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
@@ -263,6 +301,22 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
 {
   "schemaVersion": 4,
   "customRules": [],
+  "schedulerJobs": [
+    {
+      "id": "all-enabled-daily",
+      "enabled": false,
+      "scope": "all-enabled",
+      "pairIds": [],
+      "message": "/repost-run all",
+      "publishMode": "live-approved-only",
+      "schedule": {
+        "kind": "cron",
+        "tz": "Europe/London",
+        "expression": "0 10 * * *",
+        "everyHours": 24
+      }
+    }
+  ],
   "pairs": [
     {
       "id": "linkedin-to-x",

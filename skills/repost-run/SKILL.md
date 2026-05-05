@@ -1,15 +1,21 @@
 ---
 name: repost-run
-description: Run a single Repost-with-agent pair end-to-end — scrape source, dedupe (local + destination), expand URLs, publish via the user's logged-in browser, append history, and notify the user. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", or invokes /repost-run. Also invoked by scheduled agents for listen-for-future pairs.
-when_to_trigger: User wants to run a single pair manually, OR a scheduled subagent is ticking a listen-for-future pair, OR the user asks to "post the next one from <pair>". Single-post operation.
+description: Run Repost-with-agent for one pair, all enabled pairs, or an explicit subset — scrape source, dedupe (local + destination), expand URLs, publish when allowed, append history, and notify the user. Use when the user asks to "run pair <id>", "post the latest from <pair>", "tick the <pair-id> pair", "run all pairs", or invokes /repost-run. Also invoked by scheduled agents for listen-for-future pairs.
+when_to_trigger: User wants to run one pair manually, an all-pairs sweep, a scoped subset, OR a scheduled subagent is ticking listen-for-future pairs.
 ---
 
 # Repost Run
 
-You are the running agent. This skill instructs you how to do ONE end-to-end
-repost: pick the next non-duplicate item from the source, expand any shortened
-URLs, post it via the user's logged-in browser, append history, and notify
-the user via configured delivery.
+You are the running agent. This skill instructs you how to run Repost-with-agent
+for a requested scope: one pair, `all`, or an explicit subset. For each pair in
+scope, pick the next non-duplicate item from the source, expand any shortened
+URLs, post only when the requested mode and pair safety mode allow it, append
+history, and notify the user via configured delivery.
+
+The default scheduled scope is `all`: one fresh agent sweeps every enabled
+`live-approved` `listen-for-future` pair sequentially. Custom scheduler jobs may
+run one pair, a named subset, or a dry/preview sweep. Honor those requests
+without treating the default all-pairs sweep as the only valid architecture.
 
 For multi-post historical walks, see `skills/repost-backfill/SKILL.md` instead.
 
@@ -39,12 +45,17 @@ You MUST have these available in the current session:
 If any of these is missing, tell the user which one and stop. Don't try to
 substitute curl/Playwright/etc.
 
-## Step 1 — Load pair config
+## Step 1 — Load pair config and resolve scope
 
 1. Read `~/.repost-with-agent/pairs.json`.
-2. Find the requested pair by `id`. If not found, list available ids and stop.
-3. Verify `pair.enabled === true`. If false, tell the user the pair is
-   disabled and stop.
+2. Resolve the requested scope:
+   - `<pair-id>` → exactly that pair. If not found, list available ids and stop.
+   - `all` → every pair where `enabled === true` and `runMode === "listen-for-future"`.
+   - explicit subset/natural-language scheduler prompt → the named pair ids or
+     exact criteria in the prompt. If ambiguous, stop and ask in interactive
+     sessions; scheduled agents should fail closed with a clear transcript.
+3. For each scoped pair, verify `pair.enabled === true`. If false, skip it in
+   all/subset sweeps or stop for a single-pair request.
 4. Note `mode`, `runMode`, `source`, `destination`, `customRules` (top-level
    and pair-level), `policy.maxItemsPerRun` (default 1),
    `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
@@ -59,6 +70,10 @@ substitute curl/Playwright/etc.
      or page label). Do not treat it as a hard identity id unless Ethan
      explicitly configured an exact handle.
    - `destination.targetType` (`profile`, `page`, or `group`; default `profile`).
+
+If a scope contains multiple pairs, process them sequentially with a small
+jittered pause (30–60s) between pairs. Each pair is still a single-post run; use
+`repost-backfill` for historical multi-post walks.
 
 ## Browser tab reuse rule
 
@@ -135,9 +150,14 @@ crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 - If `mode === "approval-required"`: do steps 3–6, append
   `pair.preview.success`, then ASK the user to authorize the post explicitly
   in chat. Only proceed if they say yes in this same conversation.
-- If `mode === "live-approved"`: do everything end-to-end. This is the only
-  mode the scheduled agent should encounter (the install skill refuses
-  to schedule non-live-approved pairs).
+- If `mode === "live-approved"`: do everything end-to-end when the current
+  request/scheduler job is a live publish job. This is the only mode that may
+  publish unattended.
+
+For scheduled preview/dry jobs, stop before publish regardless of pair mode. For
+scheduled live jobs, skip any scoped pair that is not `live-approved` rather
+than trying to prompt. Approval-required pairs can only publish in an interactive
+session where the user explicitly approves the specific post.
 
 ## Step 3 — Scrape the source
 
@@ -470,9 +490,13 @@ optional sub-sections.
 
 When invoked from a fresh agent/subagent spawned by the scheduler:
 
-- The subagent has no chat user. All interactive prompts above are skipped — it
-  just runs the pair end-to-end if `mode === "live-approved"`.
-- It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool, including the source URL and destination URL.
+- The subagent has no chat user. All interactive prompts above are skipped.
+- Default live sweep: `/repost-run all` processes every enabled,
+  `live-approved`, `listen-for-future` pair sequentially.
+- Custom scheduled jobs may run a single pair, an explicit subset, or a
+  preview/dry sweep. Follow the scheduler prompt literally, but fail closed:
+  preview jobs never publish; live jobs publish only `live-approved` pairs.
+- It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool after every successful publish, including the source URL and destination URL.
 - It must still append to `posted.jsonl`, `audit.jsonl`, and the global
   cross-pair ledger when a publish/catch-up proves destination state.
 - After running, the agent exits. The next scheduled tick spawns a fresh agent/subagent.
