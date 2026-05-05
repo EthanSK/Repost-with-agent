@@ -11,7 +11,7 @@ user's logged-in browser, append history, and confirm Ethan.
 ## Usage
 
 - `/repost-run <pair-id>` — run that one pair.
-- `/repost-run all` — default scheduled live sweep: iterate over every enabled `live-approved` `listen-for-future` pair.
+- `/repost-run all` — default scheduled sweep: iterate over every enabled `listen-for-future` pair; live jobs publish only `live-approved` pairs.
 - Natural-language/custom scheduler variants may ask for a subset, a single-pair job, or a preview-only/dry sweep. The agent should honor the requested scope/mode while still enforcing each pair's safety mode.
 
 ## What it does

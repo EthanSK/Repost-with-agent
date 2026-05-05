@@ -471,7 +471,7 @@
           <h3>Running and scheduling</h3>
           <ul>
             <li><code>/repost-run &lt;pair-id&gt;</code> — run one pair end-to-end.</li>
-            <li><code>/repost-run all</code> — default live sweep for every enabled live-approved listen-for-future pair; preview/dry sweeps and subsets are supported by scheduler prompt.</li>
+            <li><code>/repost-run all</code> — default sweep for every enabled listen-for-future pair; live jobs publish only live-approved pairs, while preview/dry sweeps and subsets follow the scheduler prompt.</li>
             <li><code>/repost-backfill &lt;pair-id&gt; [--max N --interval M --allow-publish --resume]</code> — historical walk.</li>
             <li><code>/repost-setup-cron</code> — install the default all-pairs sweep or a custom per-pair/subset/dry schedule.</li>
           </ul>

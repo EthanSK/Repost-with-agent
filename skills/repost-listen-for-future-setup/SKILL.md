@@ -263,9 +263,9 @@ To stop a scheduler entry:
 
 ## What scheduled runs do
 
-For the default live sweep, `/repost-run all` runs every enabled,
-`live-approved`, `listen-for-future` pair sequentially with a small jittered
-delay between pairs.
+For the default sweep, `/repost-run all` scans every enabled
+`listen-for-future` pair sequentially with a small jittered delay between pairs.
+Live jobs publish only `live-approved` pairs; preview/dry jobs never publish.
 
 For custom jobs, run only the requested pair/scope and requested mode. Preview
 jobs must never publish. Live jobs must still skip pairs that are disabled,

@@ -13,9 +13,10 @@ URLs, post only when the requested mode and pair safety mode allow it, append
 history, and notify the user via configured delivery.
 
 The default scheduled scope is `all`: one fresh agent sweeps every enabled
-`live-approved` `listen-for-future` pair sequentially. Custom scheduler jobs may
-run one pair, a named subset, or a dry/preview sweep. Honor those requests
-without treating the default all-pairs sweep as the only valid architecture.
+`listen-for-future` pair sequentially. Live jobs publish only `live-approved`
+pairs; preview/dry jobs never publish. Custom scheduler jobs may run one pair,
+a named subset, or a dry/preview sweep. Honor those requests without treating
+the default all-pairs sweep as the only valid architecture.
 
 For multi-post historical walks, see `skills/repost-backfill/SKILL.md` instead.
 
@@ -491,8 +492,8 @@ optional sub-sections.
 When invoked from a fresh agent/subagent spawned by the scheduler:
 
 - The subagent has no chat user. All interactive prompts above are skipped.
-- Default live sweep: `/repost-run all` processes every enabled,
-  `live-approved`, `listen-for-future` pair sequentially.
+- Default sweep: `/repost-run all` scans every enabled `listen-for-future` pair
+  sequentially; live jobs publish only `live-approved` pairs.
 - Custom scheduled jobs may run a single pair, an explicit subset, or a
   preview/dry sweep. Follow the scheduler prompt literally, but fail closed:
   preview jobs never publish; live jobs publish only `live-approved` pairs.

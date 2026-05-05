@@ -217,9 +217,9 @@ MUST also fire a publish confirmation.
 - `/pair create` — walk through creating a new pair.
 - `/pair edit <id>` — edit an existing pair.
 - `/repost-run <pair-id>` — run a single pair end-to-end (single post).
-- `/repost-run all` — iterate over every enabled listen-for-future pair that is
-  eligible for the requested mode. The default scheduled live sweep publishes
-  only `live-approved` pairs; preview/dry sweeps may include preview-only pairs.
+- `/repost-run all` — iterate over every enabled `listen-for-future` pair in
+  one sweep. The default scheduled live sweep publishes only `live-approved`
+  pairs; preview/dry sweeps may include preview-only pairs but never publish.
 - `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — multi-post historical walk, newest-first.
 - `/repost-setup-cron` — by default, install one current-harness scheduler entry
   (OpenClaw cron preferred for OpenClaw workflows) that runs `/repost-run all`
