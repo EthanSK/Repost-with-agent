@@ -24,7 +24,7 @@ profile (`openclaw`, CDP port `18800`), not Ethan's personal browser/profile.
    this directory by fresh agent runs.
 4. In a fresh session: `/pair create` to set up a source → destination pair.
 5. `/repost-run <pair-id>` to do a manual end-to-end repost.
-6. `/repost-setup-cron <pair-id>` to schedule recurring ticks (default daily / every 24h).
+6. `/repost-setup-cron` to schedule one daily all-pairs sweep (`/repost-run all`).
 
 That's it. The agent does everything else.
 
@@ -204,7 +204,7 @@ MUST also fire a publish confirmation.
 - `/repost-run <pair-id>` — run a single pair end-to-end (single post).
 - `/repost-run all` — iterate over every enabled live-approved listen-for-future pair.
 - `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — multi-post historical walk, newest-first.
-- `/repost-setup-cron <pair-id>` — install a current-harness scheduler entry (OpenClaw cron preferred for OpenClaw workflows) to tick a listen-for-future pair on a schedule.
+- `/repost-setup-cron` — install one current-harness scheduler entry (OpenClaw cron preferred for OpenClaw workflows) that runs `/repost-run all` as a single sequential all-pairs sweep.
 
 ## Skills
 

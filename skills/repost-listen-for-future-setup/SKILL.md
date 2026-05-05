@@ -1,13 +1,14 @@
 ---
 name: repost-listen-for-future-setup
-description: Install a scheduler entry that periodically launches a fresh current-harness agent/subagent to run /repost-run on enabled listen-for-future pairs. Use when the user asks to "schedule <pair>", "set up the cron for <pair>", "make <pair> tail new posts automatically", or invokes /repost-setup-cron.
-when_to_trigger: User wants to wire up automatic, scheduled, recurring repost ticks for a listen-for-future pair.
+description: Install a scheduler entry that periodically launches ONE fresh current-harness agent/subagent to run /repost-run all across every enabled listen-for-future pair. Use when the user asks to schedule Repost-with-agent, set up the cron, make pairs tail new posts automatically, or invokes /repost-setup-cron.
+when_to_trigger: User wants to wire up automatic, scheduled, recurring repost sweeps for enabled listen-for-future pairs.
 ---
 
 # Repost Listen-for-future Setup
 
-Install the scheduler entry that triggers a fresh agent/subagent on a regular
-interval to run `/repost-run` against a `listen-for-future` pair.
+Install the scheduler entry that triggers a single fresh agent/subagent on a
+regular interval to run `/repost-run all` across every enabled
+`listen-for-future` pair.
 
 **OpenClaw is a first-class path.** If the current workflow is running in
 OpenClaw, use OpenClaw's native `openclaw cron` scheduler. Do **not** write a
@@ -18,15 +19,15 @@ harness or Ethan explicitly asks for them.
 
 ## Required state
 
-- The pair MUST exist in `~/.repost-with-agent/pairs.json` with
+- At least one pair MUST exist in `~/.repost-with-agent/pairs.json` with
   `runMode === "listen-for-future"` and `enabled === true`.
-- The pair MUST be in `mode === "live-approved"` for the scheduler to actually
-  publish. Refuse to schedule non-live-approved pairs unless Ethan explicitly
-  asks for a preview-only scheduler.
-- `notification.delivery` MUST be configured and tested (run the `repost-notify` test
-  once before enabling scheduled publishes).
-- The user MUST already be logged into source + destination platforms in the
-  current harness browser profile. You cannot log in for them.
+- The all-pairs scheduler MUST only publish pairs in `mode === "live-approved"`.
+  Refuse to schedule if no enabled live-approved listen-for-future pairs exist,
+  unless Ethan explicitly asks for a preview-only scheduler.
+- `notification.delivery` MUST be configured and tested for every pair the sweep
+  may publish (run the `repost-notify` test once before enabling scheduled publishes).
+- The user MUST already be logged into source + destination platforms needed by
+  the enabled pairs in the current harness browser profile. You cannot log in for them.
 - **OpenClaw hard rule:** OpenClaw scheduled ticks MUST use OpenClaw's own
   browser/profile (`profile: openclaw`, CDP port `18800`). Do **not** use
   Ethan's personal browser, Chrome relay, or `profile="user"` for
@@ -34,38 +35,37 @@ harness or Ethan explicitly asks for them.
 
 ## Cadence
 
-Default: once per day. Configurable via the pair's `schedule.everyHours` field
-(positive integer) or `schedule.expression` if the user wants a full cron spec.
+Default: once per day. Configurable via a deliberately chosen global sweep
+cadence. Do not infer per-pair staggered schedules unless Ethan explicitly asks
+for separate per-pair jobs.
 
 Conservative defaults; LinkedIn / X / Bluesky etc. don't post that often, so
 hammering every few minutes burns quota / risks rate-limits without payoff.
 
 ## OpenClaw scheduler — preferred for OpenClaw workflows
 
-1. Determine cadence:
-   - If `pair.schedule.everyHours` exists, use `--every "<N>h"`.
-   - If `pair.schedule.expression` exists and the user explicitly wants a cron
-     expression, use `--cron "<expr>" --tz "<pair.schedule.tz>"`.
+1. Determine the global sweep cadence. Default is daily at the current
+   user-facing timezone's preferred posting/check time (Europe/London unless
+   configured otherwise).
 
-2. Create an OpenClaw cron job. Template:
+2. Create exactly one OpenClaw cron job for the sweep. Template:
 
    ```bash
    openclaw cron add \
-     --name "repost-with-agent.<pair-id>" \
-     --description "Repost-with-agent scheduled tick for <pair-id>" \
+     --name "repost-with-agent.all.daily" \
+     --description "Repost-with-agent scheduled all-pairs sweep" \
      --agent main \
      --session isolated \
-     --message "/repost-run <pair-id>" \
+     --message "/repost-run all" \
      --thinking medium \
-     --timeout-seconds 10800 \
-     --every "<everyHours>h"
+     --timeout-seconds 21600 \
+     --cron "0 10 * * *" \
+     --tz "Europe/London"
    ```
 
-   For cron-expression cadence, replace the last line with:
-
-   ```bash
-     --cron "<schedule.expression>" --tz "<schedule.tz or Europe/London>"
-   ```
+   The scheduled agent must sweep pairs sequentially inside this one turn. Do
+   not create one cron job or one spawned sub-agent per pair unless Ethan
+   explicitly asks for that exception.
 
    Do not add a restrictive `--tools` list unless you are certain it includes
    browser automation, file tools, Bash, and configured user-message delivery.
@@ -84,7 +84,7 @@ hammering every few minutes burns quota / risks rate-limits without payoff.
 4. Verify without triggering a publish:
 
    ```bash
-   openclaw cron show repost-with-agent.<pair-id>
+   openclaw cron show repost-with-agent.all.daily
    openclaw cron list
    ```
 
@@ -148,12 +148,12 @@ another shell-invokable harness) and Ethan has approved that harness choice.
 
 Before installing the scheduler, verify:
 
-- [ ] `pair.enabled === true`
-- [ ] `pair.mode === "live-approved"` (else: refuse and tell the user to bump the mode first)
-- [ ] `pair.runMode === "listen-for-future"`
-- [ ] User is logged into source + destination platforms in the current harness browser profile
-- [ ] At least one preview run has succeeded (check audit.jsonl for a `pair.preview.success` or `pair.publish.success` event)
-- [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed
+- [ ] At least one pair has `enabled === true`
+- [ ] At least one pair has `mode === "live-approved"` (else: refuse and tell the user to bump modes first)
+- [ ] At least one pair has `runMode === "listen-for-future"`
+- [ ] User is logged into source + destination platforms needed by the enabled live-approved pairs in the current harness browser profile
+- [ ] At least one preview run has succeeded for each publish-capable destination family being scheduled (check audit.jsonl for `pair.preview.success` or `pair.publish.success` events)
+- [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed for each publish-capable pair
 
 If any check fails, refuse to install the scheduler and tell the user which
 prerequisite is missing.
@@ -179,11 +179,11 @@ To stop the scheduler:
 
 ## What `/repost-run all` does
 
-The scheduled invocation can run `/repost-run <pair-id>` for one pair or
-`/repost-run all` for EVERY enabled, `live-approved`, `listen-for-future` pair,
-sequentially with a small jittered delay between pairs. Prefer one job per pair
-unless Ethan explicitly wants a single all-pairs job; it is easier to disable or
-reschedule one pair without affecting others.
+The scheduled invocation should run `/repost-run all` for EVERY enabled,
+`live-approved`, `listen-for-future` pair, sequentially with a small jittered
+delay between pairs. This is the default architecture: one cron job, one fresh
+agent turn, one all-pairs sweep. Only create per-pair jobs if Ethan explicitly
+asks for that exception.
 
 ## Telegram-confirm every successful publish — non-negotiable
 
@@ -193,9 +193,9 @@ the per-publish ping.
 
 ## Scheduled agents read + write learnings.md
 
-Every scheduled tick spawns a fresh, ephemeral current-harness agent that loads
-this plugin and runs `/repost-run <pair-id>`. That agent ALSO follows the
-learnings-file lifecycle:
+Every scheduled tick spawns one fresh, ephemeral current-harness agent that
+loads this plugin and runs `/repost-run all`. That agent ALSO follows the
+learnings-file lifecycle for each pair it sweeps:
 
 - **Step 1.5 of `repost-run`**: the agent reads
   `~/.repost-with-agent/pairs/<id>/learnings.md` before scraping, so it inherits
