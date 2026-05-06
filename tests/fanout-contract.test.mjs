@@ -367,4 +367,20 @@ test('docs require live destination text proof before success state', () => {
   assert.match(stateDocs, /global\.publish\.malformed/i);
 });
 
+test('docs require compaction to be destination-wide and UI-feedback gated', () => {
+  const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
+  const stateDocs = readFileSync(join(root, 'docs/state-files.md'), 'utf8');
+  const xDocs = readFileSync(join(root, 'docs/destinations/x.md'), 'utf8');
+  const blueskyDocs = readFileSync(join(root, 'docs/destinations/bluesky.md'), 'utf8');
+  const threadsDocs = readFileSync(join(root, 'docs/destinations/threads.md'), 'utf8');
+  const facebookDocs = readFileSync(join(root, 'docs/destinations/facebook.md'), 'utf8');
+
+  assert.match(runSkill, /Destination-wide Ethan rule/i);
+  assert.doesNotMatch(runSkill, /X-specific Ethan rule/i);
+  for (const docs of [stateDocs, xDocs, blueskyDocs, threadsDocs, facebookDocs]) {
+    assert.match(docs, /live UI|live destination composer UI|destination UI/i);
+    assert.match(docs, /only compact|do \*\*not\*\* pre-compact|Do not compact solely/i);
+  }
+});
+
 console.log('fanout contract tests passed');

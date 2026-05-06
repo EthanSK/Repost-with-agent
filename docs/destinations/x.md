@@ -57,12 +57,13 @@ destination).
 - Free / classic accounts: 280 chars.
 - Premium / Verified: 25 000 chars.
 
-For Ethan/OpenClaw runs, do **not** pre-compact X drafts merely because a local
+For Ethan/OpenClaw runs, do **not** pre-compact drafts merely because a local
 280-char count says they may be long. Put the exact leak-guarded draft into the
 X composer first and only compact when the live UI itself reports overlength or
 cutoff feedback (for example an over-limit counter, disabled Post button with
 overlength feedback, or visible cutoff warning). If the UI accepts the exact
-draft, publish the exact draft.
+draft, publish the exact draft. This is the same destination-wide compaction
+rule used for all platforms.
 
 ## Source scraping
 

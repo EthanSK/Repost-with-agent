@@ -102,6 +102,15 @@ plenty. Bump `pair.policy.semanticDedupeWindowSize` only if the
 destination is a high-frequency page; for Substack-style low-volume
 publishing, 30 is generous.
 
+## Compaction / length handling
+
+For Ethan/OpenClaw runs, do **not** pre-compact drafts solely from local/static
+character-count assumptions. Put the exact leak-guarded draft into the live
+composer first and only compact when the destination UI itself reports
+overlength or cutoff feedback (for example an over-limit counter, disabled
+Post/Share button with overlength feedback, or visible cutoff warning). If the
+UI accepts the exact draft, publish the exact draft.
+
 ## Known quirks
 
 - **Privacy-restricted posts** may appear in the feed but resolve to a 404 / "content unavailable" page when unauthenticated. The agent should skip posts whose visibility is not Public, since the destination dedupe and cross-post path can't read them reliably.

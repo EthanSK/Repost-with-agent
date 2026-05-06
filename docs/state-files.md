@@ -1,4 +1,4 @@
-# State files (v4.5.2)
+# State files (v4.5.3)
 
 All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
 touch this state directly; runtime reposting is skill-only. The running agent
@@ -151,9 +151,9 @@ the skill workflows.
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — historical walk (newest-first). Source-level scheduled backfill jobs use a source-item fanout manifest; destination-specific pair backfills use `pairs/<id>/backfill-state.json`.
 - `policy.overlengthStrategy`:
-  - `compact` — drafts exceeding destination char cap are rewritten shorter while preserving the original voice, intent, links, and essence as much as possible. Ethan/OpenClaw default.
-  - `skip` — drafts exceeding destination char cap are skipped.
-  - `truncate` — drafts are mechanically shrunk to fit the destination cap without adding a
+  - `compact` — when the live destination composer UI explicitly indicates the exact draft is overlength/cut off, rewrite shorter while preserving the original voice, intent, links, and essence as much as possible. Ethan/OpenClaw default. Do not compact solely from local/static character-count assumptions; first try the exact leak-guarded draft in the live UI.
+  - `skip` — when the live destination composer UI explicitly indicates overlength/cutoff, skip instead of publishing.
+  - `truncate` — when the live destination composer UI explicitly indicates overlength/cutoff, mechanically shrink to fit without adding a
     source-platform permalink suffix. Use only when explicitly requested.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
 - `policy.globalDedupeEnabled` — when `true` (default), every publish-capable

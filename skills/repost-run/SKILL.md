@@ -359,19 +359,20 @@ Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 = 300, Threads = 500, LinkedIn = 3 000, Facebook = 63 206). See
 `docs/destinations/<platform>.md`.
 
-**X-specific Ethan rule:** do not pre-compact merely because a local character
-count or default 280-char assumption says the draft might be too long. X may be
-on Premium / long-post mode, and Ethan wants the source text preserved. For X,
-first put the exact leak-guarded draft into the X composer and inspect the live
-UI. Only compact if the UI itself clearly reports overlength/cutoff — for
-example an over-limit counter, disabled Post button with overlength feedback,
-or visible truncation/cutoff warning. If X accepts the exact draft, publish that
-exact draft.
+**Destination-wide Ethan rule:** do not pre-compact merely because a local
+character count or static cap assumption says the draft might be too long. Many
+platforms/accounts expose longer-post modes, and Ethan wants the source text
+preserved whenever the live UI accepts it. For every destination, first put the
+exact leak-guarded draft into the live composer and inspect the live UI. Only
+compact if the UI itself clearly reports overlength/cutoff — for example an
+over-limit counter, disabled Post/Share button with overlength feedback, or
+visible truncation/cutoff warning. If the destination UI accepts the exact draft,
+publish that exact draft.
 
-If the non-X draft exceeds the cap, or if X gives explicit live UI feedback that
-the exact draft is overlength/cut off:
+If the destination UI gives explicit live feedback that the exact draft is
+overlength/cut off:
 
-- `policy.overlengthStrategy === "compact"` (Ethan/OpenClaw default): rewrite the draft to fit while making it sound as close to the original as possible and preserving the essence, intent, tone, URLs, and key claims. Do not add a source-platform backlink. For X, reinsert the compacted draft and confirm the UI no longer shows overlength/cutoff feedback before posting. After compacting, re-run a quick duplicate check against the compacted text. Append `pair.publish.compacted` audit with original length, compacted length, cap/UI feedback, and a 1-sentence note. If it still cannot fit without losing the point, append `pair.publish.skipped_overlength` and stop.
+- `policy.overlengthStrategy === "compact"` (Ethan/OpenClaw default): rewrite the draft to fit while making it sound as close to the original as possible and preserving the essence, intent, tone, URLs, and key claims. Do not add a source-platform backlink. Reinsert the compacted draft and confirm the UI no longer shows overlength/cutoff feedback before posting. After compacting, re-run a quick duplicate check against the compacted text. Append `pair.publish.compacted` audit with original length, compacted length, destination UI feedback, and a 1-sentence note. If it still cannot fit without losing the point, append `pair.publish.skipped_overlength` and stop.
 - `policy.overlengthStrategy === "skip"`: append a `pair.publish.skipped_overlength` audit event and stop. Tell the user.
 - `policy.overlengthStrategy === "truncate"`: mechanically shrink to fit the destination
   cap without adding a source-platform backlink. Append `pair.publish.truncated`

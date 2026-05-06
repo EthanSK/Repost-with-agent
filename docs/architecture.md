@@ -1,4 +1,4 @@
-# Architecture (v4.5.2 — skill-only, current-harness first)
+# Architecture (v4.5.3 — skill-only, current-harness first)
 
 ## TL;DR
 

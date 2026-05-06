@@ -74,6 +74,15 @@ post volume for chatty accounts; 30 typically covers a couple of weeks.
 Bump `pair.policy.semanticDedupeWindowSize` higher (50–100) for very
 active Threads accounts or leave at 30 for moderate-cadence ones.
 
+## Compaction / length handling
+
+For Ethan/OpenClaw runs, do **not** pre-compact drafts solely from local/static
+character-count assumptions. Put the exact leak-guarded draft into the live
+composer first and only compact when the destination UI itself reports
+overlength or cutoff feedback (for example an over-limit counter, disabled
+Post/Share button with overlength feedback, or visible cutoff warning). If the
+UI accepts the exact draft, publish the exact draft.
+
 ## Known quirks
 
 - **Threads-of-threads.** A "thread" can contain multiple posts. For source

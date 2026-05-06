@@ -1,5 +1,13 @@
 # Changelog
 
+## v4.5.3 — 2026-05-06 — Destination-wide UI-gated compaction
+
+- Generalizes the compaction rule across every destination: try the exact
+  leak-guarded draft in the live composer first, and compact only when the
+  destination UI itself reports overlength/cutoff feedback.
+- Updates destination docs and state policy docs so static/local character-count
+  caps are advisory only; live UI acceptance wins.
+
 ## v4.5.2 — 2026-05-06 — Live-post text proof gate
 
 - Adds a mandatory live destination text proof gate before any browser publish can
