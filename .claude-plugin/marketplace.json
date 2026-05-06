@@ -5,12 +5,12 @@
     "url": "https://github.com/EthanSK/Repost-with-agent"
   },
   "metadata": {
-    "description": "Local marketplace for Repost-with-agent — a skill-only agent/OpenClaw-compatible plugin that drives the running agent through cross-platform reposting on websites it can safely operate through logged-in browser automation. Ships documented examples for LinkedIn, X, Bluesky, Threads, and Facebook. No CLI, no MCP server, no platform SDKs."
+    "description": "Local marketplace for Repost-with-agent — a skill-only agent/OpenClaw-compatible plugin that drives the running agent through cross-platform reposting on websites it can safely operate through logged-in browser automation. Ships documented examples for LinkedIn, X, Bluesky, Threads, and Facebook. No CLI, no MCP server, no platform SDKs; scheduled backfills use a source-item fanout contract."
   },
   "plugins": [
     {
       "name": "repost-with-agent",
-      "description": "Skill-only reposting workflow plugin. Skills + slash commands instruct the running agent (OpenClaw via its built-in browser, Claude Code or another harness via its explicitly configured browser automation) how to scrape a source website, dedupe against history + destination, apply custom user skip rules, expand shortened URLs, post via the user's logged-in browser, append history, and notify the user via configured delivery. Works with websites the agent can safely operate; ships documented example surfaces for LinkedIn, X, Bluesky, Threads, and Facebook. JSON state lives at ~/.repost-with-agent/. No code on disk performs any of the work — the agent does it all with native tools.",
+      "description": "Skill-only reposting workflow plugin. Skills + slash commands instruct the running agent (OpenClaw via its built-in browser, Claude Code or another harness via its explicitly configured browser automation) how to scrape a source website, dedupe against history + destination, apply custom user skip rules, expand shortened URLs, post via the user's logged-in browser, append history, manage source-item fanout manifests for scheduled backfills, and notify the user via configured delivery. Works with websites the agent can safely operate; ships documented example surfaces for LinkedIn, X, Bluesky, Threads, and Facebook. JSON state lives at ~/.repost-with-agent/. No code on disk performs any of the work — the agent does it all with native tools.",
       "category": "productivity",
       "source": ".",
       "homepage": "https://ethansk.github.io/Repost-with-agent/",
@@ -33,7 +33,8 @@
         "dedupe",
         "semantic-dedupe",
         "global-ledger",
-        "publish-confirmations"
+        "publish-confirmations",
+        "source-fanout"
       ]
     }
   ]

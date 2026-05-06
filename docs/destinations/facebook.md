@@ -68,6 +68,10 @@ composer appears to be posting as the wrong identity, stop with
    for a page or group, the audience should already be the right scope.
 6. Click "Post".
 7. Wait for the modal to close. Capture `posted_url` by finding the new post on the feed and clicking through to its permalink, OR by reading the post's permalink from the timestamp `<a>`.
+   - **Do not trust the first Facebook URL you see.** Facebook's feed and dialog DOM can leave older post links/timestamp anchors near the newly-posted content.
+   - Prefer the new post card's `Boost post` URL `target_id=<post id>` when present; normalize it to `https://www.facebook.com/<page-handle>/posts/<post id>`.
+   - After extracting any candidate permalink, open it in the browser and verify the page title/body contains the expected draft text (or a distinctive excerpt) and does **not** contain a different recent post's text.
+   - If the URL opens the wrong post, keep searching the live page for the matching post card and record `pair.publish.failed` with `category: "platform-error"` if no verified URL can be found. Do not append `posted.jsonl`, global ledger, or user notification with an unverified Facebook permalink.
 
 ## Char cap
 
@@ -81,6 +85,7 @@ composer appears to be posting as the wrong identity, stop with
   - Post text (visible body, minus "See more" expander — click "See more" if needed to load full text).
   - Canonical URL: post permalink (extractable from the timestamp `<a>` tag).
   - `publishedAt`: the visible timestamp.
+  - If a visible post card exposes a `Boost post` link with `target_id`, treat that numeric id as the safest permalink source, but still open and verify the normalized URL before using it as proof.
 
 ## Destination dedupe
 
@@ -112,3 +117,7 @@ publishing, 30 is generous.
 - **2FA / login challenge** is the most common failure. If the user is
   prompted to confirm a new device, surface it and let the user complete it
   manually.
+- **Wrong permalink proof** — a post can publish correctly while the DOM still
+  exposes an older post's `pfbid` / timestamp URL nearby. User-facing links and
+  ledgers must be content-verified by opening the captured URL before success
+  is recorded.

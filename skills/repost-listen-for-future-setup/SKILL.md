@@ -12,13 +12,19 @@ the harness or host OS.
 
 ## Product stance
 
-Default: one daily all-enabled-pairs sweep. It runs `/repost-run all`, sweeps
-matching pairs sequentially, and exits.
+Default for listen-for-future: one daily all-enabled-pairs sweep. It runs
+`/repost-run all`, sweeps matching pairs sequentially, and exits.
+
+Default for source-level backfill slots: one scheduled turn selects one source
+item and fans it out to all enabled destination pairs for that source using
+`skills/repost-source-fanout/SKILL.md`. It does not schedule one destination per
+slot unless the user explicitly asks for destination-specific jobs.
 
 That default is not a cage. If the user asks for any other safe configuration,
 implement it instead of forcing the all-pairs shape:
 
-- one job per pair;
+- one source-item fanout backfill job per source platform;
+- one job per pair when explicitly requested;
 - one job for a named subset of pairs;
 - multiple jobs with different cadences/timezones;
 - preview/dry scheduled checks that never publish;
@@ -115,7 +121,22 @@ recommended starter architecture, not the only architecture.
 
 ### Custom job examples
 
-Single-pair job:
+Source-level backfill fanout job:
+
+```bash
+openclaw cron add \
+  --name "repost-with-agent.linkedin.source-fanout.hourly" \
+  --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
+  --agent main \
+  --session isolated \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial." \
+  --thinking medium \
+  --timeout-seconds 21600 \
+  --cron "0 * * * *" \
+  --tz "Europe/London"
+```
+
+Single-pair job (destination-specific, only when explicitly requested):
 
 ```bash
 openclaw cron add \
@@ -266,6 +287,11 @@ To stop a scheduler entry:
 For the default sweep, `/repost-run all` scans every enabled
 `listen-for-future` pair sequentially with a small jittered delay between pairs.
 Live jobs publish only `live-approved` pairs; preview/dry jobs never publish.
+
+For source-level backfill jobs, run exactly one source-item fanout slot: choose
+one source item, enumerate all enabled destinations for that source, and write a
+`complete` / `blocked` / `partial` manifest before the scheduled turn exits.
+Resume any `partial` manifest before choosing another source item.
 
 For custom jobs, run only the requested pair/scope and requested mode. Preview
 jobs must never publish. Live jobs must still skip pairs that are disabled,

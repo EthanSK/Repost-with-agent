@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.4.0)
+# Repost-with-agent (v4.5.0)
 
 **GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
 
@@ -40,6 +40,8 @@ personal browser/profile.
    (`/repost-run all`). If you want something else, say so: per-pair jobs,
    subset jobs, dry/preview sweeps, custom cron expressions, and manual-only
    pairs are all valid user-owned configurations.
+7. For historical source backfills, use source-item fanout semantics: one source
+   item fans out to every enabled destination pair before the slot moves on.
 
 That's it. The agent does everything else.
 
@@ -139,6 +141,20 @@ reserved for successful publish / destination duplicate proof.
 
 (See [`docs/architecture.md`](docs/architecture.md) for the long version.)
 
+## Source-item fanout for backfills
+
+A source-level backfill slot processes **one source item** and all enabled
+destinations for that source together. For a LinkedIn source item, that means
+LinkedIn→X, LinkedIn→Bluesky, LinkedIn→Threads, LinkedIn→Facebook, etc. are
+planned/reconciled in one manifest. The source item is not complete just because
+one destination posted. If any enabled destination is missing, unattempted, or
+failed without an explicit block reason, the fanout is `partial` and the next
+continuation should resume the same source item before selecting another item.
+
+See [`skills/repost-source-fanout/SKILL.md`](skills/repost-source-fanout/SKILL.md),
+[`docs/source-fanout.md`](docs/source-fanout.md), and
+[`templates/source-fanout-manifest.json.template`](templates/source-fanout-manifest.json.template).
+
 ## Required harness toolkit
 
 The agent in your harness session must have:
@@ -220,7 +236,8 @@ MUST also fire a publish confirmation.
 - `/repost-run all` — iterate over every enabled `listen-for-future` pair in
   one sweep. The default scheduled live sweep publishes only `live-approved`
   pairs; preview/dry sweeps may include preview-only pairs but never publish.
-- `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — multi-post historical walk, newest-first.
+- `/repost-backfill <pair-id> [--max N --interval M --allow-publish --resume]` — destination-specific historical walk, newest-first, only when the user explicitly asks for a single pair.
+- `/repost-backfill source:<platform> [--max N --interval M --allow-publish --resume]` — source-item fanout walk; each source item fans out to all enabled destinations before the next item.
 - `/repost-setup-cron` — by default, install one current-harness scheduler entry
   (OpenClaw cron preferred for OpenClaw workflows) that runs `/repost-run all`
   as a single sequential all-pairs sweep. On request, install separate per-pair
@@ -239,6 +256,7 @@ over user-owned JSON state plus the host harness scheduler, so users may choose
 any layout their harness can express:
 
 - one all-enabled-pairs sweep daily, hourly, weekdays only, etc.;
+- source-item fanout backfill slots, where each slot handles one source item across all enabled destinations;
 - one cron job per pair, each using that pair's own cadence/timezone;
 - subset jobs such as “professional accounts at 09:00” and “personal accounts
   at 18:00”;
@@ -248,6 +266,8 @@ any layout their harness can express:
 - custom natural-language scheduled prompts, as long as they still invoke the
   current harness, read the same `~/.repost-with-agent` state, and obey the
   publish-confirmation/dedupe rules.
+
+For scheduled source backfills, the safe default is a source-item fanout job: one source item per slot, all enabled destinations, manifest written under `source-fanouts/`. Use destination-specific pair jobs only when the user explicitly asks for that narrower shape.
 
 `pair.schedule` and optional top-level `schedulerJobs` metadata are advisory
 configuration for agents and humans. The actual source of truth for timing is
@@ -262,6 +282,7 @@ host scheduler before changing live behaviour.
 - `skills/repost-pair-show/` — inspect one pair.
 - `skills/repost-run/` — single-post end-to-end flow.
 - `skills/repost-backfill/` — multi-post historical walk.
+- `skills/repost-source-fanout/` — source-item fanout contract for scheduled/source backfills.
 - `skills/repost-listen-for-future-setup/` — install scheduler.
 - `skills/repost-history/` — tail posted.jsonl.
 - `skills/repost-dedup/` — Layer 1 fuzzy-match algorithm reference.
@@ -280,7 +301,7 @@ All state lives at `~/.repost-with-agent/`:
 - `pairs.json` — array of pair configs (schemaVersion 4), including optional `customRules`.
 - `global-posted.jsonl` — append-only cross-pair publish/duplicate proof ledger.
 - `considered.jsonl` — append-only custom-rule / not-post-worthy decisions.
-- `schedulerJobs` (inside `pairs.json`, optional) — human/agent-readable scheduler intent for all-enabled, per-pair, subset, preview/dry, or custom jobs. The host scheduler remains the timing source of truth.
+- `schedulerJobs` (inside `pairs.json`, optional) — human/agent-readable scheduler intent for all-enabled, source-fanout, per-pair, subset, preview/dry, or custom jobs. The host scheduler remains the timing source of truth.
 - `pairs/<id>/posted.jsonl` — append-only history of successful publishes.
 - `pairs/<id>/audit.jsonl` — append-only audit events.
 - `pairs/<id>/learnings.md` — per-pair institutional memory. The agent reads
@@ -290,7 +311,8 @@ All state lives at `~/.repost-with-agent/`:
   entry has free-form prose plus optional structured sub-sections
   (`### Selectors`, `### Step playbook`, `### Quirks`) so the next run
   can follow a recipe verbatim.
-- `pairs/<id>/backfill-state.json` — transient resume state for backfills.
+- `pairs/<id>/backfill-state.json` — transient resume state for destination-specific backfills.
+- `source-fanouts/<source-platform>/<safe-source-item-id>.json` — source-item fanout manifest recording every enabled destination outcome and resume data for partials.
 - `pairs/<id>/logs/cron.log` — stdout/stderr from fallback launchd/crontab ticks when that scheduler path is explicitly used.
 
 Full schemas: [`docs/state-files.md`](docs/state-files.md).
@@ -314,6 +336,21 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "tz": "Europe/London",
         "expression": "0 10 * * *",
         "everyHours": 24
+      }
+    },
+    {
+      "id": "linkedin-source-fanout-hourly",
+      "enabled": false,
+      "scope": "source-fanout",
+      "sourcePlatform": "linkedin",
+      "pairIds": [],
+      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial.",
+      "publishMode": "live-approved-only",
+      "schedule": {
+        "kind": "cron",
+        "tz": "Europe/London",
+        "expression": "0 * * * *",
+        "everyHours": 1
       }
     }
   ],

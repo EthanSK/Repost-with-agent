@@ -1,4 +1,4 @@
-# Architecture (v4.4.0 — skill-only, current-harness first)
+# Architecture (v4.5.0 — skill-only, current-harness first)
 
 ## TL;DR
 
@@ -32,9 +32,9 @@ directory-source plugin; state migration, when needed, is a documented
 agent-assisted file edit rather than a repo script.
 
 There is no `src/` TypeScript code. There is no MCP server. There is no CLI
-binary. There is no `package.json` build chain. There are no node modules. The
-only `package.json` fields that matter are marketplace/metadata fields such as
-`version`, `description`, and `keywords`.
+binary. There is no runtime `package.json` build chain. There are no node
+modules. `package.json` is mostly marketplace metadata plus lightweight repo
+validation scripts; no package script performs reposting.
 
 ## Why this design?
 
@@ -143,9 +143,19 @@ The fresh scheduled agent:
 The next scheduled tick spawns a fresh agent/subagent. There is no daemon, no
 long-running process, no leftover state in memory. Each tick is independent and
 idempotent. The default one-sweep job is only the starter architecture; host
-schedulers can run per-pair jobs, subsets, custom cadences, or dry/preview jobs
-as long as each tick still reads the shared `~/.repost-with-agent` state and
-obeys the same safety/dedupe/notification rules.
+schedulers can run per-pair jobs, subsets, custom cadences, source-item fanout
+backfill slots, or dry/preview jobs as long as each tick still reads the shared
+`~/.repost-with-agent` state and obeys the same safety/dedupe/notification
+rules.
+
+For source-level historical backfills, the safe scheduling unit is a
+**source-item fanout**: one selected source item plus every enabled destination
+pair for that source. The run writes a manifest under
+`~/.repost-with-agent/source-fanouts/<source-platform>/<source-item>.json` and
+is `partial` unless every enabled destination is posted, already-posted/caught
+up, skipped by rule/policy, or explicitly blocked with reason/nextAction. This
+keeps a LinkedIn→all backfill from accidentally becoming four independent
+per-destination jobs.
 
 This matches Ethan's intent in voice 6026: "yeah, I guess don't follow Agent
 Bridge then. So yeah, skip the MCP. Subagent."
@@ -189,10 +199,14 @@ the typical case) or shell out to `sed` / `awk` if the candidate set is large
 - **Alternate pair route would double-post** → the global ledger's inherited
   `contentKey` is the guardrail; every pair checks destination-platform/account
   rows before compose.
+- **Source fanout stopped after one destination** → the source fanout manifest
+  remains `partial` with pending `pairIds` and resume data. The next source-level
+  backfill continuation resumes that same source item before selecting another.
 
 ## See also
 
 - `docs/state-files.md` — formal state-file schemas.
+- `docs/source-fanout.md` — source-item fanout contract.
 - `docs/migration-v3-to-v4.md` — the second rewrite explained.
 - `docs/destinations/<platform>.md` — per-platform DOM hints.
 - `skills/*/SKILL.md` — the actual playbook.

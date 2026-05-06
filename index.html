@@ -353,9 +353,9 @@
   <main class="wrap">
     <div class="hero">
       <div>
-        <span class="eyebrow">v4.4.0 · skill-only · OpenClaw-compatible</span>
+        <span class="eyebrow">v4.5.0 · skill-only · OpenClaw-compatible</span>
         <h1>Run website reposting with the agent you already use.</h1>
-        <p class="lead">A practical plugin of Markdown skills, slash commands, templates, and state-file rules. The current harness uses its logged-in browser automation to repost between websites it can safely operate, with a simple default scheduler and room for custom pair/job layouts.</p>
+        <p class="lead">A practical plugin of Markdown skills, slash commands, templates, and state-file rules. The current harness uses its logged-in browser automation to repost between websites it can safely operate, with a simple default scheduler, source-item fanout for backfills, and room for custom pair/job layouts.</p>
         <div class="actions">
           <a class="button primary" href="https://github.com/EthanSK/Repost-with-agent#readme">Read the README</a>
           <a class="button" href="https://github.com/EthanSK/Repost-with-agent/tree/main/skills">Browse skills</a>
@@ -378,7 +378,7 @@
           <div class="status-row"><strong>It avoids</strong><span>CLI runtime, MCP server, SDKs, Playwright</span></div>
           <div class="status-row"><strong>It requires</strong><span>Transparent logged-in sessions</span></div>
           <div class="status-row"><strong>It confirms</strong><span>Every successful publish</span></div>
-          <div class="status-row"><strong>It schedules</strong><span>Default sweep; custom jobs when wanted</span></div>
+          <div class="status-row"><strong>It schedules</strong><span>Default sweep; source fanout; custom jobs</span></div>
         </div>
       </aside>
     </div>
@@ -400,7 +400,7 @@
         </div>
         <div class="tile">
           <h3>State and schedules</h3>
-          <p>Pair configs, posted history, dedupe proofs, custom-rule decisions, audits, learnings, and optional scheduler intent live under <code>~/.repost-with-agent/</code>.</p>
+          <p>Pair configs, posted history, dedupe proofs, source fanout manifests, custom-rule decisions, audits, learnings, and optional scheduler intent live under <code>~/.repost-with-agent/</code>.</p>
         </div>
       </div>
     </section>
@@ -412,10 +412,10 @@
         <li><div><strong>Create a source → destination pair.</strong><br>Run <code>/pair create</code>. New pairs start safe: <code>preview-only</code> and disabled until explicitly approved.</div></li>
         <li><div><strong>Validate in the logged-in browser profile.</strong><br>The agent checks source and destination sessions, account identity, candidate text, URLs, and preview/publish readiness.</div></li>
         <li><div><strong>Run one pair manually.</strong><br><code>/repost-run &lt;pair-id&gt;</code> scrapes, applies custom rules, dedupes, expands URLs, drafts/posts, writes state, and sends a confirmation.</div></li>
-        <li><div><strong>Schedule the default sweep, or customize it.</strong><br><code>/repost-setup-cron</code> installs one daily all-enabled-pairs job that invokes <code>/repost-run all</code> sequentially by default. Users can also ask for per-pair jobs, subset jobs, dry/preview jobs, or custom cadences.</div></li>
+        <li><div><strong>Schedule the default sweep, source fanout, or customize it.</strong><br><code>/repost-setup-cron</code> installs one daily all-enabled-pairs job that invokes <code>/repost-run all</code> sequentially by default. Source-level backfill jobs process one source item across all enabled destinations; users can also ask for per-pair jobs, subset jobs, dry/preview jobs, or custom cadences.</div></li>
       </ol>
       <div class="callout"><strong>Important:</strong> scheduled live posting requires <code>mode: "live-approved"</code>, a successful preview/publish proof, and a configured <code>notification.delivery</code> route. Silent publishes are treated as bugs.</div>
-      <div class="callout"><strong>Flexible scheduling:</strong> the all-pairs sweep is the starter configuration, not the only architecture. The host scheduler can run one pair, named subsets, dry preview checks, or multiple custom cadences while reusing the same state and safety rules.</div>
+      <div class="callout"><strong>Flexible scheduling:</strong> the all-pairs sweep is the starter configuration, not the only architecture. The host scheduler can run source-item fanout backfill slots, one pair, named subsets, dry preview checks, or multiple custom cadences while reusing the same state and safety rules.</div>
     </section>
 
     <section id="workflow">
@@ -472,7 +472,8 @@
           <ul>
             <li><code>/repost-run &lt;pair-id&gt;</code> — run one pair end-to-end.</li>
             <li><code>/repost-run all</code> — default sweep for every enabled listen-for-future pair; live jobs publish only live-approved pairs, while preview/dry sweeps and subsets follow the scheduler prompt.</li>
-            <li><code>/repost-backfill &lt;pair-id&gt; [--max N --interval M --allow-publish --resume]</code> — historical walk.</li>
+            <li><code>/repost-backfill source:&lt;platform&gt; ...</code> — source-item fanout historical walk: one source item across all enabled destinations.</li>
+            <li><code>/repost-backfill &lt;pair-id&gt; ...</code> — destination-specific historical repair/job when explicitly requested.</li>
             <li><code>/repost-setup-cron</code> — install the default all-pairs sweep or a custom per-pair/subset/dry schedule.</li>
           </ul>
         </div>
@@ -486,6 +487,7 @@
 ├── pairs.json
 ├── global-posted.jsonl
 ├── considered.jsonl
+├── source-fanouts/&lt;source-platform&gt;/&lt;source-item&gt;.json
 └── pairs/&lt;pair-id&gt;/
     ├── posted.jsonl
     ├── audit.jsonl

@@ -6,32 +6,52 @@ when_to_trigger: User wants to fill in missed historical posts on the destinatio
 
 # Repost Backfill
 
-Multi-post variant of `repost-run`. Walks back through the source's historical
-posts newest-first and reposts the ones that aren't already on the destination,
-with a configurable delay between publishes.
+Multi-post variant of `repost-run`. Walks back through historical source posts
+newest-first.
+
+There are two valid units:
+
+- **Source-item fanout (default for source-level/scheduled backfills):** select
+  one source item and process every enabled destination pair for that source
+  together using `skills/repost-source-fanout/SKILL.md`.
+- **Destination-specific pair backfill:** process one `<pair-id>` only when the
+  user explicitly asks for a single destination/pair repair or job.
 
 This is a separate skill from `repost-run` because the loop, dedupe ordering,
-and rate-limiting differ.
+fanout manifest, and rate-limiting differ.
 
 ## Required tools
 
 Same as `repost-run`: Read, Edit, Write, Bash, current-harness browser
 automation, and configured current-harness user-message delivery.
 
-## Step 1 — Load pair config + backfill options
+## Step 1 — Load config, resolve unit, and read backfill options
 
-1. Read `~/.repost-with-agent/pairs.json` and find the pair. Note any
-   top-level `customRules` and pair-level `pair.customRules`; they run before
-   backfill dedupe/publish.
-2. Verify `pair.enabled === true` and either:
+1. Read `~/.repost-with-agent/pairs.json`.
+2. Resolve the requested unit:
+   - `source:<platform>`, "LinkedIn backfill slot", "backfill LinkedIn to all",
+     or any source-level scheduled prompt → **source-item fanout**. Load
+     `skills/repost-source-fanout/SKILL.md` and follow it for the selected
+     source item.
+   - `<pair-id>` → destination-specific pair backfill. This is valid only when
+     the user explicitly asks for that pair/destination.
+3. For source-item fanout, enumerate enabled pairs for the source before
+   posting anything. The slot is not complete until every enabled destination
+   has a manifest status: posted, already-posted/caught-up, skipped by rule or
+   policy, explicitly blocked with reason/nextAction, or partial.
+4. For destination-specific pair backfill, find the pair. Note any top-level
+   `customRules` and pair-level `pair.customRules`; they run before backfill
+   dedupe/publish.
+5. Verify every pair you may publish has `enabled === true` and either:
    - `pair.runMode === "backfill"`, OR
-   - The user explicitly asks for a one-shot backfill on a different runMode (in which case just remind them this is one-shot, not a permanent runMode change).
-3. Ask the user (or accept from the slash command args):
-   - `--max <N>` how many posts to backfill (default 10, hard cap 50 unless user explicitly says larger).
-   - `--interval <minutes>` requested delay between publishes (default 10 for planning; actual publish delay is floored by `policy.minDelayBetweenPostsMinutes`, normally 60).
-   - `--allow-publish` (boolean — default false). Without this flag, do a dry-run preview of every candidate but DON'T publish. With this flag, actually publish.
-4. Compute `effectiveIntervalMinutes = max(--interval or 10, pair.policy.minDelayBetweenPostsMinutes or 60)` for any publish-capable backfill. If the user supplied a lower interval, tell them the pair policy floor won; never rapid-fire publishes below the configured floor.
-5. Verify `pair.mode !== "preview-only"` if `--allow-publish` is set. If `preview-only`, refuse and tell the user to flip the pair to `approval-required` or `live-approved` first.
+   - The user explicitly asks for a one-shot backfill on a different runMode (in
+     which case just remind them this is one-shot, not a permanent runMode change).
+6. Ask the user (or accept from the slash command args):
+   - `--max <N>` how many source items to backfill (default 10, hard cap 50 unless user explicitly says larger). For source fanout, `max` counts source items, not destination posts.
+   - `--interval <minutes>` requested delay between source items / publishes (default 10 for planning; actual publish delay is floored by each pair's `policy.minDelayBetweenPostsMinutes`, normally 60).
+   - `--allow-publish` (boolean — default false). Without this flag, do a dry-run preview of every candidate but DON'T publish. With this flag, actually publish where pair mode allows it.
+7. Compute `effectiveIntervalMinutes = max(--interval or 10, pair.policy.minDelayBetweenPostsMinutes or 60)` for every publish-capable pair. If the user supplied a lower interval, tell them the pair policy floor won; never rapid-fire publishes below the configured floor.
+8. Verify `pair.mode !== "preview-only"` if `--allow-publish` is set for that pair. If `preview-only`, refuse/skip that destination and mark it blocked or preview-only in the fanout manifest rather than silently pretending it completed.
 
 ## Step 1.5 — Read pair learnings (institutional memory)
 
@@ -152,6 +172,11 @@ Sort the surviving candidates by `publishedAt` DESCENDING. Take the first
 backfill is interrupted mid-way, the destination ends up with a contiguous
 recent history rather than a gap-bounded historical block.
 
+For source-item fanout, select one source item at a time from this ordered list
+and complete/blocked/partial its manifest before selecting the next source item.
+Do not let per-destination ledgers make the scheduler advance to another source
+item while an enabled destination for the current source item is unattempted.
+
 ## Step 5.5 — Layer 2 dedupe (semantic similarity, per candidate)
 
 Use the `repost-dedup-semantic` skill. This is **Layer 2** — your own
@@ -191,7 +216,12 @@ same theme with slightly different wording — Layer 2 catches those.
 
 ## Step 6 — Publish loop
 
-For each candidate in order:
+For source-item fanout, this loop delegates each selected source item to
+`skills/repost-source-fanout/SKILL.md`: create/resume the fanout manifest,
+process every enabled destination, then return here only after the manifest is
+`complete`, `blocked`, or `partial` with resume data.
+
+For destination-specific pair backfill, process each candidate in order:
 
 1. Tell the user what we're about to publish (`#<n>/<max>`: text preview + source URL).
 2. If `pair.mode === "approval-required"`: ask the user to approve. Skip on no.
@@ -207,6 +237,12 @@ For each candidate in order:
 6. If publishing:
    - Run the URL expansion + length check from `repost-run` steps 6–7.
    - Drive the destination compose flow from `repost-run` step 8.
+   - For Facebook destinations, apply the repost-run Facebook proof gate:
+     re-open the captured destination URL and verify it contains the intended
+     draft/excerpt before recording success or notifying Ethan. If the URL
+     opens a different post, keep searching the live page for the matching
+     post card; if no verified URL is found, log a platform-error failure and
+     do not append success state.
    - On success: append to `posted.jsonl` and
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
@@ -226,7 +262,11 @@ there is proof of the destination post, and skip.
 
 ## Step 8 — Final summary
 
-After the loop, print + (optionally) Telegram a summary:
+For source-item fanout runs, summarize by source item first, then destination
+outcomes. Include `partial`/`blocked` and the manifest resume data when any
+enabled destination did not finish.
+
+After a destination-specific pair loop, print + (optionally) Telegram a summary:
 
 ```
 ✅ Backfill complete: <pair-id>

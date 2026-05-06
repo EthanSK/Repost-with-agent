@@ -1,4 +1,4 @@
-# State files (v4.4.0)
+# State files (v4.5.0)
 
 All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
 touch this state directly; runtime reposting is skill-only. The running agent
@@ -10,6 +10,9 @@ the skill workflows.
 ├── pairs.json                          # all pair configs (schemaVersion 4)
 ├── global-posted.jsonl                 # append-only cross-pair destination ledger
 ├── considered.jsonl                    # append-only custom-rule / not-post-worthy decisions
+├── source-fanouts/                     # source-item fanout manifests for scheduled/source backfills
+│   └── <source-platform>/
+│       └── <safe-source-item-id>.json
 ├── pairs.json.bak.<unix-ts>            # backups produced by manual migration / pair-edit
 ├── pairs.json.v3.bak                   # one-time backup of the v3 file
 └── pairs/
@@ -65,7 +68,7 @@ the skill workflows.
     {
       "id": "all-enabled-daily",
       "enabled": true,
-      "scope": "all-enabled | pair | subset | custom",
+      "scope": "all-enabled | pair | subset | source-fanout | custom",
       "pairIds": [],
       "message": "/repost-run all",
       "publishMode": "live-approved-only | preview-only",
@@ -129,11 +132,12 @@ the skill workflows.
 - `notification.delivery` — optional but strongly recommended for scheduled/live runs. It records the user-facing notification route the setup agent captured from the current harness/chat. For OpenClaw this maps directly to `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<short payload>)`; other harnesses map the same abstract fields to their own user-message tool. Do not rely on a default account/bot when multiple accounts exist.
 - `notification.payloadStyle: "short-human"` and `notification.noRawToolOutput: true` mean publish pings are concise human summaries, never raw JSON/tool/audit dumps.
 - `customRules` — optional top-level user preference filters that run after source scrape and before dedupe/publish. Enabled `action: "skip"` rules append to `considered.jsonl` + per-pair audit and must NOT append to `posted.jsonl` / `global-posted.jsonl` because a preference skip is not destination proof. Pair-specific `pair.customRules` may also be used for one-off destination rules. See `skills/repost-custom-rules/SKILL.md`.
-- `schedulerJobs` — optional top-level scheduler metadata for humans/agents. It can describe the default all-enabled sweep, separate per-pair jobs, subset jobs, preview/dry jobs, or custom current-harness scheduled prompts. It is **advisory**: the installed host scheduler entry (OpenClaw cron, launchd, crontab, etc.) remains the operational source of truth for timing. If absent, scheduling still works via `/repost-setup-cron`. Suggested fields:
+- `schedulerJobs` — optional top-level scheduler metadata for humans/agents. It can describe the default all-enabled sweep, separate per-pair jobs, subset jobs, source-item fanout backfill jobs, preview/dry jobs, or custom current-harness scheduled prompts. It is **advisory**: the installed host scheduler entry (OpenClaw cron, launchd, crontab, etc.) remains the operational source of truth for timing. If absent, scheduling still works via `/repost-setup-cron`. Suggested fields:
   - `id` — stable human/job id, e.g. `all-enabled-daily` or `linkedin-to-x-hourly`.
-  - `scope` — `all-enabled`, `pair`, `subset`, or `custom`.
-  - `pairIds` — explicit ids for `pair`/`subset` scopes; empty for `all-enabled`.
-  - `message` — the current-harness prompt/slash command the scheduler runs, e.g. `/repost-run all` or `/repost-run linkedin-to-x`.
+  - `scope` — `all-enabled`, `pair`, `subset`, `source-fanout`, or `custom`.
+  - `pairIds` — explicit ids for `pair`/`subset` scopes; empty for `all-enabled` or source fanout auto-enumeration.
+  - `sourcePlatform` — optional source key for `source-fanout` jobs, e.g. `linkedin`.
+  - `message` — the current-harness prompt/slash command the scheduler runs, e.g. `/repost-run all`, `/repost-run linkedin-to-x`, or a source-fanout prompt.
   - `publishMode` — `live-approved-only` for unattended live jobs, or `preview-only` for dry jobs that must never publish.
   - `schedule` — same shape as pair schedules (`manual`, `cron`, or `every`).
   - `host` — optional installed scheduler hint (`kind`, `jobName`, `jobId`) for later inspection/removal.
@@ -271,6 +275,78 @@ Invariants:
 - Pair runs that newly skip a candidate should also append
   `pair.custom_rule.skipped` to that pair's `audit.jsonl` for traceability.
 
+## `source-fanouts/<source-platform>/<safe-source-item-id>.json`
+
+Source-item fanout manifests make source-level backfill slots resumable and
+prevent an agent from treating one destination success as whole-source-item
+completion.
+
+Schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "createdAt": "<ISO-8601>",
+  "updatedAt": "<ISO-8601>",
+  "status": "in-progress | complete | blocked | partial",
+  "runKind": "scheduled-backfill-source-fanout | manual-source-fanout | dry-run-source-fanout",
+  "source": {
+    "platform": "linkedin",
+    "sourceItemId": "urn:li:activity:7000",
+    "canonicalSourceUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7000/",
+    "publishedAt": "<ISO-8601>",
+    "textHash": "sha256:<normalized-source-text-hash>",
+    "excerpt": "<first 200 chars>"
+  },
+  "destinations": [
+    {
+      "pairId": "linkedin-to-x",
+      "destinationPlatform": "x",
+      "destinationAccountHint": "@<handle>",
+      "status": "planned | attempting | posted | already-posted | caught-up | skipped-rule | skipped-by-policy | blocked | failed | unattempted",
+      "terminal": false,
+      "destinationUrl": "<published-or-matched URL when known>",
+      "destinationId": "<platform id when known>",
+      "category": "needs-login | needs-config | needs-account-switch | rate-limit | platform-error | unknown",
+      "reason": "<human reason>",
+      "nextAction": "<resume/user/platform action>",
+      "proof": {
+        "localPosted": true,
+        "globalPosted": true,
+        "notified": true
+      }
+    }
+  ],
+  "resume": {
+    "sourceItemId": "urn:li:activity:7000",
+    "canonicalSourceUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7000/",
+    "pendingPairIds": ["linkedin-to-facebook"],
+    "blockedPairIds": [],
+    "nextAction": "Resume this same source item before selecting another source item."
+  }
+}
+```
+
+Invariants:
+
+- One manifest records one source item and every enabled destination pair in
+  scope at fanout start.
+- `complete` is allowed only when every enabled destination has terminal status
+  and none is blocked.
+- `blocked` is allowed only when every enabled destination is terminal and at
+  least one destination is explicitly blocked with `category`, `reason`, and
+  `nextAction`.
+- `partial` is required when any enabled destination is `planned`, `attempting`,
+  `failed`, `unattempted`, missing from the manifest, or `blocked` without a
+  complete reason/nextAction.
+- A scheduled backfill continuation must resume a `partial` manifest before
+  selecting a different source item.
+- Successful destination publishes still append to the pair's `posted.jsonl`,
+  `audit.jsonl`, and `global-posted.jsonl`; the fanout manifest is an
+  orchestration/result ledger, not a replacement for publish proof.
+
+See `skills/repost-source-fanout/SKILL.md` and `docs/source-fanout.md`.
+
 ## `pairs/<id>/posted.jsonl`
 
 Append-only NDJSON. Each line is one JSON object representing one successful
@@ -341,6 +417,29 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.backfill.would_publish`           | Dry-run hit on a candidate. |
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
 | `pair.backfill.skipped_now_duplicate`   | Re-check between publishes found the candidate had been posted by another path. |
+| `source.fanout.start`                   | Source-item fanout began. Includes `sourcePlatform`, `sourceItemId`, `canonicalSourceUrl`, and the complete enabled `destinationPairIds` list. |
+| `source.fanout.destination`             | One enabled destination reached a manifest status (`posted`, `already-posted`, `caught-up`, `skipped-rule`, `skipped-by-policy`, `blocked`, `failed`, `unattempted`). |
+| `source.fanout.complete`                | Every enabled destination for the source item reached terminal non-blocked status. |
+| `source.fanout.blocked`                 | Every enabled destination is terminal, but one or more destinations are explicitly blocked with reason/nextAction. |
+| `source.fanout.partial`                 | At least one enabled destination is missing, unattempted, failed, planned, or blocked without a complete next action. Includes resume data. |
+
+### `source.fanout.partial` schema
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "source.fanout.partial",
+  "sourcePlatform": "linkedin",
+  "sourceItemId": "urn:li:activity:7000",
+  "canonicalSourceUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7000/",
+  "destinationPairIds": ["linkedin-to-x", "linkedin-to-bluesky", "linkedin-to-threads", "linkedin-to-facebook"],
+  "terminalPairIds": ["linkedin-to-x", "linkedin-to-bluesky", "linkedin-to-threads"],
+  "pendingPairIds": ["linkedin-to-facebook"],
+  "blockedPairIds": [],
+  "manifestPath": "~/.repost-with-agent/source-fanouts/linkedin/urn-li-activity-7000.json",
+  "nextAction": "Resume linkedin-to-facebook for this same source item before selecting another LinkedIn item."
+}
+```
 
 ### `pair.dedupe.global_duplicate` schema
 
@@ -539,11 +638,14 @@ clean completion. Schema:
 - `templates/posted.jsonl.template` — example posted history shape.
 - `templates/global-posted.jsonl.template` — example global ledger proof shape.
 - `templates/considered.jsonl.template` — example custom-rule skip state.
+- `templates/source-fanout-manifest.json.template` — example source-item fanout manifest.
 - `skills/repost-global-dedupe/SKILL.md` — global ledger algorithm and schema.
 - `skills/repost-custom-rules/SKILL.md` — custom user rules + considered state.
+- `skills/repost-source-fanout/SKILL.md` — source-item fanout procedure and status rules.
 - `templates/audit.jsonl.template` — example audit event sequence.
 - `templates/learnings.md.template` — placeholder shape for new pairs.
 - `skills/repost-learnings/SKILL.md` — full spec for the learnings.md
   lifecycle + signal-vs-noise rules.
+- `docs/source-fanout.md` — operator-facing source-item fanout contract.
 - `docs/architecture.md` — why this state shape, why no daemon.
 - `docs/migration-v3-to-v4.md` — how the v3 → v4 schema migration works.

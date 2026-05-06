@@ -1,15 +1,18 @@
 ---
-description: Backfill historical source posts to the destination (newest-first), with rate-limiting between publishes.
+description: Backfill historical source posts. Source-level jobs use one source-item fanout across all enabled destinations; pair-specific jobs are destination-specific only when explicitly requested.
 ---
 
 # `/repost-backfill`
 
-Walk back through historical source posts and repost the missing ones to the
-destination, newest-first, with a configurable delay between publishes.
+Walk back through historical source posts. For source-level backfills, each slot
+selects one source item and fans it out to every enabled destination pair for
+that source. Pair-specific backfills repost to one destination only and should
+be used only when the user explicitly asks for a destination-specific repair/job.
 
 ## Usage
 
 ```
+/repost-backfill source:<platform> [--max <N>] [--interval <minutes>] [--allow-publish] [--resume]
 /repost-backfill <pair-id> [--max <N>] [--interval <minutes>] [--allow-publish] [--resume]
 ```
 
@@ -27,11 +30,18 @@ Flags:
 
 ## What it does
 
-Dispatches to `skills/repost-backfill/SKILL.md`. It applies custom user skip
-rules + `considered.jsonl` before dedupe and again inside the publish loop.
-Newest-first ordering is
-intentional — if interrupted, the destination ends up with a contiguous recent
-history rather than a gap-bounded historical block. (Ethan voice 6021.)
+Dispatches to `skills/repost-backfill/SKILL.md`.
+
+For `source:<platform>` / source-level scheduled slots, it also loads
+`skills/repost-source-fanout/SKILL.md`: choose one source item, enumerate all
+enabled destination pairs for that source, and mark the fanout `complete`,
+`blocked`, or `partial` only after every enabled destination has an outcome.
+
+For `<pair-id>`, it applies custom user skip rules + `considered.jsonl` before
+dedupe and again inside the publish loop for that single destination pair.
+Newest-first ordering is intentional — if interrupted, the destination ends up
+with a contiguous recent history rather than a gap-bounded historical block.
+(Ethan voice 6021.)
 
 ## Mode rules
 
@@ -46,7 +56,8 @@ history rather than a gap-bounded historical block. (Ethan voice 6021.)
 > Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
 > (Ethan voice 5977 + 5978, 2026-05-01.)
 
-Each successful publish in the backfill loop fires its own ping. After a long
+Each successful publish in the backfill loop fires its own ping. In a source
+fanout, this means one ping per destination actually published. After a long
 backfill (≥5 minutes), an optional summary ping fires too.
 
 ## See also

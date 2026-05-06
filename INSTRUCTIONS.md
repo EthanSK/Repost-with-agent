@@ -54,7 +54,8 @@ the full lifecycle + good/bad-entry guidance.
 - **Per-pair history**: `~/.repost-with-agent/pairs/<id>/posted.jsonl` (NDJSON, append-only).
 - **Per-pair audit**: `~/.repost-with-agent/pairs/<id>/audit.jsonl` (NDJSON, append-only).
 - **Per-pair learnings**: `~/.repost-with-agent/pairs/<id>/learnings.md` (free-form Markdown prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections per entry).
-- **Backfill resume state**: `~/.repost-with-agent/pairs/<id>/backfill-state.json` (transient).
+- **Destination-specific backfill resume state**: `~/.repost-with-agent/pairs/<id>/backfill-state.json` (transient).
+- **Source fanout manifests**: `~/.repost-with-agent/source-fanouts/<source-platform>/<safe-source-item-id>.json` (one source item across enabled destinations).
 - **Scheduler logs**: `~/.repost-with-agent/pairs/<id>/logs/cron.log` is only for fallback launchd/crontab paths; OpenClaw cron keeps job/run state in OpenClaw.
 - **Skill bodies**: `skills/<name>/SKILL.md`.
 - **Slash command wrappers**: `commands/*.md`.
@@ -66,15 +67,16 @@ the full lifecycle + good/bad-entry guidance.
 1. **Confirm every successful publish.** Non-negotiable. See above.
 2. **New pairs default to `mode: "preview-only"` and `enabled: false`.** Don't
    flip without explicit, current-conversation user authorization.
-3. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
+3. **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item and fans it out to every enabled destination pair for that source. It writes/updates a fanout manifest and is `partial` unless every enabled destination is posted, already-posted/caught-up, skipped by rule/policy, or explicitly blocked with reason. Do not treat a single destination success as source completion unless the user explicitly requested a destination-specific pair job.
+4. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
-   Scheduling itself is flexible: the starter path is one daily all-enabled sweep, but per-pair jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
-4. **Custom user rules run before dedupe.** After source scrape, apply
+   Scheduling itself is flexible: the starter path is one daily all-enabled sweep, but source-item fanout backfill jobs, per-pair jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
+5. **Custom user rules run before dedupe.** After source scrape, apply
    top-level/pair `customRules` and `considered.jsonl` using
    `skills/repost-custom-rules/SKILL.md`. Skip matching not-post-worthy
    candidates without touching `posted.jsonl` or `global-posted.jsonl`.
-5. **Dedupe is global before it is per-pair.** Every publish-capable path must
+6. **Dedupe is global before it is per-pair.** Every publish-capable path must
    read `~/.repost-with-agent/global-posted.jsonl` via
    `skills/repost-global-dedupe/SKILL.md` before composing. Resolve a
    cross-pair `contentKey`, inherit lineage when the current source is a post
@@ -82,7 +84,7 @@ the full lifecycle + good/bad-entry guidance.
    `contentKey` already reached this destination from any pair. Pairs must look
    globally; per-pair files are not enough. Default enabled via
    `policy.globalDedupeEnabled: true`.
-6. **Dedupe runs in two layers, both must clear.**
+7. **Dedupe runs in two layers, both must clear.**
    - **Layer 1** (`skills/repost-dedup/SKILL.md`) — local exact match
      against `posted.jsonl`, global cross-pair ledger match, plus remote
      fuzzy-string match against the destination feed. Cheap, catches verbatim
@@ -96,22 +98,22 @@ the full lifecycle + good/bad-entry guidance.
      opt out per-pair via `policy.semanticDedupeEnabled: false`.
    - Uncertain matches are skipped unless
      `policy.blockOnUncertainDuplicate` is `false`.
-7. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
+8. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
    operates on user-controlled, transparent login sessions.
-8. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
+9. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
    (`profile: openclaw`, CDP port `18800`) for all Repost-with-agent OpenClaw
    work. Do not touch Ethan's personal browser/profile unless he explicitly says
    to for that run.
-9. **You CANNOT log in for the user.** If a session is expired, append
+10. **You CANNOT log in for the user.** If a session is expired, append
    `pair.publish.failed` audit with `category: "needs-login"` and stop.
-10. **Append, don't rewrite.** `posted.jsonl`, `audit.jsonl`,
+11. **Append, don't rewrite.** `posted.jsonl`, `audit.jsonl`,
    `global-posted.jsonl`, and `considered.jsonl` are append-only. Use `>>` in Bash.
-11. **Destination posts are native posts, not source receipts.** Expand any URLs
+12. **Destination posts are native posts, not source receipts.** Expand any URLs
    in the source body to their final non-source-platform URL where possible
    (for example `lnkd.in` → the underlying article/video), but do **not** append
    the source platform permalink to the public destination draft. Keep source
    canonical URLs in `posted.jsonl`, audit, and publish confirmation only.
-12. **Use the current harness browser, not Playwright or another agent by default.**
+13. **Use the current harness browser, not Playwright or another agent by default.**
    The plugin has zero Playwright / API-SDK dependencies. The browser automation
    your current harness provides is the only browser path unless Ethan explicitly
    asks for a different harness.
@@ -141,6 +143,7 @@ See `docs/state-files.md` for the full table. Key events:
 - `pair.publish.semantic_duplicate` — Layer 2 semantic dedupe match. Candidate skipped pre-publish; includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.uncertain` — destination scrape failed; treat candidates conservatively.
 - `pair.dedupe.global_duplicate` — global ledger found the same `contentKey` already posted/caught-up for this destination; skip.
+- `source.fanout.start` / `source.fanout.destination` / `source.fanout.complete` / `source.fanout.blocked` / `source.fanout.partial` — source-item fanout lifecycle and resume proof.
 
 ## Cross-machine context
 
@@ -173,7 +176,7 @@ If the user runs `/repost-run <id>`:
 If the scheduler spawned you fresh with `/repost-run all` or another Repost-with-agent scheduled prompt:
 
 1. Read `~/.repost-with-agent/pairs.json`.
-2. Resolve the requested scope literally: default `all` means enabled `listen-for-future` pairs; custom jobs may name one pair or an explicit subset.
+2. Resolve the requested scope literally: default `all` means enabled `listen-for-future` pairs; custom jobs may name one pair or an explicit subset. If the scheduled prompt is a source-level backfill slot, load `skills/repost-source-fanout/SKILL.md` and process exactly one source item across all enabled destinations before selecting another item.
 3. Live jobs publish only pairs where `mode === "live-approved"`; preview/dry jobs never publish, even if a pair is live-approved.
 4. Sleep 30–60s between pairs to avoid rate-limit thrashing.
 5. Exit cleanly.
@@ -183,6 +186,7 @@ If the scheduler spawned you fresh with `/repost-run all` or another Repost-with
 - [`README.md`](README.md) — user-facing overview.
 - [`docs/architecture.md`](docs/architecture.md) — full architectural rationale.
 - [`docs/state-files.md`](docs/state-files.md) — formal state-file schemas.
+- [`docs/source-fanout.md`](docs/source-fanout.md) — source-item fanout contract for scheduled/backfill slots.
 - [`docs/migration-v3-to-v4.md`](docs/migration-v3-to-v4.md) — second-rewrite changelog.
 - [`CLAUDE.md`](CLAUDE.md) — Claude Code-specific guidance (mirrors this file).
 - [`AGENTS.md`](AGENTS.md) — multi-harness agent guidance (mirrors this file).

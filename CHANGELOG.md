@@ -1,5 +1,40 @@
 # Changelog
 
+## v4.5.0 — 2026-05-06 — Source-item fanout hardening
+
+**Backfill safety fix.** Source-level scheduled backfill slots now have an explicit
+source-item fanout contract: select one source item, enumerate every enabled
+destination pair for that source, and do not mark the source item complete until
+every destination is posted, already-posted/caught-up, skipped by rule/policy, or
+explicitly blocked with reason/nextAction.
+
+### Added
+
+- `skills/repost-source-fanout/SKILL.md` — step-by-step fanout procedure,
+  per-destination status vocabulary, manifest rules, partial/blocked detection,
+  and resume behaviour.
+- `docs/source-fanout.md` — operator-facing explanation of why scheduled source
+  backfill slots are source-item fanouts, not per-destination jobs.
+- `templates/source-fanout-manifest.json.template` and
+  `~/.repost-with-agent/source-fanouts/<source-platform>/<source-item>.json`
+  schema docs.
+- `source.fanout.*` audit event schemas and template examples.
+- `tests/fanout-contract.test.mjs` plus `npm test` / `npm run test:fanout` for
+  the executable contract checks.
+
+### Changed
+
+- `repost-backfill`, scheduler setup docs, commands, README, INSTRUCTIONS,
+  AGENTS, CLAUDE, architecture docs, state schema, templates, and manifests now
+  say source-level backfill jobs process one source item across all enabled
+  destinations together.
+- Pair-specific backfill jobs are still allowed, but documented as
+  destination-specific repairs/jobs only when the user explicitly asks for that
+  narrower unit.
+- Existing Facebook proof-gate hardening is preserved: Facebook success state
+  requires reopening and content-verifying the captured permalink before local
+  or global success state is appended.
+
 ## Unreleased — production/OpenClaw readiness audit
 
 ### Added

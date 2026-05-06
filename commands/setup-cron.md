@@ -13,14 +13,20 @@ run Repost-with-agent on a cadence.
 /repost-setup-cron
 ```
 
-Default behavior: install **one daily all-enabled-pairs sweep** that runs
-`/repost-run all`. This is the simple starter shape and the current intended
-shape for Ethan's install.
+Default behavior for listen-for-future: install **one daily all-enabled-pairs
+sweep** that runs `/repost-run all`. This is the simple starter shape and the
+current intended shape for Ethan's listen mode.
+
+Default behavior for source backfills: install a source-item fanout job. Each
+slot chooses one source item and processes every enabled destination pair for
+that source before moving on. Do not install one backfill slot per destination
+unless the user explicitly asks for destination-specific jobs.
 
 The default is not a limitation. If the user asks for a different layout, honor
 it as long as it stays safe and current-harness-owned:
 
-- separate cron jobs per pair;
+- source-item fanout jobs per source platform;
+- separate cron jobs per pair when explicitly requested;
 - named subset jobs, e.g. “work pairs at 09:00, personal pairs at 18:00”;
 - custom cron expressions/timezones/every-N-hours cadences;
 - dry/preview scheduled checks that never publish;
@@ -87,7 +93,22 @@ openclaw cron add \
   --tz "Europe/London"
 ```
 
-Single-pair custom cadence:
+Source backfill fanout cadence:
+
+```bash
+openclaw cron add \
+  --name "repost-with-agent.linkedin.source-fanout.hourly" \
+  --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
+  --agent main \
+  --session isolated \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial." \
+  --thinking medium \
+  --timeout-seconds 21600 \
+  --cron "0 * * * *" \
+  --tz "Europe/London"
+```
+
+Single-pair custom cadence (destination-specific):
 
 ```bash
 openclaw cron add \

@@ -18,7 +18,7 @@ to the matching skill based on the subcommand.
 - `/pair edit <id>` → invoke `skills/repost-pair-setup/SKILL.md` in edit
   mode (read existing pair, ask the user which fields to update, write back).
 
-## Architecture (v4.4.0)
+## Architecture (v4.5.0)
 
 This plugin ships **no code that does the work**. The slash command above is a
 thin wrapper that loads the matching skill — the running agent (OpenClaw,
@@ -26,9 +26,10 @@ Claude Code, or another supported harness) does all the heavy lifting using its
 native tools: Read, Edit, Write, Bash, current-harness browser automation, and
 current-harness primary message delivery.
 
-JSON state lives at `~/.repost-with-agent/pairs.json` and per-pair files under
-`~/.repost-with-agent/pairs/<id>/`. The agent reads/writes them via the native
-Read/Edit/Write tools.
+JSON state lives at `~/.repost-with-agent/pairs.json`, per-pair files under
+`~/.repost-with-agent/pairs/<id>/`, and source fanout manifests under
+`~/.repost-with-agent/source-fanouts/`. The agent reads/writes them via the
+native Read/Edit/Write tools.
 
 ## Confirm every successful publish — non-negotiable
 
@@ -42,5 +43,5 @@ new pair to a non-`preview-only` mode.
 ## See also
 
 - `/repost-run` — run a single pair end-to-end.
-- `/repost-backfill` — multi-post historical walk.
+- `/repost-backfill` — multi-post historical walk; source-level scheduled backfills use source-item fanout.
 - `/repost-setup-cron` — install a current-harness scheduler entry for listen-for-future pairs (OpenClaw cron preferred for OpenClaw workflows).

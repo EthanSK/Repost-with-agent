@@ -19,6 +19,9 @@ a named subset, or a dry/preview sweep. Honor those requests without treating
 the default all-pairs sweep as the only valid architecture.
 
 For multi-post historical walks, see `skills/repost-backfill/SKILL.md` instead.
+For scheduled/source-level backfill slots, `skills/repost-source-fanout/SKILL.md`
+is the unit of work: one source item across all enabled destinations before the
+slot moves on.
 
 ## Required tools
 
@@ -74,7 +77,9 @@ substitute curl/Playwright/etc.
 
 If a scope contains multiple pairs, process them sequentially with a small
 jittered pause (30–60s) between pairs. Each pair is still a single-post run; use
-`repost-backfill` for historical multi-post walks.
+`repost-backfill` for historical multi-post walks, and use
+`repost-source-fanout` when the requested backfill unit is one source item to all
+enabled destinations.
 
 ## Browser tab reuse rule
 
@@ -369,6 +374,12 @@ This is where the running agent drives the user's logged-in browser.
    - For Bluesky: the toast or feed shows the new post; navigate to your
      profile and grab the topmost post URL.
    - For LinkedIn / Threads / Facebook: see per-platform docs.
+   - For Facebook specifically: before treating a publish as successful, open
+     the captured `posted_url` in the browser and verify the live page contains
+     the intended `draftText` (or a distinctive excerpt) and not another recent
+     post. Prefer a same-card `Boost post` `target_id` numeric permalink when
+     available. If the verified page content does not match, do not append
+     success state or notify the user with that URL.
 
 If publish fails (login expired, account mismatch, missing config, rate limit, platform error):
 
@@ -392,6 +403,11 @@ echo '<json-line>' >> ~/.repost-with-agent/pairs/<id>/posted.jsonl
 ```
 
 Append `pair.publish.success` to `audit.jsonl` with the `posted_url`.
+
+For Facebook, this step is forbidden until the destination URL has been
+re-opened and content-verified against the draft. A Facebook publish with an
+unverified/wrong permalink is `pair.publish.failed` / `platform-error`, not a
+success, even if the post itself appears somewhere on the feed.
 
 Append the same proof to `~/.repost-with-agent/global-posted.jsonl` using the
 `repost-global-dedupe` schema. Include `pairId`, `contentKey`, source platform

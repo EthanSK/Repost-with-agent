@@ -50,5 +50,6 @@ Scheduled preview/dry ticks are allowed for enabled `listen-for-future` pairs, b
 ## See also
 
 - `skills/repost-run/SKILL.md` — full step-by-step the agent follows.
+- `skills/repost-source-fanout/SKILL.md` — source-level backfill unit: one source item across all enabled destinations.
 - `/repost-backfill` — multi-post version.
 - `/pair show <id>` — inspect a pair before running.

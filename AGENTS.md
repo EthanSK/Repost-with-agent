@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.4.0)
+# AGENTS.md — Repost-with-agent (v4.5.0)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.4.0 in one paragraph
+## v4.5.0 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -56,7 +56,8 @@ agent owns the run unless Ethan explicitly asks for a different harness.
 | `~/.repost-with-agent/pairs/<id>/posted.jsonl` | Append-only NDJSON history |
 | `~/.repost-with-agent/pairs/<id>/audit.jsonl` | Append-only NDJSON audit |
 | `~/.repost-with-agent/pairs/<id>/learnings.md` | Per-pair institutional memory (free-form prose + optional `### Selectors` / `### Step playbook` / `### Quirks` sub-sections; try cached selectors FIRST, fall back to `docs/destinations/<platform>.md`) |
-| `~/.repost-with-agent/pairs/<id>/backfill-state.json` | Transient backfill resume |
+| `~/.repost-with-agent/pairs/<id>/backfill-state.json` | Transient destination-specific backfill resume |
+| `~/.repost-with-agent/source-fanouts/<source-platform>/<safe-source-item-id>.json` | Source-item fanout manifest for scheduled/source backfills |
 | `~/.repost-with-agent/pairs/<id>/logs/cron.log` | Fallback launchd/crontab tick logs when that scheduler path is used |
 
 Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
@@ -70,6 +71,7 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 | `repost-pair-show` | User wants full details + history for one pair |
 | `repost-run` | User runs a single pair end-to-end (single post) |
 | `repost-backfill` | User wants a multi-post historical walk |
+| `repost-source-fanout` | Source-level backfill slot: one source item across all enabled destinations |
 | `repost-listen-for-future-setup` | User wants to install scheduler |
 | `repost-history` | User wants to tail posted.jsonl |
 | `repost-dedup` | Reference for Layer 1 fuzzy-match algorithm (exact + string match) |
@@ -84,8 +86,9 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 
 - `/pair list|show|create|edit`
 - `/repost-run <pair-id|all>`
-- `/repost-backfill <pair-id> [--max --interval --allow-publish --resume]`
-- `/repost-setup-cron` (default all-enabled sweep; may install per-pair/subset/custom jobs on request)
+- `/repost-backfill source:<platform> [--max --interval --allow-publish --resume]` (source-item fanout)
+- `/repost-backfill <pair-id> [--max --interval --allow-publish --resume]` (destination-specific only when explicit)
+- `/repost-setup-cron` (default all-enabled sweep; may install source-fanout/per-pair/subset/custom jobs on request)
 
 ## Pre-flight before flipping a pair to live
 
@@ -105,7 +108,8 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 ## Other project rules in one paragraph
 
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
-- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
+- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but source-item fanout backfill jobs, per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
+- **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item, enumerates every enabled destination pair for that source, and records each destination as posted/already-posted/skipped/blocked/partial in a fanout manifest. Do not treat one destination success as source-item completion unless the user explicitly requested a destination-specific pair job.
 - Live publishes need `mode: "live-approved"` (scheduled ticks) or explicit per-post
   authorization (`mode: "approval-required"`).
 - **Custom rules run before dedupe.** Apply top-level/pair `customRules` and
@@ -129,7 +133,7 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 ## See also
 
 - `INSTRUCTIONS.md`, `README.md`, `CLAUDE.md`
-- `docs/architecture.md`, `docs/state-files.md`, `docs/migration-v3-to-v4.md`
+- `docs/architecture.md`, `docs/state-files.md`, `docs/source-fanout.md`, `docs/migration-v3-to-v4.md`
 - `docs/url-expander.md`, `docs/destinations/<platform>.md`
 - `skills/<name>/SKILL.md` for each skill body
 

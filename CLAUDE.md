@@ -1,10 +1,10 @@
-# CLAUDE.md — Repost-with-agent (v4.4.0)
+# CLAUDE.md — Repost-with-agent (v4.5.0)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.4.0 architecture in one paragraph
+## v4.5.0 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -77,7 +77,8 @@ Edit, Write tools.
   `### Quirks` sub-sections — try those verbatim FIRST, fall back to
   `docs/destinations/<platform>.md` only when learnings.md is silent.
   Full lifecycle: `skills/repost-learnings/SKILL.md`.
-- `pairs/<id>/backfill-state.json` — transient backfill resume state.
+- `pairs/<id>/backfill-state.json` — transient destination-specific backfill resume state.
+- `source-fanouts/<source-platform>/<safe-source-item-id>.json` — source-item fanout manifest for scheduled/source backfills.
 - `pairs/<id>/logs/cron.log` — stdout/stderr from fallback launchd/crontab ticks when that scheduler path is used.
 
 Full schemas + audit-event taxonomy: `docs/state-files.md`.
@@ -88,7 +89,9 @@ Full schemas + audit-event taxonomy: `docs/state-files.md`.
   Default. Each tick spawns a fresh subagent which runs `skills/repost-run/SKILL.md`.
 - **`backfill`**: one-shot walk back through historical source posts,
   newest-first (Ethan voice 6021). Use `skills/repost-backfill/SKILL.md`.
-  Default 10 max, 10-minute interval.
+  Source-level/scheduled backfill slots also load
+  `skills/repost-source-fanout/SKILL.md` and process one source item across all
+  enabled destinations before moving on. Default 10 max, 10-minute interval.
 
 ## URL expansion
 
@@ -106,7 +109,7 @@ links, resolve them to the underlying non-LinkedIn URL before posting to X.
 
 See `skills/repost-url-expand/SKILL.md` and `docs/url-expander.md`.
 
-## Custom rules + global/two-layer dedupe (v4.4.0+)
+## Custom rules + global/two-layer dedupe (v4.5.0+)
 
 Every publish first applies user custom rules, then must clear the global ledger and BOTH layers:
 
@@ -157,6 +160,7 @@ threshold — when on the fence, skip.
 - `pair.custom_rule.skipped` — user custom skip rule matched before dedupe/publish; considered state appended, no publish ledger append.
 - `pair.publish.semantic_duplicate` — Layer 2 dedupe match; candidate skipped pre-publish. Includes `candidateExcerpt`, `matchedExistingUrl`, `matchedExistingExcerpt`, `agentReasoning`, `windowSize`.
 - `pair.dedupe.global_duplicate` — global ledger found this content already on this destination from another pair/path.
+- `source.fanout.start` / `source.fanout.destination` / `source.fanout.complete` / `source.fanout.blocked` / `source.fanout.partial` — source-item fanout lifecycle and resume proof.
 - `pair.dedupe.uncertain` — destination scrape failed; candidates skipped.
 
 ## Scheduled-run context
@@ -166,7 +170,8 @@ should invoke the same harness the user chose for the workflow. If the current
 harness is OpenClaw, use OpenClaw scheduling/session tools; do not route the
 run through Claude Code. A Claude Code invocation is appropriate only when the
 current workflow is intentionally Claude Code-based. The fresh scheduled agent
-loads this plugin, runs the slash command (which loads `skills/repost-run/SKILL.md`),
+loads this plugin, runs the slash command (which loads `skills/repost-run/SKILL.md`
+for normal sweeps or `skills/repost-source-fanout/SKILL.md` for source backfill slots),
 then exits.
 There is no daemon, no long-running process, no shared state in memory between
 ticks.
@@ -174,7 +179,8 @@ ticks.
 ## Project rules in one paragraph
 
 - New pairs default to `mode: "preview-only"` and `enabled: false`. Intentional.
-- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
+- Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but source-item fanout backfill jobs, per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
+- **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item, enumerates every enabled destination pair for that source, and records each destination as posted/already-posted/skipped/blocked/partial in a fanout manifest. Do not treat one destination success as source-item completion unless the user explicitly requested a destination-specific pair job.
 - Live publishes always need either `mode: "live-approved"` (for scheduled
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.

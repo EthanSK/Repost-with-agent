@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-05-06T12:00:00Z",
+  "updatedAt": "2026-05-06T12:08:00Z",
+  "status": "partial",
+  "runKind": "scheduled-backfill-source-fanout",
+  "source": {
+    "platform": "linkedin",
+    "sourceItemId": "urn:li:activity:7000",
+    "canonicalSourceUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7000/",
+    "publishedAt": "2026-05-01T09:00:00Z",
+    "textHash": "sha256:<normalized-source-text-hash>",
+    "excerpt": "First 200 characters of the source post..."
+  },
+  "destinations": [
+    {
+      "pairId": "linkedin-to-x",
+      "destinationPlatform": "x",
+      "destinationAccountHint": "@<handle>",
+      "status": "posted",
+      "terminal": true,
+      "destinationUrl": "https://x.com/<handle>/status/123",
+      "destinationId": "123",
+      "proof": {
+        "localPosted": true,
+        "globalPosted": true,
+        "notified": true
+      }
+    },
+    {
+      "pairId": "linkedin-to-bluesky",
+      "destinationPlatform": "bluesky",
+      "destinationAccountHint": "<handle>.bsky.social",
+      "status": "already-posted",
+      "terminal": true,
+      "destinationUrl": "https://bsky.app/profile/<handle>.bsky.social/post/abc",
+      "reason": "global-posted ledger already has this contentKey for Bluesky"
+    },
+    {
+      "pairId": "linkedin-to-threads",
+      "destinationPlatform": "threads",
+      "destinationAccountHint": "@<handle>",
+      "status": "posted",
+      "terminal": true,
+      "destinationUrl": "https://www.threads.com/@<handle>/post/abc"
+    },
+    {
+      "pairId": "linkedin-to-facebook",
+      "destinationPlatform": "facebook",
+      "destinationAccountHint": "<page-name>",
+      "status": "unattempted",
+      "terminal": false,
+      "reason": "Agent stopped before attempting this enabled destination"
+    }
+  ],
+  "resume": {
+    "sourceItemId": "urn:li:activity:7000",
+    "canonicalSourceUrl": "https://www.linkedin.com/feed/update/urn:li:activity:7000/",
+    "pendingPairIds": ["linkedin-to-facebook"],
+    "blockedPairIds": [],
+    "nextAction": "Resume this same source item and attempt linkedin-to-facebook before selecting another LinkedIn source item."
+  }
+}
