@@ -1,5 +1,5 @@
 ---
-description: Install current-harness scheduler entries for Repost-with-agent. Default is one daily all-enabled-pairs sweep; custom per-pair, subset, dry/preview, and arbitrary cadence jobs are supported when the user asks.
+description: Install current-harness scheduler entries for Repost-with-agent. Default listen mode is one daily all-enabled-pairs sweep; source backfills use source-item fanout; custom per-pair, subset, dry/preview, and arbitrary cadence jobs are supported when the user asks.
 ---
 
 # `/repost-setup-cron`
@@ -47,14 +47,21 @@ For **live publish jobs**:
 
 - [ ] At least one pair in scope has `enabled === true`.
 - [ ] At least one pair in scope has `mode === "live-approved"`.
-- [ ] At least one pair in scope has `runMode === "listen-for-future"`.
+- [ ] At least one pair in scope has `runMode === "listen-for-future"` for listen jobs, or `runMode === "backfill"` / explicit one-shot authorization for source backfill jobs.
 - [ ] User is logged into source + destination platforms needed by scoped live-approved pairs in the current harness browser profile.
 - [ ] Preview/publish validation has succeeded for each publish-capable destination family being scheduled (`audit.jsonl` shows `pair.preview.success` or `pair.publish.success`).
 - [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed for publish-capable pairs.
 
+For **source backfill fanout jobs**:
+
+- [ ] At least one enabled pair has the requested `source.platform`.
+- [ ] The scheduler prompt says one source item fans out to all enabled destinations.
+- [ ] The prompt says to write/resume the fanout manifest and not select another source item while any enabled destination is partial.
+- [ ] Publish-capable destinations still satisfy the live/preview policy gates above.
+
 For **dry/preview jobs**:
 
-- [ ] At least one pair in scope has `enabled === true` and `runMode === "listen-for-future"`.
+- [ ] At least one pair in scope has `enabled === true` and the runMode required by the job (`listen-for-future` for sweeps, `backfill` or explicit one-shot authorization for source fanout backfills).
 - [ ] The scheduler prompt explicitly says not to publish, even if a pair is `live-approved`.
 - [ ] Source/destination login is still checked when the preview flow needs the browser.
 
@@ -64,7 +71,8 @@ For **dry/preview jobs**:
 
 - **OpenClaw workflows (preferred):** `openclaw cron` jobs that start fresh
   isolated agent turns with messages such as `/repost-run all`,
-  `/repost-run <pair-id>`, or a clear natural-language subset/dry-run prompt.
+  a source-item fanout backfill prompt, `/repost-run <pair-id>`, or a clear
+  natural-language subset/dry-run prompt.
   Use `thinking=medium` by default; escalate only when the user or pair needs
   heavier reasoning.
 - **Claude Code / other explicitly chosen harnesses:** equivalent scheduler

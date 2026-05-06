@@ -1,6 +1,6 @@
 ---
 name: repost-listen-for-future-setup
-description: Install current-harness scheduler entries for Repost-with-agent. Default is one fresh agent/subagent running /repost-run all across enabled listen-for-future pairs; custom per-pair, subset, dry/preview, and arbitrary cadence jobs are supported when the user asks.
+description: Install current-harness scheduler entries for Repost-with-agent. Default listen mode is one fresh agent/subagent running /repost-run all across enabled listen-for-future pairs; source backfills use source-item fanout; custom per-pair, subset, dry/preview, and arbitrary cadence jobs are supported when the user asks.
 when_to_trigger: User wants to wire up automatic, scheduled, recurring repost sweeps, set up cron, make pairs tail new posts automatically, or invokes /repost-setup-cron.
 ---
 
@@ -52,12 +52,16 @@ Scope first, then validate. The scope can be:
   `runMode === "listen-for-future"`;
 - `pair` — one explicit pair id;
 - `subset` — an explicit list of pair ids;
+- `source-fanout` — one source platform/source profile whose selected item fans out to every enabled destination pair;
 - `custom` — a natural-language scheduler prompt that still names exactly what
-  pair(s) or criteria it should run.
+  pair(s), source platform, or criteria it should run.
 
 For **live publish jobs**:
 
 - At least one in-scope pair MUST have `enabled === true`.
+- Listen-for-future jobs require `runMode === "listen-for-future"`; source
+  backfill fanout jobs require `runMode === "backfill"` or explicit one-shot
+  authorization for the scheduled backfill scope.
 - At least one in-scope pair MUST have `mode === "live-approved"`.
 - The job MUST publish only pairs in `mode === "live-approved"`; preview-only
   and approval-required pairs may be inspected but must not publish unattended.
@@ -71,10 +75,20 @@ For **live publish jobs**:
   publish-capable destination family being scheduled (`audit.jsonl` contains
   `pair.preview.success` or `pair.publish.success`).
 
+For **source backfill fanout jobs**:
+
+- At least one enabled pair MUST match the requested `source.platform`.
+- The job prompt MUST say one source item fans out to every enabled destination
+  pair for that source.
+- The job prompt MUST say to write/resume the fanout manifest and not select
+  another source item while any enabled destination is partial.
+- Publish-capable destinations still need the live-publish gates above.
+
 For **dry/preview jobs**:
 
-- At least one in-scope pair MUST have `enabled === true` and
-  `runMode === "listen-for-future"`.
+- At least one in-scope pair MUST have `enabled === true` and the runMode
+  required by the job (`listen-for-future` for sweeps, `backfill` or explicit
+  one-shot authorization for source fanout backfills).
 - The scheduler prompt MUST explicitly say not to publish, even if a pair is
   `live-approved`.
 - Browser login is still required when the preview needs source/destination UI.
@@ -261,6 +275,10 @@ Suggested shape:
   }
 }
 ```
+
+For source backfill jobs, set `scope: "source-fanout"`, include
+`sourcePlatform`, and use a message that names one source-item fanout slot rather
+than one destination pair.
 
 ## Updating cadence later
 
