@@ -326,6 +326,28 @@ The destination post should read like a fresh native post on that destination,
 not like a cross-post receipt. Keep the source canonical URL only in
 `posted.jsonl`, audit events, and the Telegram confirmation.
 
+### Mandatory source URL leak guard
+
+Immediately before composing/publishing, run this fail-closed check against the
+final public draft:
+
+1. If `canonicalSourceUrl` is non-empty and appears in the draft, do **not**
+   publish.
+2. For LinkedIn sources, also block drafts containing LinkedIn source permalink
+   markers such as `linkedin.com/feed/update/`, `/posts/`, or
+   `urn:li:activity:` unless the source post's own human-visible body clearly
+   contains that URL as the content being discussed and the run records an
+   explicit `allowSourceUrlInPublicDraft: true` rationale.
+3. Rebuild the draft from the source body only, expand any body URLs, and run
+   the leak guard again.
+4. If the guard still trips, mark the destination `blocked` with category
+   `source-url-leak-guard`, write an audit event
+   `pair.publish.source_url_leak_blocked`, and do not touch the browser compose
+   box.
+
+This guard exists because source canonical URLs belong in state/audit/user
+confirmation, not in destination post bodies.
+
 If the source body contains URLs, expand/resolve them to the non-source-platform
 final URL before publishing (for example `lnkd.in` / LinkedIn safety redirect →
 the underlying article or video URL). Do not leave LinkedIn wrapper URLs in an X

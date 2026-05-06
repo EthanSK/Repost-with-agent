@@ -151,6 +151,10 @@ For each `planned` destination:
 2. Run `repost-run` steps 6–9 for this selected source item and destination
    pair: URL expansion, length/compact policy, compose, proof append, and global
    ledger append.
+   - The mandatory source URL leak guard from `repost-run` is required here too:
+     if the final public draft contains the source canonical URL or source
+     permalink marker, block that destination with `source-url-leak-guard` rather
+     than publishing.
    - Do **not** send an individual per-destination user notification from inside
      this loop.
    - Carry the destination result forward into the fanout manifest so Step 6 can

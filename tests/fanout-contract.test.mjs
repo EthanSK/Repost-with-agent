@@ -49,6 +49,20 @@ function summarizeFanout(destinations) {
   return { status: 'complete', pendingPairIds: [], blockedPairIds: [] };
 }
 
+function hasSourceUrlLeak({ draftText, canonicalSourceUrl, sourcePlatform = 'linkedin' }) {
+  if (!draftText) return false;
+
+  if (canonicalSourceUrl && draftText.includes(canonicalSourceUrl)) {
+    return true;
+  }
+
+  if (sourcePlatform === 'linkedin') {
+    return /linkedin\.com\/feed\/update\//i.test(draftText) || /urn:li:activity:/i.test(draftText);
+  }
+
+  return false;
+}
+
 function enabledDestinationPairs({ pairs, sourcePlatform, sourceProfileUrl }) {
   return pairs
     .filter((pair) => pair.enabled === true)
@@ -269,6 +283,35 @@ test('source fanout notifications are one aggregate message, not per-platform pi
   assert.match(sourceFanoutSkill, /one source item gets one\s+aggregate message after all enabled destinations/i);
   assert.match(notifySkill, /one message per source post containing all platform outcomes/i);
   assert.match(backfillCommand, /not one message per platform/i);
+});
+
+test('source URL leak guard blocks LinkedIn canonical URLs in public drafts', () => {
+  assert.equal(
+    hasSourceUrlLeak({
+      canonicalSourceUrl: 'https://www.linkedin.com/feed/update/urn:li:activity:7000/',
+      draftText: 'Native destination copy\n\nhttps://www.linkedin.com/feed/update/urn:li:activity:7000/',
+    }),
+    true,
+  );
+
+  assert.equal(
+    hasSourceUrlLeak({
+      canonicalSourceUrl: 'https://www.linkedin.com/feed/update/urn:li:activity:7000/',
+      draftText: 'Native destination copy only',
+    }),
+    false,
+  );
+});
+
+test('docs require a fail-closed source URL leak guard before publishing', () => {
+  const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
+  const urlExpandSkill = readFileSync(join(root, 'skills/repost-url-expand/SKILL.md'), 'utf8');
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+
+  assert.match(runSkill, /Mandatory source URL leak guard/i);
+  assert.match(runSkill, /source-url-leak-guard/i);
+  assert.match(urlExpandSkill, /source URL leak guard/i);
+  assert.match(sourceFanoutSkill, /source-url-leak-guard/i);
 });
 
 console.log('fanout contract tests passed');

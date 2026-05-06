@@ -45,6 +45,10 @@ short:
 5. Do **not** append the source platform's canonical URL to the public post.
    Source canonical URLs belong in state/audit/Telegram confirmation, not in the
    destination post body.
+6. Run a fail-closed source URL leak guard before publishing: if the final draft
+   contains `canonicalSourceUrl`, or a LinkedIn source permalink marker such as
+   `linkedin.com/feed/update/` / `urn:li:activity:`, rebuild from the source body
+   and re-check. If still present, block instead of publishing.
 
 ## Per-platform quirks
 

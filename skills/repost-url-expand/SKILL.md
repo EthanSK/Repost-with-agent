@@ -80,6 +80,11 @@ In the `repost-run` step 6 flow:
 4. Do **not** append the source canonical URL as a public backlink. Store the
    source canonical URL in `posted.jsonl`, audit, and Telegram confirmation
    only. The destination post should be native to the destination platform.
+5. Run the mandatory source URL leak guard before publishing: if the final
+   public draft contains `canonicalSourceUrl`, or a LinkedIn source permalink
+   marker such as `linkedin.com/feed/update/` / `urn:li:activity:`, rebuild the
+   draft from the source body and check again. If it still appears, block the
+   destination with `source-url-leak-guard` instead of publishing.
 
 If the source text contains source-platform wrapper URLs (for example
 `lnkd.in` / LinkedIn safety redirects), resolve them to the underlying
