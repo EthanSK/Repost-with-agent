@@ -18,15 +18,13 @@ be used only when the user explicitly asks for a destination-specific repair/job
 
 Flags:
 
-- `--max <N>` — cap the number of publishes (default 10, hard cap 50 unless
-  the user explicitly asks for higher).
+- `--max <N>` — cap the number of source items for source fanout, or candidate publishes for a destination-specific pair backfill (default 10, hard cap 50 unless the user explicitly asks for higher).
 - `--interval <minutes>` — requested delay between publishes (default 10 for
   planning; actual publish delay is floored by `policy.minDelayBetweenPostsMinutes`,
   normally 60).
 - `--allow-publish` — actually publish. Default behaviour without this flag is
   a dry-run that scrapes + dedupes + shows what would publish.
-- `--resume` — load `~/.repost-with-agent/pairs/<id>/backfill-state.json` from
-  a previous run and skip already-completed items.
+- `--resume` — for source fanout, resume partial manifests under `~/.repost-with-agent/source-fanouts/` before selecting another source item; for pair-specific backfill, load `~/.repost-with-agent/pairs/<id>/backfill-state.json` and skip already-completed items.
 
 ## What it does
 
@@ -63,5 +61,6 @@ backfill (≥5 minutes), an optional summary ping fires too.
 ## See also
 
 - `skills/repost-backfill/SKILL.md` — full step-by-step.
+- `skills/repost-source-fanout/SKILL.md` — source-item fanout manifest/result rules.
 - `skills/repost-dedup/SKILL.md` — fuzzy-match algorithm.
 - `skills/repost-url-expand/SKILL.md` — shortener resolution.

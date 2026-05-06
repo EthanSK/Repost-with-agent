@@ -101,7 +101,7 @@ Field invariants:
 - `runMode: "listen-for-future"` is the default — tail new posts on a schedule.
 - `runMode: "backfill"` is for one-shot historical walks (newest-first).
 - `mode: "live-approved"` is the only mode that allows unattended scheduled live publishes; scheduled dry/preview jobs may inspect pairs without publishing.
-- Optional top-level `schedulerJobs` records human/agent-readable scheduler intent (all-enabled sweep, per-pair jobs, subsets, preview-only jobs). The host scheduler remains the operational source of truth.
+- Optional top-level `schedulerJobs` records human/agent-readable scheduler intent (all-enabled sweep, source-item fanout backfill jobs, per-pair jobs, subsets, preview-only jobs). The host scheduler remains the operational source of truth.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
 - `policy.overlengthStrategy: "compact"` is the Ethan/OpenClaw default for tight destinations: if a draft is over the cap, rewrite it shorter while preserving the original voice, intent, links, and meaning as much as possible. Use `"skip"` only when Ethan wants overlength drafts dropped; use `"truncate"` only if he explicitly asks for mechanical shortening.
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
@@ -128,7 +128,7 @@ Field invariants:
 3. **Pair name + id.** Suggest `<source>-to-<destination>` as the id; let the user override the human-readable name.
 4. **Run mode.** "`listen-for-future` (tail new posts on a schedule) or `backfill` (one-shot walk back through history)?" Default to `listen-for-future` if unsure.
 5. **Safety mode.** Default to `preview-only`. Only set `approval-required` or `live-approved` if the user explicitly asks for live posting now.
-6. **Schedule (if listen-for-future).** Default to the global all-enabled daily sweep. If the user wants something else, capture it literally: manual-only, custom cron expression, every-N-hours/minutes, per-pair job, subset job, preview-only dry job, or multiple jobs. Store per-pair intent in `pair.schedule`; store cross-pair/subset intent in optional top-level `schedulerJobs` when useful.
+6. **Schedule.** If `listen-for-future`, default to the global all-enabled daily sweep. If `backfill` is scheduled at source level, default to source-item fanout: one source item across all enabled destinations per slot. If the user wants something else, capture it literally: manual-only, custom cron expression, every-N-hours/minutes, source-fanout job, per-pair job, subset job, preview-only dry job, or multiple jobs. Store per-pair intent in `pair.schedule`; store cross-pair/source-fanout/subset intent in optional top-level `schedulerJobs` when useful.
 7. **Notification route.** Capture or confirm the current user-facing delivery route and write it to top-level `notification.delivery` in `~/.repost-with-agent/pairs.json`. Prefer harness metadata over asking: e.g. OpenClaw can use its current `channel`, `account_id`, and chat target; Slack/Discord equivalents should record channel/user ids; Claude Code should record its configured user channel. If the route is unavailable, block scheduled/live setup until the user provides it.
 
 ## Destination account / page switching

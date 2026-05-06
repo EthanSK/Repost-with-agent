@@ -149,7 +149,7 @@ the skill workflows.
   - `live-approved` — agent publishes without per-post prompting. Required for unattended scheduled live ticks.
 - `runMode`:
   - `listen-for-future` — tail new posts on a schedule. Default.
-  - `backfill` — one-shot historical walk (newest-first).
+  - `backfill` — historical walk (newest-first). Source-level scheduled backfill jobs use a source-item fanout manifest; destination-specific pair backfills use `pairs/<id>/backfill-state.json`.
 - `policy.overlengthStrategy`:
   - `compact` — drafts exceeding destination char cap are rewritten shorter while preserving the original voice, intent, links, and essence as much as possible. Ethan/OpenClaw default.
   - `skip` — drafts exceeding destination char cap are skipped.
@@ -178,7 +178,7 @@ the skill workflows.
   produced. Tune up for high-volume destinations (X power-users) and
   down for low-volume destinations (Substack-style); 30 is a sweet spot
   for most accounts.
-- `schedule` — advisory per-pair schedule intent. `kind: "manual"` means no automatic pair-specific job should be installed unless another custom job explicitly includes the pair. `kind: "cron"` uses `expression`; `kind: "every"` uses `everyHours` or `everyMinutes`. Defaults to daily (`everyHours: 24`) for listen-for-future pairs. The default all-enabled sweep may ignore per-pair cadence in favor of its own global schedule; custom per-pair jobs should honor the pair schedule. The host scheduler is the source of truth for actual timing.
+- `schedule` — advisory per-pair schedule intent. `kind: "manual"` means no automatic pair-specific job should be installed unless another custom job explicitly includes the pair. `kind: "cron"` uses `expression`; `kind: "every"` uses `everyHours` or `everyMinutes`. Defaults to daily (`everyHours: 24`) for listen-for-future pairs. The default all-enabled sweep may ignore per-pair cadence in favor of its own global schedule; custom per-pair jobs should honor the pair schedule. Source-level backfill schedules should be represented as top-level `schedulerJobs` with `scope: "source-fanout"`. The host scheduler is the source of truth for actual timing.
 
 ### Migration from v3
 
