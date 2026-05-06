@@ -37,7 +37,7 @@
       "scope": "source-fanout",
       "sourcePlatform": "linkedin",
       "pairIds": [],
-      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial.",
+      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial.",
       "publishMode": "live-approved-only",
       "schedule": {
         "kind": "cron",

@@ -260,4 +260,15 @@ test('docs and skill state that a scheduled source backfill slot is one source-i
   assert.match(skill, /Never mark a source item `complete` merely because one destination posted/i);
 });
 
+test('source fanout notifications are one aggregate message, not per-platform pings', () => {
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+  const notifySkill = readFileSync(join(root, 'skills/repost-notify/SKILL.md'), 'utf8');
+  const backfillCommand = readFileSync(join(root, 'commands/backfill.md'), 'utf8');
+
+  assert.match(sourceFanoutSkill, /Do \*\*not\*\* send one message per platform/i);
+  assert.match(sourceFanoutSkill, /one source item gets one\s+aggregate message after all enabled destinations/i);
+  assert.match(notifySkill, /one message per source post containing all platform outcomes/i);
+  assert.match(backfillCommand, /not one message per platform/i);
+});
+
 console.log('fanout contract tests passed');

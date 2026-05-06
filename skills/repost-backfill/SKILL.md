@@ -246,7 +246,7 @@ For destination-specific pair backfill, process each candidate in order:
    - On success: append to `posted.jsonl` and
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
-   - **Notify the user immediately** (step 10 of `repost-run`).
+   - For destination-specific pair backfills, notify the user for that single-pair publish (step 10 of `repost-run`). For source-item fanout backfills, do **not** notify per destination; carry the result into the source-item aggregate notification.
 7. **Sleep** `effectiveIntervalMinutes * 60` seconds before the next candidate
    (use `sleep` via Bash). This is mandatory — destinations rate-limit
    aggressively on rapid-fire posts, and the per-pair policy floor prevents
@@ -276,9 +276,11 @@ After a destination-specific pair loop, print + (optionally) Telegram a summary:
   Duration:  <H>h<M>m
 ```
 
-The per-publish Telegram pings already happened during step 6. The summary
-itself can ALSO go to Telegram if the run was longer than ~5 minutes — Ethan
-likes a wrap-up.
+For source-item fanout runs, this final per-source summary is the user-facing
+notification: one message per source post containing all platform outcomes or
+reasons. Do not also send per-platform pings. For destination-specific pair
+loops, the per-publish pings already happened during step 6; an additional
+wrap-up summary can go to the user if the run was longer than ~5 minutes.
 
 ## Step 9 — Flush discovered quirks to learnings.md
 
@@ -330,17 +332,22 @@ nothing. The file is for deltas, not heartbeats. See
 `skills/repost-learnings/SKILL.md` for full "signal vs noise" rules + the
 good/bad entry example showing all three optional sub-sections.
 
-## Telegram-confirm every successful publish — non-negotiable
+## User confirmation — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source and destination URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source and destination URLs. For source fanout, that is
+> one aggregate message per source post containing all platform outcomes, not one
+> message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
-Backfill is the highest-volume publish path. Wire notification pings carefully:
-one per successful publish (step 6), plus an optional final-summary ping. Use
-`notification.delivery` from `~/.repost-with-agent/pairs.json` for the concrete
-channel/account/target (OpenClaw maps this to the `message` tool). Never rely on
-default delivery accounts, and never paste raw JSON/tool output into user-facing messages.
+Backfill is the highest-volume publish path. Wire notifications carefully. For
+destination-specific pair backfills, send one message per successful single-pair
+publish. For source-item fanout backfills, suppress per-destination pings and
+send one aggregate message after all enabled destinations for that source item
+have been posted/skipped/caught-up/blocked. Use `notification.delivery` from
+`~/.repost-with-agent/pairs.json` for the concrete channel/account/target
+(OpenClaw maps this to the `message` tool). Never rely on default delivery
+accounts, and never paste raw JSON/tool output into user-facing messages.
 
 ## See also
 

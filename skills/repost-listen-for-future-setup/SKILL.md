@@ -31,7 +31,7 @@ implement it instead of forcing the all-pairs shape:
 - manual-only pairs with no scheduler;
 - custom current-harness scheduled prompts, provided they read
   `~/.repost-with-agent`, use the current harness browser, and obey dedupe +
-  publish-confirmation rules.
+  publish-confirmation / aggregate source-item confirmation rules.
 
 Keep `pair.schedule` and optional top-level `schedulerJobs` metadata as
 human/agent-readable intent. The installed OpenClaw cron / launchd / crontab
@@ -80,7 +80,7 @@ For **source backfill fanout jobs**:
 - At least one enabled pair MUST match the requested `source.platform`.
 - The job prompt MUST say one source item fans out to every enabled destination
   pair for that source.
-- The job prompt MUST say to write/resume the fanout manifest and not select
+- The job prompt MUST say to write/resume the fanout manifest, send one aggregate user-facing message per source item with every platform outcome/reason, and not select
   another source item while any enabled destination is partial.
 - Publish-capable destinations still need the live-publish gates above.
 
@@ -143,7 +143,7 @@ openclaw cron add \
   --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
   --agent main \
   --session isolated \
-  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial." \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
   --thinking medium \
   --timeout-seconds 21600 \
   --cron "0 * * * *" \
@@ -200,12 +200,13 @@ browser automation, file tools, Bash, and configured user-message delivery.
 
 ### Delivery notes
 
-- `/repost-run` itself MUST confirm every successful publish via
-  `repost-notify`; that is the important user-facing ping. The concrete
-  channel/account/target MUST come from `notification.delivery` in
-  `~/.repost-with-agent/pairs.json` (captured from the current chat/harness
-  during setup). Never rely on default delivery accounts, and never send raw
-  JSON/tool output in user-facing messages.
+- `/repost-run` / `repost-source-fanout` MUST confirm outcomes via
+  `repost-notify`: single-pair runs send one single-pair confirmation; source
+  fanout / all-destination runs send one aggregate message per source item with
+  every platform outcome/reason. The concrete channel/account/target MUST come
+  from `notification.delivery` in `~/.repost-with-agent/pairs.json` (captured
+  from the current chat/harness during setup). Never rely on default delivery
+  accounts, and never send raw JSON/tool output in user-facing messages.
 - Add scheduler transcript announcements only if the user explicitly wants every
   scheduled tick's final transcript delivered too. Otherwise it is usually
   noise.
@@ -315,11 +316,13 @@ For custom jobs, run only the requested pair/scope and requested mode. Preview
 jobs must never publish. Live jobs must still skip pairs that are disabled,
 not `listen-for-future`, or not `live-approved`.
 
-## Telegram-confirm every successful publish — non-negotiable
+## User confirmation — non-negotiable
 
-The scheduled agent runs `repost-run`, which already enforces this rule. Don't
-add a separate ping for the scheduler tick itself unless the user asks — that is
-usually noise. Just the per-publish ping.
+The scheduled agent runs `repost-run` / `repost-source-fanout`, which already
+enforces this rule. Don't add a separate ping for the scheduler tick itself
+unless the user asks — that is usually noise. For source fanout, the only
+user-facing ping should be the one aggregate message for that source item, after
+all enabled destinations have been evaluated.
 
 ## Scheduled agents read + write learnings.md
 

@@ -107,7 +107,9 @@ Good scheduled source backfill prompt:
 Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose
 the next eligible LinkedIn source item, enumerate all enabled LinkedIn
 destination pairs, post/skip/block every destination together, write the fanout
-manifest, and do not select another source item if any destination is partial.
+manifest, send one aggregate user-facing message containing all platform
+outcomes/reasons for the source item, and do not select another source item if
+any destination is partial.
 ```
 
 Bad scheduled prompt unless the user explicitly wants destination-specific work:

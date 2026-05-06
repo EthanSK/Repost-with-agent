@@ -1,22 +1,28 @@
 ---
 name: repost-notify
-description: Send the configured user-facing confirmation after a successful repost publish, OR test that notification delivery is wired up. Use as part of the repost-run / repost-backfill flow, or standalone when the user asks "test the repost telegram", "send a test ping", or "verify notify is configured".
-when_to_trigger: Immediately after every successful publish from the plugin (mandatory, non-negotiable), OR when the user asks to test notification delivery.
+description: Send the configured user-facing confirmation after a successful repost publish or aggregate source-item fanout, OR test that notification delivery is wired up. Use as part of the repost-run / repost-backfill / repost-source-fanout flow, or standalone when the user asks "test the repost telegram", "send a test ping", or "verify notify is configured".
+when_to_trigger: After a single-pair successful publish, after a source-item fanout has evaluated all enabled destinations, OR when the user asks to test notification delivery.
 ---
 
 # Repost Notify
 
-Send the primary-channel confirmation that fires immediately after every
-successful repost publish. The channel is not inherently Telegram: read the
-configured `notification.delivery` route from `~/.repost-with-agent/pairs.json`
-and map it to the current harness's user-facing message tool.
+Send the primary-channel confirmation for repost outcomes. For a single-pair
+run, that confirmation may follow the successful destination publish. For a
+source-item fanout, wait until every enabled destination for that one source item
+has been evaluated, then send one aggregate message containing all platform
+outcomes. The channel is not inherently Telegram: read the configured
+`notification.delivery` route from `~/.repost-with-agent/pairs.json` and map it
+to the current harness's user-facing message tool.
 
 ## The non-negotiable rule
 
-> Every successful post from this plugin MUST trigger a message to the user on
-> the primary current-harness communication channel, confirming the source URL
-> and every destination post URL created. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04.)
+> Every successful source item from this plugin MUST trigger a message to the user
+> on the primary current-harness communication channel, confirming the source URL
+> and every destination post URL created. For source fanout / all-destination
+> runs, send one message per source post containing all platform outcomes, not
+> one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04;
+> aggregate fanout clarification 2026-05-06.)
 
 This is enforced by EVERY publish path in the plugin (`repost-run`,
 `repost-backfill`, any future bespoke flow). No exceptions.
@@ -40,7 +46,9 @@ the error and stop the publish flow. Do not silently skip.
 
 ## Payload
 
-Format (use the current harness's normal Telegram formatting mode):
+Format (use the current harness's normal formatting mode):
+
+Single-pair run:
 
 ```
 [Repost-with-agent] ✅ Posted: <pair-id>
@@ -48,18 +56,35 @@ Source: <canonicalSourceUrl>
 → Destination: <destinationUrl>
 ```
 
+Source-item fanout / all-destination run:
+
+```
+[Repost-with-agent] ✅ Source fanout: <sourceItemId>
+Source: <canonicalSourceUrl>
+- X: posted <destinationUrl>
+- Bluesky: already-posted <proofUrl>
+- Threads: posted <destinationUrl>
+- Facebook: blocked — <reason / next action>
+```
+
 Project-tag / prefix rules from the current harness's user instructions still apply. Include `[Repost-with-agent]` at the start unless the harness has a stricter active-project tag rule.
 
 ## Success path
 
-1. After the publish step in `repost-run` / `repost-backfill` returns success
-   AND `posted.jsonl` has been appended:
-2. Build the message payload above.
+1. For a single-pair run: after the publish step in `repost-run` /
+   destination-specific `repost-backfill` returns success AND `posted.jsonl` has
+   been appended, build the single-pair payload above.
+2. For a source-item fanout or all-destination run: suppress individual
+   per-destination pings, finish evaluating all enabled destinations for that
+   source item, then build one aggregate payload containing every platform URL
+   or skipped/blocked/failed reason.
 3. Call the current harness's primary message delivery tool with the configured
    recipient from `notification.delivery`:
    - OpenClaw: `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<payload>)`.
    - Claude Code / other harnesses: use their equivalent configured delivery path.
-4. Append `pair.publish.notify.success` to `~/.repost-with-agent/pairs/<id>/audit.jsonl`.
+4. Append `pair.publish.notify.success` for single-pair notifications, or
+   `source.fanout.notify.success` to every in-scope pair audit log for aggregate
+   source-item notifications.
 
 ## Failure path
 
@@ -119,8 +144,9 @@ Stay short:
 
 - ONE project tag in `[]` at the start.
 - ONE check / fail emoji.
-- TWO URLs: source canonical, destination final.
-- Optional: pair id, item index for backfills (`3/10`).
+- Single-pair message: source canonical URL + destination final URL.
+- Source fanout message: source canonical URL + one short line per enabled destination, with URL or reason.
+- Optional: pair id / source item id / item index for backfills (`3/10`).
 
 DO NOT include the full draft text in the confirmation. The destination URL is
 enough; the user clicks through to see the actual post.

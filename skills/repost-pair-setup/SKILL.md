@@ -182,16 +182,20 @@ You can verify by navigating the current harness browser to the source profile
 URL and taking a snapshot — if you see logged-out indicators
 (login modal, "Sign in to continue" CTA, etc.), tell the user and stop.
 
-## Notify after every successful publish — non-negotiable
+## Notify after every successful source item — non-negotiable
 
-> Every successful post from this plugin MUST trigger a user-facing message
-> confirming the source and destination URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source and destination URL(s). For source fanout /
+> all-destination runs, send one message per source post containing all platform
+> outcomes, not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
 The agent (you) is responsible for sending this via the configured
-`notification.delivery` route and the current harness's message-delivery tool
-immediately after appending to `posted.jsonl`. This behavior is enforced by the
-`repost-notify` and `repost-run` skills.
+`notification.delivery` route and the current harness's message-delivery tool.
+Single-pair runs can notify immediately after appending to `posted.jsonl`;
+source fanout runs must wait until every enabled destination for the source item
+has been evaluated, then send one aggregate outcome message. This behavior is
+enforced by the `repost-notify`, `repost-run`, and `repost-source-fanout` skills.
 
 During setup, write `notification.delivery` into `~/.repost-with-agent/pairs.json`
 from the current harness/chat metadata (channel, account/bot id, target/chat id,

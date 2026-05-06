@@ -1,5 +1,15 @@
 # Changelog
 
+## v4.5.1 — 2026-05-06 — Aggregate source-item notifications
+
+- Clarifies the notification contract for source fanout / all-destination runs:
+  one user-facing message per source post, listing every enabled platform
+  outcome or reason, instead of one message per platform.
+- Updates `repost-notify`, `repost-run`, `repost-backfill`,
+  `repost-source-fanout`, scheduler prompts, slash-command docs, README, and
+  the current LinkedIn backfill runbook to enforce aggregate source-item
+  summaries while preserving the silent-publish guardrail.
+
 ## v4.5.0 — 2026-05-06 — Source-item fanout hardening
 
 **Backfill safety fix.** Source-level scheduled backfill slots now have an explicit

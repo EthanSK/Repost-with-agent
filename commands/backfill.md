@@ -48,15 +48,17 @@ with a contiguous recent history rather than a gap-bounded historical block.
 - Backfill respects `policy.minDelayBetweenPostsMinutes` as a floor on
   `--interval`.
 
-## Confirm every successful publish — non-negotiable
+## Confirm every successful source item — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source URL and destination post URL(s). For source
+> fanout, send one message per source post containing all platform outcomes —
+> not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
-Each successful publish in the backfill loop fires its own ping. In a source
-fanout, this means one ping per destination actually published. After a long
-backfill (≥5 minutes), an optional summary ping fires too.
+For source fanout, send one aggregate message after all enabled destinations for
+the source item have been posted/skipped/caught-up/blocked. Destination-specific
+pair backfills still send one message per successful single-pair publish.
 
 ## See also
 

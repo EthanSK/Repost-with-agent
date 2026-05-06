@@ -18,7 +18,7 @@ to the matching skill based on the subcommand.
 - `/pair edit <id>` → invoke `skills/repost-pair-setup/SKILL.md` in edit
   mode (read existing pair, ask the user which fields to update, write back).
 
-## Architecture (v4.5.0)
+## Architecture (v4.5.1)
 
 This plugin ships **no code that does the work**. The slash command above is a
 thin wrapper that loads the matching skill — the running agent (OpenClaw,
@@ -31,11 +31,13 @@ JSON state lives at `~/.repost-with-agent/pairs.json`, per-pair files under
 `~/.repost-with-agent/source-fanouts/`. The agent reads/writes them via the
 native Read/Edit/Write tools.
 
-## Confirm every successful publish — non-negotiable
+## Confirm every successful source item — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source URL and destination post URL(s). For source
+> fanout / all-destination runs, send one message per source post containing all
+> platform outcomes, not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
 The `repost-pair-setup` skill checks Telegram is wired up before flipping a
 new pair to a non-`preview-only` mode.

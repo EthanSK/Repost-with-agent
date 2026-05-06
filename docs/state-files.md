@@ -1,4 +1,4 @@
-# State files (v4.5.0)
+# State files (v4.5.1)
 
 All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
 touch this state directly; runtime reposting is skill-only. The running agent

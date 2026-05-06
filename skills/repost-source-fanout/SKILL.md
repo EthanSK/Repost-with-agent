@@ -25,7 +25,7 @@ for destination-specific work.
 
 Same as `repost-run` / `repost-backfill`: Read, Edit, Write, Bash,
 current-harness browser automation, and configured current-harness user-message
-delivery for successful publishes.
+delivery for the final aggregate source-item outcome.
 
 ## Status vocabulary
 
@@ -148,13 +148,17 @@ mark it `unattempted` or `failed`; the top-level status must be `partial`.
 For each `planned` destination:
 
 1. Mark the destination `attempting` in the manifest before touching the browser.
-2. Run `repost-run` steps 6–10 for this selected source item and destination
-   pair: URL expansion, length/compact policy, compose, proof append, global
-   ledger append, and user notification.
+2. Run `repost-run` steps 6–9 for this selected source item and destination
+   pair: URL expansion, length/compact policy, compose, proof append, and global
+   ledger append.
+   - Do **not** send an individual per-destination user notification from inside
+     this loop.
+   - Carry the destination result forward into the fanout manifest so Step 6 can
+     send one aggregate message for the source item.
 3. For Facebook, enforce the verified-permalink proof gate from
    `docs/destinations/facebook.md` before recording success.
 4. On success, set the destination to `posted` with `destinationUrl`,
-   `destinationId` when available, and `notified: true|false`.
+   `destinationId` when available, and `notifiedByAggregate: true|false` after Step 6.
 5. On rule/policy skip discovered during the loop, set `skipped-rule` or
    `skipped-by-policy` with the exact reason.
 6. On user/platform/config/login/account problems, set `blocked` with
@@ -188,10 +192,19 @@ A scheduled backfill slot may select the next source item ONLY after the current
 source item fanout is `complete` or explicitly `blocked`. A `partial` fanout must
 be resumed first.
 
-## Step 6 — Report shape
+## Step 6 — Aggregate notification / report shape
 
-The transcript/user-facing summary should name the source item once and list all
-destination outcomes. Example:
+Send at most **one** user-facing message for this source item. It must name the
+source item once and list every enabled destination outcome: posted URL,
+already-posted/caught-up proof URL, skipped reason, or blocked/failed reason.
+
+Do **not** send one message per platform for a source fanout. Per-platform pings
+make it hard to see whether the source item completed. One source item gets one
+aggregate message after all enabled destinations have been evaluated. Silent
+publishes are still a bug: the single aggregate message is the confirmation.
+
+If every destination is a duplicate/no-op and the scheduled prompt asks for
+quiet no-op behavior, output exactly `NO_REPLY`. Otherwise use this shape:
 
 ```text
 Source fanout: urn:li:activity:7000
@@ -203,8 +216,10 @@ Status: partial
 Next: resume the same source item for linkedin-to-facebook before selecting another LinkedIn item.
 ```
 
-For successful publishes, the normal per-publish user notification still fires
-immediately via `repost-notify`. The final summary does not replace those pings.
+Append a fanout-level notify audit event such as `source.fanout.notify.success`
+or `source.fanout.notify.failure` to every in-scope pair's audit log. Do not
+append misleading per-pair `pair.publish.notify.success` rows for destinations
+whose success was confirmed only through the aggregate fanout message.
 
 ## See also
 

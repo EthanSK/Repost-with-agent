@@ -56,7 +56,7 @@ For **source backfill fanout jobs**:
 
 - [ ] At least one enabled pair has the requested `source.platform`.
 - [ ] The scheduler prompt says one source item fans out to all enabled destinations.
-- [ ] The prompt says to write/resume the fanout manifest and not select another source item while any enabled destination is partial.
+- [ ] The prompt says to write/resume the fanout manifest, send one aggregate user-facing message per source item with every platform outcome/reason, and not select another source item while any enabled destination is partial.
 - [ ] Publish-capable destinations still satisfy the live/preview policy gates above.
 
 For **dry/preview jobs**:
@@ -109,7 +109,7 @@ openclaw cron add \
   --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
   --agent main \
   --session isolated \
-  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial." \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
   --thinking medium \
   --timeout-seconds 21600 \
   --cron "0 * * * *" \

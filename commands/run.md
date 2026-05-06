@@ -39,11 +39,13 @@ current-harness primary message delivery) to:
 
 Scheduled preview/dry ticks are allowed for enabled `listen-for-future` pairs, but the scheduler prompt must explicitly say not to publish.
 
-## Confirm every successful publish — non-negotiable
+## Confirm every successful source item — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source URL and destination post URL(s). For source
+> fanout / all-destination runs, send one message per source post containing all
+> platform outcomes, not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
 `skills/repost-run/SKILL.md` step 10 enforces this. Don't bypass.
 

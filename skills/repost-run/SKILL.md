@@ -418,10 +418,13 @@ this destination.
 
 ## Step 10 — Confirm to the user with post links (non-negotiable)
 
-> Every successful post from this plugin MUST trigger a message to the user on
-> the primary current-harness communication channel, confirming the source URL
-> and every destination post URL created. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04.)
+> Every successful source item from this plugin MUST trigger a message to the
+> user on the primary current-harness communication channel, confirming the
+> source URL and every destination post URL created. For source fanout /
+> all-destination runs, send one message per source post containing all platform
+> outcomes, not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; link-list clarification 2026-05-04;
+> aggregate fanout clarification 2026-05-06.)
 
 Use the configured primary user communication channel / message delivery tool.
 Read `notification.delivery` from `~/.repost-with-agent/pairs.json`; do not infer
@@ -429,25 +432,44 @@ from the current/default account when multiple accounts/bots exist. In OpenClaw,
 call `message(action="send", channel=delivery.channel, accountId=delivery.accountId, target=delivery.target, threadId=delivery.threadId?, message=<payload>)`.
 For Ethan's current OpenClaw config, those values are Telegram + `clordlethird` +
 `telegram:6164541473`, but other users/harnesses should write their own route.
-Never paste raw JSON/tool output into user-facing messages. Message format:
+Never paste raw JSON/tool output into user-facing messages.
 
-```
-[Repost-with-agent] ✅ Posted: <pair-id>
-Source: <canonical source URL>
-→ Destination: <destination URL>
-```
+Notification shape depends on scope:
 
-If the Telegram send fails:
+- **Single-pair run:** send the normal one-pair confirmation after success:
 
-- Append `pair.publish.notify.failure` audit with the error.
+  ```
+  [Repost-with-agent] ✅ Posted: <pair-id>
+  Source: <canonical source URL>
+  → Destination: <destination URL>
+  ```
+
+- **Source fanout / all-destination run:** do not send individual per-platform
+  pings. Collect every enabled destination outcome for the same source item,
+  then send one aggregate message after the source item is fully evaluated:
+
+  ```
+  [Repost-with-agent] ✅ Source fanout: <sourceItemId>
+  Source: <canonical source URL>
+  - X: posted <destination URL>
+  - Bluesky: already-posted <proof URL>
+  - Threads: posted <destination URL>
+  - Facebook: blocked — <reason / next action>
+  ```
+
+If the user-message send fails:
+
+- Append `pair.publish.notify.failure` for single-pair messages, or
+  `source.fanout.notify.failure` for aggregate fanout messages.
 - Tell the user in chat (so the missed ping is replaced).
 - DO NOT roll back the post — it's already up.
 
-If you reach this step and Telegram is unconfigured / unavailable, append
-`pair.publish.notify_skipped_unconfigured` audit. Treat that as an alert: the
-plugin shipped a silent publish. Tell the user immediately.
+If you reach this step and user-message delivery is unconfigured / unavailable,
+append `pair.publish.notify_skipped_unconfigured` or
+`source.fanout.notify_skipped_unconfigured` as appropriate. Treat that as an
+alert: the plugin shipped a silent publish. Tell the user immediately.
 
-See `skills/repost-notify/SKILL.md` for the Telegram payload spec.
+See `skills/repost-notify/SKILL.md` for the payload spec.
 
 ## Step 11 — Final summary
 
@@ -513,7 +535,7 @@ When invoked from a fresh agent/subagent spawned by the scheduler:
 - Custom scheduled jobs may run a single pair, an explicit subset, or a
   preview/dry sweep. Follow the scheduler prompt literally, but fail closed:
   preview jobs never publish; live jobs publish only `live-approved` pairs.
-- It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool after every successful publish, including the source URL and destination URL.
+- It must still confirm to Ethan via the primary current-harness communication channel / message delivery tool: one single-pair message for single-pair runs, or one aggregate message per source item for source fanout / all-destination runs, including every destination URL or reason.
 - It must still append to `posted.jsonl`, `audit.jsonl`, and the global
   cross-pair ledger when a publish/catch-up proves destination state.
 - After running, the agent exits. The next scheduled tick spawns a fresh agent/subagent.

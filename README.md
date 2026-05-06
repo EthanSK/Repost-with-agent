@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.5.0)
+# Repost-with-agent (v4.5.1)
 
 **GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
 
@@ -168,7 +168,7 @@ The agent in your harness session must have:
   its first-class `message` tool / Telegram channel; Claude Code should use
   `plugin:telegram:telegram`; other harnesses should use their equivalent
   configured delivery path. Used to send the mandatory
-  publish-confirmation pings to Ethan.
+  publish confirmations to Ethan.
 
 Do **not** hand a Repost-with-agent run to Claude Code merely because Claude
 Code is listed as a supported harness. The agent that receives the request owns
@@ -203,7 +203,7 @@ When you invoke `/repost-run linkedin-to-x`:
 11. Agent reads the resulting URL from the page.
 12. Agent appends `{ts, sourceItemId, destinationUrl, ...}` to `posted.jsonl`
     and a publish proof to `global-posted.jsonl`.
-13. Agent uses the current harness's primary message delivery tool to send the publish-confirmation:
+13. Agent uses the current harness's primary message delivery tool to send the publish-confirmation (single-pair shape shown here; source fanout uses one aggregate message):
 
     ```
     [Repost-with-agent] ✅ Posted: linkedin-to-x
@@ -213,18 +213,22 @@ When you invoke `/repost-run linkedin-to-x`:
 
 That's the full v4 flow. No code on disk did any of it.
 
-## Confirm every successful publish — non-negotiable
+## Confirm every successful source item — non-negotiable
 
-> Every successful post from this plugin MUST trigger a Telegram message to
-> Ethan confirming the source URL and destination post URL. Silent publishes are a bug.
-> (Ethan voice 5977 + 5978, 2026-05-01.)
+> Every successful source item from this plugin MUST trigger a user-facing
+> message confirming the source URL and destination post URL(s). For source
+> fanout / all-destination runs, send one message per source post containing all
+> platform outcomes, not one message per platform. Silent publishes are a bug.
+> (Ethan voice 5977 + 5978, 2026-05-01; aggregate fanout clarification 2026-05-06.)
 
 This rule is enforced in `skills/repost-notify/SKILL.md` and replayed in
 `skills/repost-run/SKILL.md` step 10, `skills/repost-backfill/SKILL.md`
-step 6, plus every slash command body. Defense in depth.
+step 6, `skills/repost-source-fanout/SKILL.md` step 6, plus every slash command
+body. Defense in depth.
 
 If you (the running agent) trigger a publish through any non-skill path, you
-MUST also fire a publish confirmation.
+MUST also fire the correct confirmation shape: single-pair for single-pair runs,
+or one aggregate source-item message for fanout/all-destination runs.
 
 ## Slash commands
 
@@ -256,7 +260,7 @@ over user-owned JSON state plus the host harness scheduler, so users may choose
 any layout their harness can express:
 
 - one all-enabled-pairs sweep daily, hourly, weekdays only, etc.;
-- source-item fanout backfill slots, where each slot handles one source item across all enabled destinations;
+- source-item fanout backfill slots, where each slot handles one source item across all enabled destinations and emits one aggregate outcome message;
 - one cron job per pair, each using that pair's own cadence/timezone;
 - subset jobs such as “professional accounts at 09:00” and “personal accounts
   at 18:00”;
@@ -265,7 +269,7 @@ any layout their harness can express:
 - manual-only pairs with `schedule.kind: "manual"` and no installed scheduler;
 - custom natural-language scheduled prompts, as long as they still invoke the
   current harness, read the same `~/.repost-with-agent` state, and obey the
-  publish-confirmation/dedupe rules.
+  publish-confirmation / aggregate fanout confirmation / dedupe rules.
 
 For scheduled source backfills, the safe default is a source-item fanout job: one source item per slot, all enabled destinations, manifest written under `source-fanouts/`. Use destination-specific pair jobs only when the user explicitly asks for that narrower shape.
 
@@ -344,7 +348,7 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
       "scope": "source-fanout",
       "sourcePlatform": "linkedin",
       "pairIds": [],
-      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, and do not select another source item if any destination is partial.",
+      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial.",
       "publishMode": "live-approved-only",
       "schedule": {
         "kind": "cron",
