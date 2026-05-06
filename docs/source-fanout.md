@@ -44,7 +44,8 @@ Each enabled destination gets exactly one manifest record.
 
 Terminal outcomes:
 
-- `posted` — this fanout posted it and wrote local + global proof.
+- `posted` — this fanout posted it, verified the live destination post text
+  matches the intended draft, and wrote local + global proof.
 - `already-posted` / `caught-up` — local, global, destination, or semantic
   dedupe proved the destination already has it; catch-up proof was written when
   needed.
@@ -53,7 +54,10 @@ Terminal outcomes:
 - `skipped-by-policy` — an explicit configured policy skipped it, e.g. an
   overlength skip policy.
 - `blocked` — terminal only when it includes `category`, `reason`, and
-  `nextAction`.
+  `nextAction`. A destination where the platform created a public post but the
+  live text did not match the intended draft is `blocked` with
+  `category: "live-text-mismatch"`; it may have `posted-malformed` quarantine
+  proof, but it is not a successful `posted` outcome.
 
 Non-terminal outcomes:
 

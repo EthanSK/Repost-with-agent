@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.5.1)
+# Repost-with-agent (v4.5.2)
 
 **GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
 

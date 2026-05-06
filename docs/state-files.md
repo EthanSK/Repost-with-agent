@@ -1,4 +1,4 @@
-# State files (v4.5.1)
+# State files (v4.5.2)
 
 All Repost-with-agent state lives at `~/.repost-with-agent/`. Repo files do not
 touch this state directly; runtime reposting is skill-only. The running agent
@@ -208,7 +208,7 @@ Schema:
 ```json
 {
   "ts": "<ISO-8601>",
-  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate",
+  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate | global.publish.malformed",
   "pairId": "<pair-id>",
   "contentKey": "<sourcePlatform:sourceItemId or canonical URL key>",
   "sourcePlatform": "<platform>",
@@ -219,7 +219,7 @@ Schema:
   "destinationUrl": "<published/matched destination post URL>",
   "destinationId": "<destination platform id>",
   "draftText": "<text posted or matched>",
-  "status": "posted | caught-up | skipped-duplicate",
+  "status": "posted | caught-up | skipped-duplicate | posted-malformed",
   "note": "<optional>"
 }
 ```
@@ -344,13 +344,19 @@ Invariants:
 - Successful destination publishes still append to the pair's `posted.jsonl`,
   `audit.jsonl`, and `global-posted.jsonl`; the fanout manifest is an
   orchestration/result ledger, not a replacement for publish proof.
+- If a platform creates a public post but the mandatory live-text proof gate
+  fails, the destination is blocked with `category: "live-text-mismatch"` and
+  quarantine proof is appended as `posted-malformed` / `global.publish.malformed`
+  only to prevent accidental duplicate reposts. It is not success proof.
 
 See `skills/repost-source-fanout/SKILL.md` and `docs/source-fanout.md`.
 
 ## `pairs/<id>/posted.jsonl`
 
 Append-only NDJSON. Each line is one JSON object representing one successful
-publish. Schema:
+publish, plus rare `posted-malformed` quarantine rows for public posts that were
+created by the platform but failed the mandatory live-text proof gate. Quarantine
+rows prevent accidental duplicate reposts; they are not success proof. Schema:
 
 ```json
 {
@@ -359,7 +365,10 @@ publish. Schema:
   "canonicalSourceUrl": "<full URL of the source post>",
   "destinationUrl": "<full URL of the published destination post>",
   "destinationId": "<platform-specific id>",
-  "draftText": "<the exact text we published>",
+  "draftText": "<the exact text observed live or matched>",
+  "intendedDraftText": "<optional; required for posted-malformed rows>",
+  "status": "<optional; posted-malformed for quarantine rows>",
+  "needsRemediation": "<optional boolean>",
   "note": "<optional, e.g. 'caught-up via destination dedupe'>"
 }
 ```
@@ -367,7 +376,10 @@ publish. Schema:
 Invariants:
 
 - Append-only. NEVER rewrite an existing line.
-- Order is the order of successful publishes.
+- Order is the order of successful publishes plus quarantine rows.
+- Rows with `status: "posted-malformed"` block duplicate automation but must not
+  be reported as successful destination proof; they require Ethan's delete/repost
+  or accept-as-is decision.
 - `sourceItemId` is the dedupe key — if a candidate's `sourceItemId` already
   appears in any line, it's a local duplicate.
 - The file is human-tail-able (`tail -10`) without breaking the agent's reads.
@@ -408,7 +420,8 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.compacted`                | Draft exceeded char cap; compact strategy rewrote it to fit while preserving voice/essence. Includes original length, compacted length, cap, and note. |
 | `pair.publish.truncated`                | Draft exceeded char cap; truncate strategy applied. |
 | `pair.publish.skipped_overlength`       | Draft exceeded char cap; skip strategy applied. |
-| `pair.publish.success`                  | Destination confirmed the post. Includes `sourceItemId`, `destinationUrl`. |
+| `pair.publish.success`                  | Destination confirmed the post and the live-post text proof gate matched the intended draft. Includes `sourceItemId`, `destinationUrl`. |
+| `pair.publish.live_text_mismatch`       | Platform created a public post, but the live destination text did not match the intended draft after allowed normalization. Append `posted-malformed` quarantine proof, block the destination with `category: "live-text-mismatch"`, and do not emit success. |
 | `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. Categories include `needs-login`, `needs-config`, `needs-account-switch`, `rate-limit`, `platform-error`, and `unknown`. |
 | `pair.publish.notify.success`           | Telegram-confirm delivered. |
 | `pair.publish.notify.failure`           | Telegram-confirm failed. Includes error. **The post itself stayed up.** |

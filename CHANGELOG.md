@@ -1,5 +1,19 @@
 # Changelog
 
+## v4.5.2 — 2026-05-06 — Live-post text proof gate
+
+- Adds a mandatory live destination text proof gate before any browser publish can
+  be recorded as successful: reopen the captured destination URL, compare the
+  live post text against the intended draft, and fail closed on missing, stale,
+  duplicated, or malformed fragments.
+- Adds `pair.publish.live_text_mismatch`, `posted-malformed`, and
+  `global.publish.malformed` quarantine semantics so public posts that were
+  created incorrectly block duplicate automation without being treated as
+  successful repost proof.
+- Extends the protection across normal runs, source-item fanouts, destination
+  backfills, X destination notes, state docs, templates, and fanout contract
+  tests.
+
 ## v4.5.1 — 2026-05-06 — Aggregate source-item notifications
 
 - Clarifies the notification contract for source fanout / all-destination runs:

@@ -63,6 +63,21 @@ function hasSourceUrlLeak({ draftText, canonicalSourceUrl, sourcePlatform = 'lin
   return false;
 }
 
+function normalizeLivePostText(text) {
+  return String(text ?? '')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line, index, lines) => line !== '' || lines[index - 1] !== '')
+    .join('\n')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+function livePostTextMatches({ intendedDraftText, observedLiveText }) {
+  return normalizeLivePostText(intendedDraftText) === normalizeLivePostText(observedLiveText);
+}
+
 function enabledDestinationPairs({ pairs, sourcePlatform, sourceProfileUrl }) {
   return pairs
     .filter((pair) => pair.enabled === true)
@@ -303,6 +318,26 @@ test('source URL leak guard blocks LinkedIn canonical URLs in public drafts', ()
   );
 });
 
+test('live post text proof gate rejects malformed composer fragments', () => {
+  const intendedDraftText = `How do you come up with ideas to make with agents?\n\nI start by automating a manual flow. As I prompt the narrow version, I usually realise it wants to be a general purpose app, with one sliver covering my own need.\n\nThen I open source it.`;
+
+  assert.equal(
+    livePostTextMatches({
+      intendedDraftText,
+      observedLiveText: `How do you come up with ideas to make with agents?\n\n\nI start by automating a manual flow. As I prompt the narrow version, I usually realise it wants to be a general purpose app, with one sliver covering my own need.\n\nThen I open source it.`,
+    }),
+    true,
+  );
+
+  assert.equal(
+    livePostTextMatches({
+      intendedDraftText,
+      observedLiveText: `Then I open source it.\n\nThen I open source it.sliver covering my own need.\n\nThen I open source it.`,
+    }),
+    false,
+  );
+});
+
 test('docs require a fail-closed source URL leak guard before publishing', () => {
   const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
   const urlExpandSkill = readFileSync(join(root, 'skills/repost-url-expand/SKILL.md'), 'utf8');
@@ -312,6 +347,24 @@ test('docs require a fail-closed source URL leak guard before publishing', () =>
   assert.match(runSkill, /source-url-leak-guard/i);
   assert.match(urlExpandSkill, /source URL leak guard/i);
   assert.match(sourceFanoutSkill, /source-url-leak-guard/i);
+});
+
+test('docs require live destination text proof before success state', () => {
+  const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+  const backfillSkill = readFileSync(join(root, 'skills/repost-backfill/SKILL.md'), 'utf8');
+  const xDocs = readFileSync(join(root, 'docs/destinations/x.md'), 'utf8');
+  const sourceFanoutDocs = readFileSync(join(root, 'docs/source-fanout.md'), 'utf8');
+  const stateDocs = readFileSync(join(root, 'docs/state-files.md'), 'utf8');
+
+  assert.match(runSkill, /Mandatory live-post text proof gate/i);
+  assert.match(runSkill, /pair\.publish\.live_text_mismatch/i);
+  assert.match(runSkill, /posted-malformed/i);
+  assert.match(sourceFanoutSkill, /live-post text proof gate/i);
+  assert.match(backfillSkill, /live-post text proof gate/i);
+  assert.match(xDocs, /Hard proof gate/i);
+  assert.match(sourceFanoutDocs, /live text did not match the intended draft/i);
+  assert.match(stateDocs, /global\.publish\.malformed/i);
 });
 
 console.log('fanout contract tests passed');

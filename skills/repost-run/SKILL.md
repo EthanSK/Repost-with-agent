@@ -406,12 +406,30 @@ This is where the running agent drives the user's logged-in browser.
    - For Bluesky: the toast or feed shows the new post; navigate to your
      profile and grab the topmost post URL.
    - For LinkedIn / Threads / Facebook: see per-platform docs.
-   - For Facebook specifically: before treating a publish as successful, open
-     the captured `posted_url` in the browser and verify the live page contains
-     the intended `draftText` (or a distinctive excerpt) and not another recent
-     post. Prefer a same-card `Boost post` `target_id` numeric permalink when
-     available. If the verified page content does not match, do not append
-     success state or notify the user with that URL.
+9. **Mandatory live-post text proof gate for every destination:** before
+   treating any browser publish as successful, open the captured `posted_url`
+   in the browser and verify the live destination post text matches the
+   intended `draftText`.
+   - Compare the actual post card/text, not the compose box DOM. Normalize only
+     harmless platform rendering differences such as repeated whitespace or URL
+     wrapper display; do not accept missing paragraphs, duplicated fragments,
+     stale editor text, or a different recent post.
+   - For X specifically, this gate protects against Draft.js/contenteditable
+     desync after interrupted typing. If the live X post says something other
+     than the intended draft, the publish is **not** successful even if X
+     returned a status URL.
+   - For Facebook, also prefer a same-card `Boost post` `target_id` numeric
+     permalink when available, but still open and verify the normalized URL
+     before using it as proof.
+   - If the live text proof gate fails, do **not** append
+     `pair.publish.success`, do **not** append `global.publish.success`, and do
+     **not** send a success notification. Instead append
+     `pair.publish.live_text_mismatch` to `audit.jsonl`; append quarantine proof
+     with `status: "posted-malformed"` to the pair `posted.jsonl` and
+     `event: "global.publish.malformed"` / `status: "posted-malformed"` to
+     `global-posted.jsonl` so a later run does not accidentally duplicate the
+     same source item; then mark the destination blocked with category
+     `live-text-mismatch` and ask Ethan whether to delete/repost or accept it.
 
 If publish fails (login expired, account mismatch, missing config, rate limit, platform error):
 
@@ -436,10 +454,12 @@ echo '<json-line>' >> ~/.repost-with-agent/pairs/<id>/posted.jsonl
 
 Append `pair.publish.success` to `audit.jsonl` with the `posted_url`.
 
-For Facebook, this step is forbidden until the destination URL has been
-re-opened and content-verified against the draft. A Facebook publish with an
-unverified/wrong permalink is `pair.publish.failed` / `platform-error`, not a
-success, even if the post itself appears somewhere on the feed.
+This step is forbidden until the destination URL has been re-opened and the
+live destination post text has passed the mandatory proof gate in Step 8. A
+publish with an unverified/wrong permalink or mismatched live text is
+`pair.publish.live_text_mismatch` / `live-text-mismatch`, not a success, even if
+the platform created a public post somewhere on the feed. Record it only as
+`posted-malformed` quarantine proof so future runs do not duplicate it.
 
 Append the same proof to `~/.repost-with-agent/global-posted.jsonl` using the
 `repost-global-dedupe` schema. Include `pairId`, `contentKey`, source platform

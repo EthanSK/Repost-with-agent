@@ -41,9 +41,16 @@ destination).
 4. Type the draft body EXACTLY.
 5. Click the Post button: `[data-testid="tweetButtonInline"]` or
    `[data-testid="tweetButton"]`.
-6. Wait for the URL to change to `https://x.com/<handle>/status/<id>`.
-7. Extract the numeric `<id>` for `destinationId`. Capture the full URL as
-   `destinationUrl`.
+6. Wait for either a success toast, a URL change to
+   `https://x.com/<handle>/status/<id>`, or compose dismissal back to `/home`.
+7. Capture the full `destinationUrl`. If X returns to `/home`, navigate to the
+   destination profile and scrape the top post timestamp/status link.
+8. **Hard proof gate:** open the captured status URL and extract the live post
+   text from the post card (not the compose box). Normalize only harmless
+   whitespace/display differences and verify it matches the intended draft. If
+   the live text is a fragment, duplicated/stale editor text, or otherwise
+   different, append `pair.publish.live_text_mismatch` plus `posted-malformed`
+   quarantine proof and do not record success.
 
 ## Char cap
 

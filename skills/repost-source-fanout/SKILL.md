@@ -159,15 +159,25 @@ For each `planned` destination:
      this loop.
    - Carry the destination result forward into the fanout manifest so Step 6 can
      send one aggregate message for the source item.
-3. For Facebook, enforce the verified-permalink proof gate from
-   `docs/destinations/facebook.md` before recording success.
-4. On success, set the destination to `posted` with `destinationUrl`,
+3. Enforce the `repost-run` mandatory live-post text proof gate before recording
+   success for **any** destination. Re-open the captured destination URL and
+   verify the live post text matches the intended draft (allowing only harmless
+   platform rendering differences such as repeated whitespace or URL wrapper
+   display). Facebook still has its extra verified-permalink requirements in
+   `docs/destinations/facebook.md`.
+4. If the platform created a public post but the live text proof gate fails, do
+   not mark the destination `posted`. Append the `posted-malformed` quarantine
+   proof described in `repost-run`, set this destination to `blocked` with
+   `category: "live-text-mismatch"`, include the public URL plus observed and
+   intended text excerpts, and stop the source fanout until Ethan decides
+   whether to delete/repost or accept it.
+5. On success, set the destination to `posted` with `destinationUrl`,
    `destinationId` when available, and `notifiedByAggregate: true|false` after Step 6.
-5. On rule/policy skip discovered during the loop, set `skipped-rule` or
+6. On rule/policy skip discovered during the loop, set `skipped-rule` or
    `skipped-by-policy` with the exact reason.
-6. On user/platform/config/login/account problems, set `blocked` with
+7. On user/platform/config/login/account problems, set `blocked` with
    `category`, `reason`, and `nextAction`.
-7. On unexpected failure without a clear next action, set `failed` and include
+8. On unexpected failure without a clear next action, set `failed` and include
    the error. This keeps the fanout `partial` until a future run resumes.
 
 Refresh global/destination dedupe between destination attempts when another

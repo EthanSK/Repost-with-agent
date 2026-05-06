@@ -237,12 +237,14 @@ For destination-specific pair backfill, process each candidate in order:
 6. If publishing:
    - Run the URL expansion + length check from `repost-run` steps 6–7.
    - Drive the destination compose flow from `repost-run` step 8.
-   - For Facebook destinations, apply the repost-run Facebook proof gate:
-     re-open the captured destination URL and verify it contains the intended
-     draft/excerpt before recording success or notifying Ethan. If the URL
-     opens a different post, keep searching the live page for the matching
-     post card; if no verified URL is found, log a platform-error failure and
-     do not append success state.
+   - Apply the repost-run mandatory live-post text proof gate for every
+     destination: re-open the captured destination URL and verify the live post
+     text matches the intended draft/excerpt before recording success or
+     notifying Ethan. If the URL opens a different post, the text is malformed,
+     or the live text is only a fragment/duplicate of the intended draft, append
+     the `posted-malformed` quarantine proof described in `repost-run`, log
+     `pair.publish.live_text_mismatch`, and do not append success state.
+     Facebook still has its extra verified-permalink search requirements.
    - On success: append to `posted.jsonl` and
      `~/.repost-with-agent/global-posted.jsonl` (step 9 of `repost-run`),
      update `backfill-state.json`, append `pair.backfill.published` audit.
