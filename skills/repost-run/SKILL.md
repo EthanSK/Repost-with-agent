@@ -222,16 +222,23 @@ ops plus the global cross-pair ledger that catch verbatim, near-verbatim, and
 already-routed reposts.
 
 1. **Local dedupe.** Read `~/.repost-with-agent/pairs/<id>/posted.jsonl`
-   (line-delimited JSON, may be empty). For each candidate remaining after step 3.5, drop it
-   if its `sourceItemId` already appears in any line.
+   (line-delimited JSON, may be empty). For each candidate remaining after step
+   3.5, group rows by `sourceItemId` and use the newest live-success verdict.
+   Only `posted`, `caught-up`, and `skipped-duplicate` rows with a live
+   `destinationUrl`/`destinationId` and no remediation flags prove a duplicate.
+   Newer rows such as `deleted-malformed`, `deleted-runaway`,
+   `deleted-source-url-leak`, `posted-malformed`, `needs-repost`,
+   `needsRemediation: true`, or `event: "global.publish.deleted"` explicitly do
+   **not** count as posted proof; they mean repair/repost/skip is still needed.
 2. **Global cross-pair dedupe.** Use `skills/repost-global-dedupe/SKILL.md`
    unless `pair.policy.globalDedupeEnabled === false`. Read
    `~/.repost-with-agent/global-posted.jsonl`, resolve the candidate
    `contentKey` (including lineage inheritance from earlier destination URLs),
-   and drop it if the same `contentKey` has already been posted/caught-up for
-   this pair's destination platform/account by ANY pair. This is mandatory for
-   routes such as LinkedIn→X→Bluesky plus X→Bluesky: whichever path first
-   proves the Bluesky destination has the content wins, and the other path skips.
+   and drop it only if the latest same-destination verdict for that `contentKey`
+   is live success. Do not treat deleted/malformed/remediation ledger rows as
+   duplicates. This is mandatory for routes such as LinkedIn→X→Bluesky plus
+   X→Bluesky: whichever path first proves the Bluesky destination has the
+   content wins, and the other path skips.
 3. **Destination dedupe.** Use your current-harness browser automation to navigate to
    `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. **Keep
    this scrape in your reasoning** — Layer 2 (step 4.5) reuses it. For each

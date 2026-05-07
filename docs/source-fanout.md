@@ -82,9 +82,11 @@ The source item is never silently complete just because one destination posted.
 
 ## Resume rule
 
-If a fanout ends `partial`, the next scheduled continuation should resume the
-same source item first. It should not select a newer/older source item until the
-partial one is `complete` or explicitly `blocked`.
+If a fanout ends `partial`, `blocked`, `in-progress`, or contains any
+`needs-repost`/deleted/malformed destination, the next scheduled continuation
+must resume or repair that same source item first. It must not select a
+newer/older source item until the earlier one is `complete`, explicitly skipped,
+or cancelled with proof.
 
 The manifest's `resume` block must include:
 

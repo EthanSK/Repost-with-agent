@@ -61,17 +61,27 @@ dedupe.
 
 1. Read `~/.repost-with-agent/pairs/<id>/posted.jsonl` (line-delimited JSON,
    may be empty or missing).
-2. For each line, parse the JSON and extract `sourceItemId`.
-3. Build a Set of all `sourceItemId`s.
+2. For each line, parse the JSON and extract `sourceItemId`, `status`,
+   `destinationUrl`/`destinationId`, and remediation/deletion markers.
+3. Group rows by `sourceItemId` and compute the **latest live-success verdict**:
+   - live success: `status` missing/`posted`/`caught-up`/`skipped-duplicate`
+     with a destination URL or ID, no `needsRemediation` / `needsRepost`, and no
+     malformed/deleted event/status;
+   - deleted/non-live: `deleted-*`, `posted-deleted`, `event:
+     "global.publish.deleted"`, or `needsRepost: true`;
+   - malformed/quarantine: `posted-malformed`, `event:
+     "global.publish.malformed"`, `needsRemediation: true`, or `needs-repost`.
 4. For each candidate:
-   - If `candidate.sourceItemId` is in the Set → DUPLICATE.
+   - If the latest verdict is live success → DUPLICATE.
+   - If the latest verdict is deleted/malformed/remediation → NOT a duplicate;
+     the item still needs repair/repost/explicit skip.
    - Else → not a local duplicate (proceed to remote check).
 
-Use `jq` or grep for speed if posted.jsonl is large:
+Do not use a simple `grep sourceItemId` as the final answer when cleanup rows may exist; grep is only a prefilter. Use `jq`/Python/agent reasoning to compute the newest live-success verdict.
 
 ```bash
-jq -r '.sourceItemId' ~/.repost-with-agent/pairs/<id>/posted.jsonl | grep -Fxq "<candidate-id>"
-# exit 0 → duplicate, exit 1 → not duplicate
+jq -c 'select(.sourceItemId == "<candidate-id>")' ~/.repost-with-agent/pairs/<id>/posted.jsonl
+# Inspect the matched rows and apply the latest live-success verdict; row existence alone is not duplicate proof.
 ```
 
 ## Global cross-pair dedupe
@@ -89,10 +99,15 @@ Key points:
    (e.g. an X status created by LinkedIn→X), inherit that earlier line's
    `contentKey` so the downstream pair still represents the LinkedIn-origin
    content.
-4. If the same `contentKey` already has a global ledger line for the current
-   destination platform/account, verdict is `duplicate-global`. Skip and append
-   the audit/catch-up lines described in `repost-global-dedupe`.
-5. If no same-destination global line exists, continue to destination scrape.
+4. For the current destination platform/account, evaluate the newest ledger rows
+   for that `contentKey` using the same latest live-success verdict as local
+   dedupe. `global.publish.deleted`, `deleted-*`, `posted-malformed`,
+   `needsRepost`, and `needsRemediation` rows remove or quarantine old proof;
+   they are not duplicates.
+5. If the latest same-destination verdict is live success,
+   verdict is `duplicate-global`. Skip and append the audit/catch-up lines
+   described in `repost-global-dedupe`.
+6. If no live same-destination verdict exists, continue to destination scrape.
 
 This check is what makes all pairs look globally instead of thinking in silos.
 
@@ -158,12 +173,16 @@ counts (≤20) you'll typically see.
 
 ## Output for the calling skill
 
-For each candidate, produce one of three verdicts:
+For each candidate, produce one of these verdicts:
 
-- `duplicate-local` — found in this pair's `posted.jsonl`. Skip.
-- `duplicate-global` — found in `global-posted.jsonl` for this destination.
+- `duplicate-local` — latest local ledger verdict is live success. Skip.
+- `not-duplicate-local-remediation` — local rows exist but the latest verdict is
+  deleted/malformed/needs-remediation; do not skip on local ledger alone.
+- `duplicate-global` — latest global same-destination verdict is live success.
   Skip + append the global/per-pair catch-up records from
   `skills/repost-global-dedupe/SKILL.md`.
+- `not-duplicate-global-remediation` — global rows exist but the latest verdict
+  is deleted/malformed/needs-remediation; do not skip on global ledger alone.
 - `duplicate-remote` — found in the destination scrape. Skip + append a
   catch-up entry to `posted.jsonl` so we don't re-check next run:
 

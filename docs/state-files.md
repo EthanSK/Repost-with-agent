@@ -208,7 +208,7 @@ Schema:
 ```json
 {
   "ts": "<ISO-8601>",
-  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate | global.publish.malformed",
+  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate | global.publish.malformed | global.publish.deleted",
   "pairId": "<pair-id>",
   "contentKey": "<sourcePlatform:sourceItemId or canonical URL key>",
   "sourcePlatform": "<platform>",
@@ -219,7 +219,7 @@ Schema:
   "destinationUrl": "<published/matched destination post URL>",
   "destinationId": "<destination platform id>",
   "draftText": "<text posted or matched>",
-  "status": "posted | caught-up | skipped-duplicate | posted-malformed",
+  "status": "posted | caught-up | skipped-duplicate | posted-malformed | deleted-malformed | deleted-runaway | deleted-source-url-leak",
   "note": "<optional>"
 }
 ```
@@ -231,8 +231,13 @@ Invariants:
 - If a candidate source URL/ID matches a previous line's destination URL/ID, the
   candidate inherits that previous line's `contentKey`. This preserves lineage
   across hops such as LinkedIn→X→Bluesky.
-- The same `contentKey` may have one row per destination platform/account. A
-  second row for the same destination is a duplicate and should be skipped.
+- The same `contentKey` may have one live-success row per destination
+  platform/account. A second **live-success** row for the same destination is a
+  duplicate and should be skipped.
+- Dedupe must evaluate the latest same-destination verdict, not mere row
+  existence. `global.publish.deleted`, `deleted-*`, `global.publish.malformed`,
+  `posted-malformed`, `needsRepost`, and `needsRemediation` rows remove or
+  quarantine stale proof and do not count as live duplicate proof.
 
 ## `considered.jsonl`
 
@@ -303,7 +308,7 @@ Schema:
       "pairId": "linkedin-to-x",
       "destinationPlatform": "x",
       "destinationAccountHint": "@<handle>",
-      "status": "planned | attempting | posted | already-posted | caught-up | skipped-rule | skipped-by-policy | blocked | failed | unattempted",
+      "status": "planned | attempting | posted | already-posted | caught-up | skipped-rule | skipped-by-policy | blocked | failed | unattempted | needs-repost | deleted-malformed | deleted-runaway",
       "terminal": false,
       "destinationUrl": "<published-or-matched URL when known>",
       "destinationId": "<platform id when known>",
@@ -337,10 +342,13 @@ Invariants:
   least one destination is explicitly blocked with `category`, `reason`, and
   `nextAction`.
 - `partial` is required when any enabled destination is `planned`, `attempting`,
-  `failed`, `unattempted`, missing from the manifest, or `blocked` without a
-  complete reason/nextAction.
-- A scheduled backfill continuation must resume a `partial` manifest before
-  selecting a different source item.
+  `failed`, `unattempted`, `needs-repost`, `deleted-malformed`,
+  `deleted-runaway`, missing from the manifest, or `blocked` without a complete
+  reason/nextAction.
+- A scheduled backfill continuation must resume a `partial`, `blocked`,
+  `in-progress`, `needs-repost`, deleted, or malformed earlier manifest before
+  selecting a different source item, unless that earlier item was explicitly
+  skipped/cancelled with proof.
 - Successful destination publishes still append to the pair's `posted.jsonl`,
   `audit.jsonl`, and `global-posted.jsonl`; the fanout manifest is an
   orchestration/result ledger, not a replacement for publish proof.
@@ -377,11 +385,13 @@ Invariants:
 
 - Append-only. NEVER rewrite an existing line.
 - Order is the order of successful publishes plus quarantine rows.
-- Rows with `status: "posted-malformed"` block duplicate automation but must not
-  be reported as successful destination proof; they require Ethan's delete/repost
-  or accept-as-is decision.
-- `sourceItemId` is the dedupe key — if a candidate's `sourceItemId` already
-  appears in any line, it's a local duplicate.
+- Rows with `status: "posted-malformed"`, `needsRemediation`, `needsRepost`,
+  `deleted-malformed`, `deleted-runaway`, or any `deleted-*` status block stale
+  success proof but must not be reported as successful destination proof; they
+  require repair/repost or an explicit skip/accept decision.
+- `sourceItemId` is the dedupe grouping key. A candidate is a local duplicate
+  only when the newest row for that source item is live-success proof; row
+  existence alone is not duplicate proof.
 - The file is human-tail-able (`tail -10`) without breaking the agent's reads.
 
 ## `pairs/<id>/audit.jsonl`

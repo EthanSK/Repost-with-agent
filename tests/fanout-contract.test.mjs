@@ -24,15 +24,21 @@ const LIVE_SUCCESS_EVENTS = new Set([
   'global.publish.semantic_duplicate',
 ]);
 
-const MALFORMED_STATUSES = new Set(['posted-malformed', 'malformed']);
-const DELETED_STATUSES = new Set(['posted-deleted', 'deleted']);
+const MALFORMED_STATUSES = new Set(['posted-malformed', 'malformed', 'needs-repost']);
+const DELETED_STATUSES = new Set([
+  'posted-deleted',
+  'deleted',
+  'deleted-malformed',
+  'deleted-runaway',
+  'deleted-source-url-leak',
+]);
 
 function isMalformedLedgerRow(row) {
   return MALFORMED_STATUSES.has(row?.status) || row?.event === 'global.publish.malformed';
 }
 
 function isDeletedLedgerRow(row) {
-  return DELETED_STATUSES.has(row?.status) || row?.event === 'global.publish.deleted';
+  return DELETED_STATUSES.has(row?.status) || row?.status?.startsWith?.('deleted-') || row?.event === 'global.publish.deleted';
 }
 
 function isLiveSuccessLedgerRow(row) {
@@ -73,9 +79,17 @@ function latestLedgerVerdict(rows) {
   return verdict;
 }
 
+function isExplicitQueueBlock(item) {
+  return item?.status === 'blocked' && Boolean(item.category) && Boolean(item.reason) && Boolean(item.nextAction);
+}
+
+function canAdvancePastQueueItem(item) {
+  return QUEUE_ADVANCE_STATUSES.has(item?.status) || isExplicitQueueBlock(item);
+}
+
 function queuePrefixBlocker(items, currentQueueIndex) {
   return items.find(
-    (item) => item.queueIndex < currentQueueIndex && !QUEUE_ADVANCE_STATUSES.has(item.status),
+    (item) => item.queueIndex < currentQueueIndex && !canAdvancePastQueueItem(item),
   ) ?? null;
 }
 
@@ -342,7 +356,13 @@ test('finite scheduled queues must refuse later items while earlier work is unre
   assert.equal(
     queuePrefixBlocker(
       queueItems
-        .with(1, { ...queueItems[1], status: 'complete' })
+        .with(1, {
+          ...queueItems[1],
+          status: 'blocked',
+          category: 'needs-login',
+          reason: 'destination requires user login',
+          nextAction: 'resume after login',
+        })
         .with(2, { ...queueItems[2], status: 'complete' }),
       7,
     ),
@@ -364,12 +384,16 @@ test('deleted and malformed ledger rows are not live success proof', () => {
     latestLedgerVerdict([success, { ...success, event: 'global.publish.deleted', status: 'posted-deleted' }]).kind,
     'none',
   );
+  assert.equal(latestLedgerVerdict([success, { ...success, status: 'deleted-runaway' }]).kind, 'none');
+  assert.equal(latestLedgerVerdict([success, { ...success, status: 'deleted-source-url-leak' }]).kind, 'none');
   assert.equal(
     latestLedgerVerdict([success, { ...success, event: 'global.publish.malformed', status: 'posted-malformed' }]).kind,
     'quarantine',
   );
   assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'posted-malformed' }), false);
+  assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'needs-repost', needsRemediation: true }), false);
   assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'posted-deleted' }), false);
+  assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'deleted-malformed' }), false);
 });
 
 test('source fanout manifest template is valid JSON and visibly partial when a destination is unattempted', () => {

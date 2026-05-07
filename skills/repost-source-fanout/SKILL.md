@@ -51,10 +51,19 @@ Per-destination status MUST be one of:
   to `blocked` with a reason.
 - `unattempted` — the fanout ended before this enabled destination was checked.
   This is always non-terminal and makes the fanout `partial`.
+- `needs-repost` — cleanup/remediation proved a previous destination post was
+  deleted, malformed, or otherwise not usable as live proof. This is
+  non-terminal and makes the fanout `partial` until repaired or explicitly
+  skipped.
+- `deleted-malformed` / `deleted-runaway` — cleanup markers for a public post
+  that was deleted after malformed/runaway automation. These are non-terminal
+  and must not be counted as successful destination proof.
 
 Terminal per-destination statuses are: `posted`, `already-posted`, `caught-up`,
 `skipped-rule`, `skipped-by-policy`, and `blocked` **only when it has an explicit
-`category`, `reason`, and `nextAction`**.
+`category`, `reason`, and `nextAction`**. Remediation statuses (`needs-repost`,
+`deleted-malformed`, `deleted-runaway`, `posted-malformed`, or rows with
+`needsRemediation: true`) are not terminal.
 
 Top-level fanout status MUST be:
 
@@ -63,7 +72,8 @@ Top-level fanout status MUST be:
 - `blocked` — every enabled destination is terminal, and at least one destination
   is explicitly `blocked` with a reason/next action.
 - `partial` — at least one enabled destination is `planned`, `attempting`,
-  `failed`, `unattempted`, or `blocked` without a complete reason/nextAction.
+  `failed`, `unattempted`, `needs-repost`, `deleted-malformed`,
+  `deleted-runaway`, or `blocked` without a complete reason/nextAction.
 - `in-progress` — the current agent is still actively processing destinations.
 
 Never mark a source item `complete` merely because one destination posted.
@@ -123,8 +133,10 @@ On resume:
    `unattempted`, `needs-repost`, `deleted-malformed`, or `deleted-runaway`,
    stop and resume/repair that earlier item first. Do not use a later scheduled
    slot to skip over a partial source item.
-5. Do NOT select a different source item until this manifest is `complete` or
-   explicitly `blocked`.
+5. Do NOT select a different source item until this manifest is `complete`,
+   explicitly skipped, or cancelled with proof. A `blocked`, `partial`, or
+   `in-progress` manifest stops the finite queue until it is repaired or Ethan
+   explicitly decides to skip it.
 
 ## Step 3 — Pre-compute destination outcomes together
 
@@ -210,11 +222,13 @@ After all enabled destinations have been evaluated for this source item:
    `source.fanout.partial` to every in-scope pair's `audit.jsonl`.
 
 A scheduled backfill slot may select the next source item ONLY after every
-earlier source item in the same queue/fanout set is `complete` or explicitly
-`blocked`. A `partial` or `in-progress` fanout must be resumed first. A deleted
-or malformed destination (`posted-malformed`, `deleted-malformed`,
-`deleted-runaway`, `needs-repost`, `needsRemediation: true`) is not terminal and
-must be repaired/skipped with explicit proof before the scheduler advances.
+earlier source item in the same queue/fanout set is `complete`, explicitly
+skipped, or cancelled with proof. `blocked`, `partial`, or `in-progress` fanouts
+must be resolved first instead of being skipped by a later scheduled slot. A
+deleted or malformed destination (`posted-malformed`, `deleted-malformed`,
+`deleted-runaway`, `deleted-source-url-leak`, `needs-repost`,
+`needsRemediation: true`) is not terminal and must be repaired/skipped with
+explicit proof before the scheduler advances.
 
 ## Step 6 — Aggregate notification / report shape
 

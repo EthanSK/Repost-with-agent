@@ -38,7 +38,10 @@ automation, and configured current-harness user-message delivery.
 3. For source-item fanout, enumerate enabled pairs for the source before
    posting anything. The slot is not complete until every enabled destination
    has a manifest status: posted, already-posted/caught-up, skipped by rule or
-   policy, explicitly blocked with reason/nextAction, or partial.
+   policy, or a visible partial/blocked state with reason/nextAction. Finite
+   scheduled queues must not advance past an earlier partial/blocked/deleted/
+   malformed/needs-repost source item unless Ethan explicitly skips/cancels it
+   with proof.
 4. For destination-specific pair backfill, find the pair. Note any top-level
    `customRules` and pair-level `pair.customRules`; they run before backfill
    dedupe/publish.

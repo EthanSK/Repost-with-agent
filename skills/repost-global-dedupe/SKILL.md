@@ -27,7 +27,7 @@ Each line should be shaped like:
 ```json
 {
   "ts": "<ISO-8601>",
-  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate",
+  "event": "global.publish.success | global.publish.catchup | global.publish.semantic_duplicate | global.publish.remote_duplicate | global.publish.deleted | global.publish.malformed",
   "pairId": "<pair-id that observed/created this record>",
   "contentKey": "<canonical cross-pair content identity>",
   "sourcePlatform": "<site-key, e.g. linkedin | x | bluesky | threads | facebook | your-site>",
@@ -38,7 +38,7 @@ Each line should be shaped like:
   "destinationUrl": "<published/matched destination post URL>",
   "destinationId": "<destination platform item id if known>",
   "draftText": "<text that was/would be posted>",
-  "status": "posted | caught-up | skipped-duplicate",
+  "status": "posted | caught-up | skipped-duplicate | posted-malformed | deleted-malformed | deleted-runaway | deleted-source-url-leak",
   "note": "<optional human reason>"
 }
 ```
@@ -90,14 +90,24 @@ For the current pair and candidate:
    - `destinationPlatform === pair.destination.platform`, and
    - if both are present, `destinationAccountHint` / destination profile/account
      point at the same configured destination identity.
-4. If such a line exists, the candidate is `duplicate-global` for this
-   destination. Do **not** publish. Append:
+4. Compute the newest **live-success verdict** for those same-destination rows.
+   A row proves live success only when its event/status is one of
+   `global.publish.success`, `global.publish.catchup`,
+   `global.publish.remote_duplicate`, `global.publish.semantic_duplicate`,
+   `posted`, `caught-up`, or `skipped-duplicate`, it has a destination URL/ID,
+   and it has no remediation/deletion/malformed flags. Newer rows with
+   `global.publish.deleted`, `deleted-*`, `posted-malformed`,
+   `global.publish.malformed`, `needsRepost`, or `needsRemediation` remove or
+   quarantine the old proof and must not count as duplicates.
+5. If the latest same-destination verdict is live success, the candidate is
+   `duplicate-global` for this destination. Do **not** publish. Append:
    - a per-pair audit event `pair.dedupe.global_duplicate`, and
    - a per-pair catch-up line to `pairs/<id>/posted.jsonl`, and
    - a global catch-up line with `event: "global.publish.catchup"`,
      `status: "skipped-duplicate"`, and a note naming the matched destination.
-5. If no such line exists, the candidate is globally unique for this
-   destination. Continue to destination scrape + Layer 2 semantic dedupe.
+6. If no live same-destination verdict exists, the candidate is globally unique
+   for this destination. Continue to destination scrape + Layer 2 semantic
+   dedupe.
 
 Important nuance: the same `contentKey` may legitimately be posted once per
 configured destination. LinkedIn→X and LinkedIn→Bluesky are both allowed; two
@@ -106,7 +116,8 @@ different routes to Bluesky for the same `contentKey` are not.
 ## When to append global state
 
 Append to the global ledger on every meaningful outcome that proves destination
-state:
+state. Use correction/deletion rows instead of relying on old success rows after
+cleanup; future dedupe must evaluate the latest verdict, not mere row existence:
 
 - **Successful publish:** append `global.publish.success` immediately after the
   per-pair `posted.jsonl` success line.
@@ -119,7 +130,12 @@ state:
   not re-reason the same skip.
 
 Do not append global success for failed/uncertain login, CAPTCHA, rate-limit, or
-compose failures. Those do not prove a destination post exists.
+compose failures. Those do not prove a destination post exists. If a previously
+recorded destination post is deleted or found malformed/source-url-leaking,
+append `global.publish.deleted` or `global.publish.malformed` with the old URL,
+status (`deleted-malformed`, `deleted-runaway`, `deleted-source-url-leak`, or
+`posted-malformed`), and `needsRepost` / `needsRemediation` as appropriate so
+later runs do not treat stale proof as live.
 
 ## Audit event
 
