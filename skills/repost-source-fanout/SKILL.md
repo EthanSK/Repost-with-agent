@@ -116,7 +116,14 @@ On resume:
 2. Keep terminal destination records unchanged.
 3. Attempt only destinations whose status is `planned`, `failed`, `unattempted`,
    or incomplete `blocked`.
-4. Do NOT select a different source item until this manifest is `complete` or
+4. Before publishing anything, scan the source fanout directory and any active
+   backfill queue file for earlier source items from the same source-level
+   backfill. If an earlier item is `partial` or `in-progress`, or has a
+   non-terminal destination such as `planned`, `attempting`, `failed`,
+   `unattempted`, `needs-repost`, `deleted-malformed`, or `deleted-runaway`,
+   stop and resume/repair that earlier item first. Do not use a later scheduled
+   slot to skip over a partial source item.
+5. Do NOT select a different source item until this manifest is `complete` or
    explicitly `blocked`.
 
 ## Step 3 — Pre-compute destination outcomes together
@@ -202,9 +209,12 @@ After all enabled destinations have been evaluated for this source item:
 6. Append one of `source.fanout.complete`, `source.fanout.blocked`, or
    `source.fanout.partial` to every in-scope pair's `audit.jsonl`.
 
-A scheduled backfill slot may select the next source item ONLY after the current
-source item fanout is `complete` or explicitly `blocked`. A `partial` fanout must
-be resumed first.
+A scheduled backfill slot may select the next source item ONLY after every
+earlier source item in the same queue/fanout set is `complete` or explicitly
+`blocked`. A `partial` or `in-progress` fanout must be resumed first. A deleted
+or malformed destination (`posted-malformed`, `deleted-malformed`,
+`deleted-runaway`, `needs-repost`, `needsRemediation: true`) is not terminal and
+must be repaired/skipped with explicit proof before the scheduler advances.
 
 ## Step 6 — Aggregate notification / report shape
 

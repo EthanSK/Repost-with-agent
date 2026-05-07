@@ -13,6 +13,72 @@ const TERMINAL_STATUSES = new Set([
   'skipped-by-policy',
 ]);
 
+const QUEUE_ADVANCE_STATUSES = new Set(['complete', 'skipped-rule', 'skipped-by-policy', 'cancelled']);
+
+const LIVE_SUCCESS_STATUSES = new Set(['posted', 'caught-up', 'skipped-duplicate']);
+
+const LIVE_SUCCESS_EVENTS = new Set([
+  'global.publish.success',
+  'global.publish.catchup',
+  'global.publish.remote_duplicate',
+  'global.publish.semantic_duplicate',
+]);
+
+const MALFORMED_STATUSES = new Set(['posted-malformed', 'malformed']);
+const DELETED_STATUSES = new Set(['posted-deleted', 'deleted']);
+
+function isMalformedLedgerRow(row) {
+  return MALFORMED_STATUSES.has(row?.status) || row?.event === 'global.publish.malformed';
+}
+
+function isDeletedLedgerRow(row) {
+  return DELETED_STATUSES.has(row?.status) || row?.event === 'global.publish.deleted';
+}
+
+function isLiveSuccessLedgerRow(row) {
+  if (!row || row.needsRemediation || isMalformedLedgerRow(row) || isDeletedLedgerRow(row)) {
+    return false;
+  }
+
+  if (row.event && !LIVE_SUCCESS_EVENTS.has(row.event)) {
+    return false;
+  }
+
+  if (!row.status) {
+    return Boolean(row.destinationUrl || row.destinationId);
+  }
+
+  return LIVE_SUCCESS_STATUSES.has(row.status);
+}
+
+function latestLedgerVerdict(rows) {
+  let verdict = { kind: 'none', row: null };
+
+  for (const row of rows) {
+    if (isDeletedLedgerRow(row)) {
+      verdict = { kind: 'none', row };
+      continue;
+    }
+
+    if (isMalformedLedgerRow(row)) {
+      verdict = { kind: 'quarantine', row };
+      continue;
+    }
+
+    if (isLiveSuccessLedgerRow(row)) {
+      verdict = { kind: 'live-success', row };
+    }
+  }
+
+  return verdict;
+}
+
+function queuePrefixBlocker(items, currentQueueIndex) {
+  return items.find(
+    (item) => item.queueIndex < currentQueueIndex && !QUEUE_ADVANCE_STATUSES.has(item.status),
+  ) ?? null;
+}
+
 function isExplicitBlock(destination) {
   return (
     destination.status === 'blocked' &&
@@ -261,6 +327,49 @@ test('explicit blocks are closed as blocked, but incomplete blocks stay partial'
   );
 
   assert.equal(summarizeFanout(incompleteBlock).status, 'partial');
+});
+
+test('finite scheduled queues must refuse later items while earlier work is unresolved', () => {
+  const queueItems = [
+    { queueIndex: 4, sourceNum: 10, status: 'complete' },
+    { queueIndex: 5, sourceNum: 12, status: 'blocked' },
+    { queueIndex: 6, sourceNum: 17, status: 'partial' },
+    { queueIndex: 7, sourceNum: 18, status: 'scheduled' },
+  ];
+
+  assert.deepEqual(queuePrefixBlocker(queueItems, 7), queueItems[1]);
+  assert.deepEqual(queuePrefixBlocker(queueItems.with(1, { ...queueItems[1], status: 'complete' }), 7), queueItems[2]);
+  assert.equal(
+    queuePrefixBlocker(
+      queueItems
+        .with(1, { ...queueItems[1], status: 'complete' })
+        .with(2, { ...queueItems[2], status: 'complete' }),
+      7,
+    ),
+    null,
+  );
+});
+
+test('deleted and malformed ledger rows are not live success proof', () => {
+  const success = {
+    event: 'global.publish.success',
+    status: 'posted',
+    sourceItemId: 'urn:li:activity:7000',
+    destinationPlatform: 'x',
+    destinationUrl: 'https://x.com/example/status/1',
+  };
+
+  assert.equal(isLiveSuccessLedgerRow(success), true);
+  assert.equal(
+    latestLedgerVerdict([success, { ...success, event: 'global.publish.deleted', status: 'posted-deleted' }]).kind,
+    'none',
+  );
+  assert.equal(
+    latestLedgerVerdict([success, { ...success, event: 'global.publish.malformed', status: 'posted-malformed' }]).kind,
+    'quarantine',
+  );
+  assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'posted-malformed' }), false);
+  assert.equal(isLiveSuccessLedgerRow({ ...success, status: 'posted-deleted' }), false);
 });
 
 test('source fanout manifest template is valid JSON and visibly partial when a destination is unattempted', () => {
