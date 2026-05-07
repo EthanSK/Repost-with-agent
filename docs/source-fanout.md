@@ -88,6 +88,15 @@ must resume or repair that same source item first. It must not select a
 newer/older source item until the earlier one is `complete`, explicitly skipped,
 or cancelled with proof.
 
+The continuation should actively try to fix the blocker itself before asking the
+operator. Safe self-remediation includes clean-reposting deleted/malformed proof
+from local source text, correcting wrong ledger/manifest rows from live proof,
+retrying transient destination failures, and applying configured compaction. Ask
+for help only when the next action is ambiguous, requires credentials/config,
+needs a safety/editorial judgment, or would perform an uncertain destructive
+public action. In that case, the `blocked` record must say what was already
+tried and what exact decision/action is needed.
+
 The manifest's `resume` block must include:
 
 - `sourceItemId`

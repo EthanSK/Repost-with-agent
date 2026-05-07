@@ -78,6 +78,35 @@ Top-level fanout status MUST be:
 
 Never mark a source item `complete` merely because one destination posted.
 
+## Blocker self-resolution rule
+
+Default posture: resolve blockers yourself before asking Ethan.
+
+When a destination is `partial`, `failed`, `unattempted`, `needs-repost`,
+`deleted-malformed`, `deleted-runaway`, `deleted-source-url-leak`,
+`posted-malformed`, or otherwise non-terminal, do not stop at a passive
+"blocked" report if the next safe action is within the agent's existing
+permissions and configured tools. First attempt the obvious remediation, for
+example:
+
+- clean-repost a deleted/malformed/source-URL-leak post from the local source
+  text, after dedupe, source URL leak guard, and live-text proof;
+- delete/quarantine malformed or duplicate public posts that this backfill run
+  clearly created, when the evidence is unambiguous;
+- correct bad ledger/audit/manifest rows when live proof shows the local state
+  is wrong;
+- retry a destination whose earlier failure was transient, using the current
+  pair learnings and destination docs;
+- compact overlength drafts according to policy instead of skipping when
+  compaction is allowed.
+
+Ask Ethan only when the remediation is externally destructive and ambiguous,
+requires new credentials/account switching/configuration, needs a product or
+editorial judgment, would publish content whose safety/notability is uncertain,
+or the available evidence is insufficient to know the correct fix. If asking is
+necessary, leave a precise `blocked` record with `category`, `reason`,
+`nextAction`, proof URLs/excerpts, and what was already tried.
+
 ## Step 1 — Resolve source scope and destination pairs
 
 1. Read `~/.repost-with-agent/pairs.json`.

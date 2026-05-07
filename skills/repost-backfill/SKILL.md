@@ -42,6 +42,13 @@ automation, and configured current-harness user-message delivery.
    scheduled queues must not advance past an earlier partial/blocked/deleted/
    malformed/needs-repost source item unless Ethan explicitly skips/cancels it
    with proof.
+   Before asking Ethan about such a blocker, first try to resolve it yourself
+   when the safe next action is within the existing tool/account permissions:
+   repair/repost malformed or deleted proof from local source text, correct bad
+   ledgers/manifests, retry transient failures, or apply allowed compaction.
+   Ask only for ambiguous public deletion/repost decisions, missing credentials
+   or configuration, safety/editorial calls, or cases where evidence is
+   insufficient. Record exactly what was tried and the remaining `nextAction`.
 4. For destination-specific pair backfill, find the pair. Note any top-level
    `customRules` and pair-level `pair.customRules`; they run before backfill
    dedupe/publish.
