@@ -154,6 +154,73 @@ function normalizeLivePostText(text) {
     .trim();
 }
 
+function normalizeForDerivedSource(text) {
+  return String(text ?? '')
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[^a-z0-9#]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function extractDomains(text) {
+  return new Set(
+    Array.from(String(text ?? '').matchAll(/https?:\/\/([^/\s]+)/gi)).map((match) =>
+      match[1].replace(/^www\./i, '').toLowerCase(),
+    ),
+  );
+}
+
+function significantTokens(text) {
+  const stop = new Set(['the', 'and', 'for', 'you', 'your', 'with', 'that', 'this', 'from', 'into', 'when', 'while']);
+  return new Set(
+    normalizeForDerivedSource(text)
+      .split(' ')
+      .filter((token) => token.length >= 4 && !stop.has(token)),
+  );
+}
+
+function sharedTokenCount(a, b) {
+  const aa = significantTokens(a);
+  const bb = significantTokens(b);
+  return Array.from(aa).filter((token) => bb.has(token)).length;
+}
+
+function hasDerivedSourceShadow({ candidate, backfillQueueItems = [], pairLedgerRows = [], fanoutManifests = [] }) {
+  const candidateUrl = candidate.canonicalSourceUrl;
+  const candidateId = candidate.sourceItemId;
+
+  const ledgerMatch = pairLedgerRows.find(
+    (row) => row.destinationUrl === candidateUrl || row.destinationId === candidateId,
+  );
+  if (ledgerMatch) {
+    return { matched: true, proof: 'pair-ledger', upstreamSourceItemId: ledgerMatch.sourceItemId };
+  }
+
+  for (const manifest of fanoutManifests) {
+    for (const destination of Object.values(manifest.destinations ?? {})) {
+      if (destination.destinationUrl === candidateUrl || destination.destinationId === candidateId) {
+        return { matched: true, proof: 'source-fanout-manifest', upstreamSourceItemId: manifest.sourceItemId };
+      }
+    }
+  }
+
+  const candidateNorm = normalizeForDerivedSource(candidate.text);
+  const candidateDomains = extractDomains(candidate.text);
+  for (const item of backfillQueueItems) {
+    const queueNorm = normalizeForDerivedSource(item.sourceBody ?? item.cleanDraftText ?? '');
+    const queueDomains = extractDomains(item.sourceBody ?? item.cleanDraftText ?? '');
+    const sharesPublicDomain = Array.from(candidateDomains).some((domain) => queueDomains.has(domain));
+    const prefixOverlap = candidateNorm.length >= 80 && queueNorm.includes(candidateNorm.slice(0, 80));
+    const tokenOverlap = sharedTokenCount(candidate.text, item.sourceBody ?? item.cleanDraftText ?? '') >= 12;
+    if (sharesPublicDomain && (prefixOverlap || tokenOverlap)) {
+      return { matched: true, proof: 'backfill-queue-text-match', upstreamSourceItemId: item.sourceItemId };
+    }
+  }
+
+  return { matched: false };
+}
+
 function livePostTextMatches({ intendedDraftText, observedLiveText }) {
   return normalizeLivePostText(intendedDraftText) === normalizeLivePostText(observedLiveText);
 }
@@ -420,6 +487,67 @@ test('docs and skill state that a scheduled source backfill slot is one source-i
   assert.match(docs, /all enabled destination/i);
   assert.match(skill, /It is \*\*not\*\* four independent destination jobs/i);
   assert.match(skill, /Never mark a source item `complete` merely because one destination posted/i);
+});
+
+test('derived-source crash guard prevents cascading a repost output as a fresh source', () => {
+  const candidate = {
+    sourcePlatform: 'x',
+    sourceItemId: '2052706064714305642',
+    canonicalSourceUrl: 'https://x.com/REEEthan_YT/status/2052706064714305642',
+    text: `For Codex/Claude Code frontend bugs: make a Cursor-style debug-mode skill.
+
+It boots a temp dev server, captures browser console logs/http context while you reproduce the issue, then loops on fixing it.
+
+Human in the Loop.
+
+https://github.com/EthanSK/local-web-debug-mode`,
+  };
+
+  const queueItems = [
+    {
+      sourceItemId: 'urn:li:activity:7446662205640499201',
+      sourceBody: `For developers who use Codex or Claude Code: you can make a Cursor-inspired debug mode skill for frontend development so whenever you have a bug, you ask it to use that skill, which will automatically boot up a temporary dev server and add http requests to send console logs to the dev server while you manually reproduce the issue, and try and fix it in a loop
+
+Human in the Loop.
+
+https://github.com/EthanSK/local-web-debug-mode`,
+    },
+  ];
+
+  assert.deepEqual(hasDerivedSourceShadow({ candidate, backfillQueueItems: queueItems }), {
+    matched: true,
+    proof: 'backfill-queue-text-match',
+    upstreamSourceItemId: 'urn:li:activity:7446662205640499201',
+  });
+
+  assert.deepEqual(
+    hasDerivedSourceShadow({
+      candidate,
+      pairLedgerRows: [
+        {
+          sourceItemId: 'urn:li:activity:7446662205640499201',
+          destinationUrl: 'https://x.com/REEEthan_YT/status/2052706064714305642',
+        },
+      ],
+    }),
+    {
+      matched: true,
+      proof: 'pair-ledger',
+      upstreamSourceItemId: 'urn:li:activity:7446662205640499201',
+    },
+  );
+});
+
+test('docs require derived-source suppression before listen-for-future publishes', () => {
+  const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
+  const globalDedupeSkill = readFileSync(join(root, 'skills/repost-global-dedupe/SKILL.md'), 'utf8');
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+
+  for (const text of [runSkill, globalDedupeSkill, sourceFanoutSkill]) {
+    assert.match(text, /derived-source/i);
+  }
+  assert.match(globalDedupeSkill, /backfill-queue-text-match/i);
+  assert.match(runSkill, /crashed\/compacted after creating the public post/i);
 });
 
 test('source fanout notifications are one aggregate message, not per-platform pings', () => {

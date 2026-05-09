@@ -95,6 +95,10 @@ example:
   clearly created, when the evidence is unambiguous;
 - correct bad ledger/audit/manifest rows when live proof shows the local state
   is wrong;
+- catch up a source fanout when a failed/compacted run created one destination
+  post and a later listen-for-future sweep cascaded that derived post to other
+  destinations; record those existing posts as `caught-up` for the original
+  source item instead of reposting;
 - retry a destination whose earlier failure was transient, using the current
   pair learnings and destination docs;
 - compact overlength drafts according to policy instead of skipping when
@@ -174,8 +178,12 @@ For each destination pair, before composing anything:
 1. Apply custom rules / considered state from `repost-custom-rules`.
 2. Check local `posted.jsonl`.
 3. Check `global-posted.jsonl` via `repost-global-dedupe`.
-4. Scrape destination recent posts for Layer 1 fuzzy dedupe.
-5. Run Layer 2 semantic dedupe when enabled.
+4. Run the global dedupe derived-source crash guard: if the destination proof
+   for this source item already exists indirectly because another pair/sweep
+   treated a derived public post as source, mark this destination `caught-up` and
+   repair the original fanout state rather than posting a duplicate.
+5. Scrape destination recent posts for Layer 1 fuzzy dedupe.
+6. Run Layer 2 semantic dedupe when enabled.
 
 Record the result in the manifest:
 

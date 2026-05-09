@@ -1,5 +1,17 @@
 # Changelog
 
+## v4.5.4 — 2026-05-09 — Derived-source cascade guard
+
+- Adds a crash-recovery derived-source guard so daily listen-for-future sweeps do
+  not treat public posts created by another pair/backfill as fresh organic source
+  material when a previous run crashed before writing complete global state.
+- Requires agents to search pair ledgers, source-fanout manifests, and active
+  backfill queues for matching destination URLs/ids or near-exact text/link
+  matches before publishing from an owned destination account.
+- Documents `pair.dedupe.derived_source_shadow` and updates the fanout contract
+  tests for the LinkedIn→X failure mode that cascaded into X→Bluesky/Threads/
+  Facebook.
+
 ## v4.5.3 — 2026-05-06 — Destination-wide UI-gated compaction
 
 - Generalizes the compaction rule across every destination: try the exact

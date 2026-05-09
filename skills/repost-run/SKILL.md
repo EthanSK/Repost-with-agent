@@ -239,6 +239,14 @@ already-routed reposts.
    duplicates. This is mandatory for routes such as LinkedIn→X→Bluesky plus
    X→Bluesky: whichever path first proves the Bluesky destination has the
    content wins, and the other path skips.
+   - **Derived-source crash guard:** if the current source post is from an owned
+     destination account and matches a previous pair's destination URL/id, a
+     source-fanout manifest, or an active backfill queue source body, treat it as
+     `derived-source-shadow` and do not cascade it as a fresh source. This guard
+     is required even when the global ledger is missing because a previous run
+     crashed/compacted after creating the public post but before writing state.
+     Repair/catch up the upstream fanout state instead of publishing more
+     downstream copies.
 3. **Destination dedupe.** Use your current-harness browser automation to navigate to
    `pair.destination.profileUrl`. Scroll to load ~50–100 recent posts. **Keep
    this scrape in your reasoning** — Layer 2 (step 4.5) reuses it. For each

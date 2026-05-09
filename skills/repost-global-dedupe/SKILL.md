@@ -79,6 +79,42 @@ Before finalizing that key, inherit lineage from the global ledger:
 This lineage inheritance is what prevents LinkedIn→X→Bluesky and a direct
 X→Bluesky pair from both posting the same LinkedIn-origin content to Bluesky.
 
+### Crash-recovery derived-source guard
+
+Do not rely only on the global ledger when the current source account is also a
+configured destination account for another pair. A crashed or compacted run can
+create a public destination post before it writes `global-posted.jsonl`; the next
+daily sweep may then scrape that public post as a fresh source and cascade it to
+other platforms.
+
+Before publishing a candidate from an owned destination account such as the X
+profile used by a LinkedIn→X pair:
+
+1. Search every local pair history (`~/.repost-with-agent/pairs/*/posted.jsonl`)
+   for a live row whose `destinationUrl` / `destinationId` matches the current
+   candidate's `canonicalSourceUrl` / `sourceItemId`. If found, inherit that
+   row's `contentKey` and treat the current source as a derived repost output,
+   not a new organic source.
+2. Search source-fanout manifests under `~/.repost-with-agent/source-fanouts/`
+   for destination records matching the candidate URL/id. If found, inherit the
+   manifest source item key (`<sourcePlatform>:<sourceItemId>`).
+3. Search active backfill queues under `~/.repost-with-agent/backfill-queues/`
+   when the candidate text/link is a near-exact match for a queue item's
+   `sourceBody`/clean draft, even if the failed run never wrote a manifest or
+   pair ledger. Match conservatively: same expanded public URL plus an obvious
+   text overlap, or ≥80-character normalized prefix/quote overlap. When this
+   matches, fail closed with `derived-source-shadow` rather than publishing.
+4. Append a `pair.dedupe.derived_source_shadow` audit event and a global catch-up
+   line if the destination already exists; otherwise skip the candidate without
+   creating a public post. The audit must name the upstream source item, the
+   matched queue/manifest/ledger proof, and the reason.
+
+This guard covers the exact failure mode where LinkedIn→X created an X post,
+OpenClaw failed before state was fully written, and the daily `x-to-*` sweep saw
+that X post as new source material. In that case the correct action is to repair
+or catch up the original LinkedIn fanout state, not repost the derived X post to
+more destinations.
+
 ## Global duplicate decision
 
 For the current pair and candidate:
@@ -86,11 +122,16 @@ For the current pair and candidate:
 1. Resolve the candidate `contentKey` using the rules above.
 2. If `pair.policy.globalDedupeEnabled === false`, skip this skill. Default is
    **enabled**.
-3. Search global ledger lines for the same `contentKey` where:
+3. Run the crash-recovery derived-source guard above. If it matches, do **not**
+   publish the candidate as a normal source item; either inherit the upstream
+   key and continue dedupe, or skip/catch up with `derived-source-shadow` when
+   the only safe conclusion is that the source is a repost output from another
+   pair/backfill.
+4. Search global ledger lines for the same `contentKey` where:
    - `destinationPlatform === pair.destination.platform`, and
    - if both are present, `destinationAccountHint` / destination profile/account
      point at the same configured destination identity.
-4. Compute the newest **live-success verdict** for those same-destination rows.
+5. Compute the newest **live-success verdict** for those same-destination rows.
    A row proves live success only when its event/status is one of
    `global.publish.success`, `global.publish.catchup`,
    `global.publish.remote_duplicate`, `global.publish.semantic_duplicate`,
@@ -99,13 +140,13 @@ For the current pair and candidate:
    `global.publish.deleted`, `deleted-*`, `posted-malformed`,
    `global.publish.malformed`, `needsRepost`, or `needsRemediation` remove or
    quarantine the old proof and must not count as duplicates.
-5. If the latest same-destination verdict is live success, the candidate is
+6. If the latest same-destination verdict is live success, the candidate is
    `duplicate-global` for this destination. Do **not** publish. Append:
    - a per-pair audit event `pair.dedupe.global_duplicate`, and
    - a per-pair catch-up line to `pairs/<id>/posted.jsonl`, and
    - a global catch-up line with `event: "global.publish.catchup"`,
      `status: "skipped-duplicate"`, and a note naming the matched destination.
-6. If no live same-destination verdict exists, the candidate is globally unique
+7. If no live same-destination verdict exists, the candidate is globally unique
    for this destination. Continue to destination scrape + Layer 2 semantic
    dedupe.
 
@@ -153,6 +194,23 @@ When this skill skips a candidate, append to `pairs/<id>/audit.jsonl`:
   "matchedDestinationPlatform": "<destination platform>",
   "matchedDestinationUrl": "<existing destination URL>",
   "reason": "same contentKey already posted/caught-up for this destination"
+}
+```
+
+For derived-source suppression, append the sibling shape:
+
+```json
+{
+  "ts": "<ISO-8601>",
+  "event": "pair.dedupe.derived_source_shadow",
+  "pairId": "<pair-id>",
+  "sourceItemId": "<candidate source id>",
+  "canonicalSourceUrl": "<candidate source URL>",
+  "contentKey": "<inherited upstream contentKey if known>",
+  "matchedUpstreamSourcePlatform": "linkedin",
+  "matchedUpstreamSourceItemId": "urn:li:activity:...",
+  "matchedProof": "global-ledger | pair-ledger | source-fanout-manifest | backfill-queue-text-match",
+  "reason": "source post is a public destination output from another pair/backfill; repair upstream state instead of cascading"
 }
 ```
 
