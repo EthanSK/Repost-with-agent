@@ -1,5 +1,11 @@
 # Changelog
 
+## v4.5.5 — 2026-05-09 — Transactional fanout state hardening
+
+- Requires source fanout/backfill runs to write durable `attempting` manifest/audit state before touching a public browser composer.
+- Requires pair/global/manifest success state to be flushed immediately after live-post proof and before moving to the next destination.
+- Documents `needs-state-repair` recovery for public posts created before all state writes complete.
+
 ## v4.5.4 — 2026-05-09 — Derived-source cascade guard
 
 - Adds a crash-recovery derived-source guard so daily listen-for-future sweeps do

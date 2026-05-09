@@ -201,9 +201,22 @@ mark it `unattempted` or `failed`; the top-level status must be `partial`.
 
 ## Step 4 — Attempt all missing destinations for this same source item
 
+### Transactional state rule
+
+A public browser publish must never be the first durable record of work. Before
+touching a destination composer, write durable local intent; immediately after
+live proof, write durable success/catch-up before attempting any other
+destination. This is the crash-recovery boundary that prevents a public post
+from existing with no resumable state if OpenClaw compacts, crashes, times out,
+or produces an incomplete terminal tool-use turn.
+
 For each `planned` destination:
 
-1. Mark the destination `attempting` in the manifest before touching the browser.
+1. Mark the destination `attempting` in the manifest **and flush it to disk**
+   before touching the browser. Include `attemptStartedAt`, `draftText`,
+   `textHash`, and `expectedDestinationPlatform`. Append
+   `source.fanout.destination.attempting` to that pair's `audit.jsonl`. If either
+   write fails, stop; do not open the composer or publish.
 2. Run `repost-run` steps 6–9 for this selected source item and destination
    pair: URL expansion, length/compact policy, compose, proof append, and global
    ledger append.
@@ -227,8 +240,13 @@ For each `planned` destination:
    `category: "live-text-mismatch"`, include the public URL plus observed and
    intended text excerpts, and stop the source fanout until Ethan decides
    whether to delete/repost or accept it.
-5. On success, set the destination to `posted` with `destinationUrl`,
-   `destinationId` when available, and `notifiedByAggregate: true|false` after Step 6.
+5. On success, immediately set the destination to `posted` with `destinationUrl`,
+   `destinationId` when available, and `notifiedByAggregate: true|false` after
+   Step 6. Flush the manifest, pair `posted.jsonl`, pair `audit.jsonl`, and
+   `global-posted.jsonl` before starting the next destination. If those writes
+   fail after a public post exists, stop the fanout and leave the manifest
+   `partial` / `needs-state-repair` with the captured URL; do not continue to
+   another platform.
 6. On rule/policy skip discovered during the loop, set `skipped-rule` or
    `skipped-by-policy` with the exact reason.
 7. On user/platform/config/login/account problems, set `blocked` with
@@ -238,6 +256,13 @@ For each `planned` destination:
 
 Refresh global/destination dedupe between destination attempts when another
 agent/run may have posted the same source item meanwhile.
+
+On resume, any destination left as `attempting` without terminal success must be
+treated as `needs-state-repair`: inspect recent destination posts and browser
+history for the stored `draftText`/`textHash`; if live proof exists, catch it up
+to `posted`/`caught-up` without reposting, otherwise demote it to `planned` or
+`failed` with an explicit reason. Never skip over an `attempting` destination to
+process a later queue item.
 
 ## Step 5 — Finalize status and emit resume data
 

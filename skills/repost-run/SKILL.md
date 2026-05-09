@@ -397,6 +397,12 @@ overlength/cut off:
 
 This is where the running agent drives the user's logged-in browser.
 
+Before opening or typing into a public composer, confirm the caller has already
+created durable `attempting` state for this selected source/destination pair
+when the run is part of a source fanout/backfill. If no manifest/audit
+`attempting` record exists and cannot be written, do not publish. A later crash
+would otherwise leave a public post with no resumable state.
+
 1. Reuse an existing destination tab if one is already open; otherwise navigate
    to the destination's compose URL (see `docs/destinations/<platform>.md`).
 2. Verify the active posting identity by **visible UI name** BEFORE typing:
@@ -483,6 +489,12 @@ Append the same proof to `~/.repost-with-agent/global-posted.jsonl` using the
 `event: "global.publish.success"`, and `status: "posted"`. This global append is
 not optional: it is how other pairs learn that this content already reached
 this destination.
+
+For source fanout/backfill runs, this success write is a transaction boundary:
+flush pair history, pair audit, global ledger, and the source-fanout manifest
+before beginning any later destination. If a public URL was captured but any
+state write fails, stop immediately with `needs-state-repair`; do not proceed to
+Bluesky/Threads/Facebook/etc. from a half-recorded X publish.
 
 ## Step 10 — Confirm to the user with post links (non-negotiable)
 

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "repost-with-agent",
-  "version": "4.5.4",
+  "version": "4.5.5",
   "description": "Skill-only agent/OpenClaw-compatible plugin for browser-based reposting across websites the current harness can safely operate through a logged-in browser; ships documented examples for LinkedIn, X, Bluesky, Threads, and Facebook. The running agent uses its existing tools (Read, Edit, Write, Bash, current-harness browser automation, and the current harness's Telegram/message tool \u2014 OpenClaw message tool or Claude Code plugin:telegram:telegram) to scrape, dedupe (Layer 1 strings + Layer 2 agent semantic check), apply custom user skip rules, post, log history, manage source-item fanout manifests for backfill slots, and notify. Maintains per-pair learnings.md so the agent does not re-figure site quirks every scheduled tick. No CLI, no MCP server, no platform SDKs.",
   "skills": [
     "skills/repost-pair-setup",

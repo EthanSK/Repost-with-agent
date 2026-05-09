@@ -550,6 +550,23 @@ test('docs require derived-source suppression before listen-for-future publishes
   assert.match(runSkill, /crashed\/compacted after creating the public post/i);
 });
 
+test('docs require transactional state before and after browser publish', () => {
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+  const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
+
+  assert.match(sourceFanoutSkill, /Transactional state rule/);
+  assert.match(sourceFanoutSkill, /before touching the browser/);
+  assert.match(sourceFanoutSkill, /source\.fanout\.destination\.attempting/);
+  assert.match(sourceFanoutSkill, /attemptStartedAt/);
+  assert.match(sourceFanoutSkill, /needs-state-repair/);
+  assert.match(sourceFanoutSkill, /before starting the next destination/);
+
+  assert.match(runSkill, /Before opening or typing into a public composer/);
+  assert.match(runSkill, /durable `attempting` state/);
+  assert.match(runSkill, /transaction boundary/);
+  assert.match(runSkill, /half-recorded X publish/);
+});
+
 test('source fanout notifications are one aggregate message, not per-platform pings', () => {
   const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
   const notifySkill = readFileSync(join(root, 'skills/repost-notify/SKILL.md'), 'utf8');
