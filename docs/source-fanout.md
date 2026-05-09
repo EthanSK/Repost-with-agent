@@ -64,6 +64,7 @@ Non-terminal outcomes:
 - `planned`
 - `attempting`
 - `failed`
+- `soft-failed` — safe deferred failure under the same-failure streak threshold
 - `unattempted`
 - `blocked` without a complete reason/nextAction
 
@@ -74,6 +75,10 @@ A non-terminal enabled destination means the source item fanout is `partial`.
 - `complete` — all enabled destinations are terminal and none is blocked.
 - `blocked` — all enabled destinations are terminal, but at least one destination
   is explicitly blocked with a reason/next action.
+- `soft-failed` — every remaining incomplete destination is a safe deferred
+  failure below the same-fingerprint threshold (default 3). The queue may
+  continue, but the source item remains deferred repair work rather than
+  complete.
 - `partial` — at least one enabled destination is still planned, attempting,
   failed, unattempted, or incompletely blocked.
 - `in-progress` — the active agent is still processing the fanout.
@@ -87,6 +92,15 @@ If a fanout ends `partial`, `blocked`, `in-progress`, or contains any
 must resume or repair that same source item first. It must not select a
 newer/older source item until the earlier one is `complete`, explicitly skipped,
 or cancelled with proof.
+
+Exception: `soft-failed` fanouts may be passed only while every deferred failure
+has `safeToContinue: true`, a specific `failureType`, `rootCause`,
+`failureFingerprint`, `consecutiveFailureCount`, and `failureThreshold`, and the
+same-fingerprint count is below threshold. When the same fingerprint reaches the
+threshold, promote it to `blocked` and stop the queue until fixed or skipped.
+Never soft-fail public-side-effect uncertainty, malformed/live-text mismatch,
+source URL leaks, login/config/account-switch needs, or ambiguous public/
+destructive/editorial decisions.
 
 The continuation should actively try to fix the blocker itself before asking the
 operator. Safe self-remediation includes clean-reposting deleted/malformed proof

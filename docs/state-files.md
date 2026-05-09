@@ -293,7 +293,7 @@ Schema:
   "schemaVersion": 1,
   "createdAt": "<ISO-8601>",
   "updatedAt": "<ISO-8601>",
-  "status": "in-progress | complete | blocked | partial",
+  "status": "in-progress | complete | soft-failed | blocked | partial",
   "runKind": "scheduled-backfill-source-fanout | manual-source-fanout | dry-run-source-fanout",
   "source": {
     "platform": "linkedin",
@@ -308,13 +308,19 @@ Schema:
       "pairId": "linkedin-to-x",
       "destinationPlatform": "x",
       "destinationAccountHint": "@<handle>",
-      "status": "planned | attempting | posted | already-posted | caught-up | skipped-rule | skipped-by-policy | blocked | failed | unattempted | needs-repost | deleted-malformed | deleted-runaway",
+      "status": "planned | attempting | posted | already-posted | caught-up | skipped-rule | skipped-by-policy | blocked | failed | soft-failed | unattempted | needs-repost | deleted-malformed | deleted-runaway",
       "terminal": false,
       "destinationUrl": "<published-or-matched URL when known>",
       "destinationId": "<platform id when known>",
       "category": "needs-login | needs-config | needs-account-switch | rate-limit | platform-error | unknown",
       "reason": "<human reason>",
       "nextAction": "<resume/user/platform action>",
+      "failureType": "browser-timeout | selector-missing | rate-limit | platform-5xx | tool-error | live-proof-timeout | needs-login | needs-config | public-side-effect-uncertain | unknown",
+      "rootCause": "<best concise root cause when status is failed/soft-failed/blocked>",
+      "failureFingerprint": "<pairId>:<failureType>:<rootCause-slug>",
+      "consecutiveFailureCount": 1,
+      "failureThreshold": 3,
+      "safeToContinue": true,
       "proof": {
         "localPosted": true,
         "globalPosted": true,
@@ -341,6 +347,11 @@ Invariants:
 - `blocked` is allowed only when every enabled destination is terminal and at
   least one destination is explicitly blocked with `category`, `reason`, and
   `nextAction`.
+- `soft-failed` is allowed only when every non-terminal destination is safe to
+  defer, has `status: "soft-failed"`, includes `failureType`, `rootCause`,
+  `failureFingerprint`, `consecutiveFailureCount`, `failureThreshold`, and
+  `safeToContinue: true`, and the same-fingerprint count is still below
+  threshold. The queue may advance, but the source item is not complete.
 - `partial` is required when any enabled destination is `planned`, `attempting`,
   `failed`, `unattempted`, `needs-repost`, `deleted-malformed`,
   `deleted-runaway`, missing from the manifest, or `blocked` without a complete
@@ -348,7 +359,8 @@ Invariants:
 - A scheduled backfill continuation must resume a `partial`, `blocked`,
   `in-progress`, `needs-repost`, deleted, or malformed earlier manifest before
   selecting a different source item, unless that earlier item was explicitly
-  skipped/cancelled with proof.
+  skipped/cancelled with proof. It may advance past `soft-failed` only while the
+  failure streak is below threshold and `safeToContinue` remains true.
 - Successful destination publishes still append to the pair's `posted.jsonl`,
   `audit.jsonl`, and `global-posted.jsonl`; the fanout manifest is an
   orchestration/result ledger, not a replacement for publish proof.
@@ -441,9 +453,12 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.backfill.published`               | Backfill loop publish succeeded. |
 | `pair.backfill.skipped_now_duplicate`   | Re-check between publishes found the candidate had been posted by another path. |
 | `source.fanout.start`                   | Source-item fanout began. Includes `sourcePlatform`, `sourceItemId`, `canonicalSourceUrl`, and the complete enabled `destinationPairIds` list. |
-| `source.fanout.destination`             | One enabled destination reached a manifest status (`posted`, `already-posted`, `caught-up`, `skipped-rule`, `skipped-by-policy`, `blocked`, `failed`, `unattempted`). |
+| `source.fanout.destination`             | One enabled destination reached a manifest status (`posted`, `already-posted`, `caught-up`, `skipped-rule`, `skipped-by-policy`, `blocked`, `failed`, `soft-failed`, `unattempted`). |
+| `source.fanout.destination.soft_failed` | A destination failure was classified as safe to defer under the failure-streak threshold. Includes `failureType`, `rootCause`, `failureFingerprint`, `consecutiveFailureCount`, `failureThreshold`, and `safeToContinue`. |
+| `source.fanout.failure_streak.blocked`  | The same failure fingerprint reached the threshold, so the source-level queue must stop until fixed/skipped. |
 | `source.fanout.complete`                | Every enabled destination for the source item reached terminal non-blocked status. |
 | `source.fanout.blocked`                 | Every enabled destination is terminal, but one or more destinations are explicitly blocked with reason/nextAction. |
+| `source.fanout.soft_failed`             | The source item has deferred safe failures under threshold; the queue may continue but repair data remains. |
 | `source.fanout.partial`                 | At least one enabled destination is missing, unattempted, failed, planned, or blocked without a complete next action. Includes resume data. |
 
 ### `source.fanout.partial` schema

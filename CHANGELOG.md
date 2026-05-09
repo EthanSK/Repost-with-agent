@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.5.6 — 2026-05-09 — Fail-soft backfill failure streaks
+
+- Adds `soft-failed` source fanout semantics so one safe transient destination failure does not freeze the whole historical backfill.
+- Requires failure classification fields: `failureType`, `rootCause`, `failureFingerprint`, `consecutiveFailureCount`, `failureThreshold`, and `safeToContinue`.
+- Allows queue advancement only below the same-fingerprint threshold (default 3), then promotes repeated failures to blocked; unsafe public-side-effect uncertainty still fails closed.
+- Adds executable fanout contract tests for safe soft failures, threshold blocking, unsafe failure types, and required docs.
+
 ## v4.5.5 — 2026-05-09 — Transactional fanout state hardening
 
 - Requires source fanout/backfill runs to write durable `attempting` manifest/audit state before touching a public browser composer.

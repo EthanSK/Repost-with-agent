@@ -38,10 +38,15 @@ automation, and configured current-harness user-message delivery.
 3. For source-item fanout, enumerate enabled pairs for the source before
    posting anything. The slot is not complete until every enabled destination
    has a manifest status: posted, already-posted/caught-up, skipped by rule or
-   policy, or a visible partial/blocked state with reason/nextAction. Finite
-   scheduled queues must not advance past an earlier partial/blocked/deleted/
-   malformed/needs-repost source item unless Ethan explicitly skips/cancels it
-   with proof.
+   policy, a safe `soft-failed` deferred failure under the streak threshold, or
+   a visible partial/blocked state with reason/nextAction. Finite scheduled
+   queues must not advance past an earlier partial/blocked/deleted/malformed/
+   needs-repost source item unless Ethan explicitly skips/cancels it with proof;
+   they may advance past `soft-failed` items only when the failure is safe to
+   defer and the same `failureFingerprint` has not reached the `failureThreshold`
+   (default 3). Soft-failed records must include `failureType`, `rootCause`,
+   `failureFingerprint`, `consecutiveFailureCount`, `failureThreshold`, and
+   `safeToContinue`.
    Before asking Ethan about such a blocker, first try to resolve it yourself
    when the safe next action is within the existing tool/account permissions:
    repair/repost malformed or deleted proof from local source text, correct bad
@@ -183,9 +188,12 @@ backfill is interrupted mid-way, the destination ends up with a contiguous
 recent history rather than a gap-bounded historical block.
 
 For source-item fanout, select one source item at a time from this ordered list
-and complete/blocked/partial its manifest before selecting the next source item.
-Do not let per-destination ledgers make the scheduler advance to another source
-item while an enabled destination for the current source item is unattempted.
+and complete/blocked/partial/soft-failed its manifest before selecting the next
+source item. Do not let per-destination ledgers make the scheduler advance to
+another source item while an enabled destination for the current source item is
+unattempted. The only exception is a documented `soft-failed` destination under
+the failure-streak threshold from `repost-source-fanout`, which is deferred
+repair work rather than a completed post.
 
 ## Step 5.5 — Layer 2 dedupe (semantic similarity, per candidate)
 
@@ -229,7 +237,9 @@ same theme with slightly different wording — Layer 2 catches those.
 For source-item fanout, this loop delegates each selected source item to
 `skills/repost-source-fanout/SKILL.md`: create/resume the fanout manifest,
 process every enabled destination, then return here only after the manifest is
-`complete`, `blocked`, or `partial` with resume data.
+`complete`, `soft-failed`, `blocked`, or `partial` with resume data.
+`soft-failed` means the queue may advance but the deferred destination remains
+recorded for repair and counted against its failure streak.
 
 For destination-specific pair backfill, process each candidate in order:
 

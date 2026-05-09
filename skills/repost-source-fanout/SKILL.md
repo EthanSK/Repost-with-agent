@@ -49,6 +49,12 @@ Per-destination status MUST be one of:
 - `failed` — an attempted destination failed without a clear terminal block.
   This is non-terminal and makes the fanout `partial` until retried or promoted
   to `blocked` with a reason.
+- `soft-failed` — an attempted destination failed in a way that is safe to
+  defer: no public post was created or the public side effect is fully known,
+  the failure has `failureType`, `rootCause`, `failureFingerprint`,
+  `consecutiveFailureCount`, `failureThreshold`, and `safeToContinue: true`,
+  and the consecutive same-fingerprint failure count is still below the
+  threshold. Default threshold: 3.
 - `unattempted` — the fanout ended before this enabled destination was checked.
   This is always non-terminal and makes the fanout `partial`.
 - `needs-repost` — cleanup/remediation proved a previous destination post was
@@ -74,6 +80,11 @@ Top-level fanout status MUST be:
 - `partial` — at least one enabled destination is `planned`, `attempting`,
   `failed`, `unattempted`, `needs-repost`, `deleted-malformed`,
   `deleted-runaway`, or `blocked` without a complete reason/nextAction.
+- `soft-failed` — every non-success/non-skip destination is a safe deferred
+  `soft-failed` destination whose same-fingerprint failure streak is below the
+  configured threshold. This is not a completed source item, but a finite
+  backfill scheduler may continue to later source items while keeping explicit
+  repair data for the deferred destination(s).
 - `in-progress` — the current agent is still actively processing destinations.
 
 Never mark a source item `complete` merely because one destination posted.
@@ -110,6 +121,45 @@ editorial judgment, would publish content whose safety/notability is uncertain,
 or the available evidence is insufficient to know the correct fix. If asking is
 necessary, leave a precise `blocked` record with `category`, `reason`,
 `nextAction`, proof URLs/excerpts, and what was already tried.
+
+## Fail-soft streak policy
+
+Do not let one transient destination failure freeze the whole historical
+backfill. Classify every failure and decide whether it is safe to defer.
+
+For each destination failure, write both the manifest destination record and the
+pair audit with:
+
+- `failureType` — e.g. `browser-timeout`, `selector-missing`, `rate-limit`,
+  `platform-5xx`, `tool-error`, `live-proof-timeout`, `needs-login`,
+  `needs-config`, `public-side-effect-uncertain`, `unknown`.
+- `rootCause` — the best concise explanation, not just the symptom.
+- `failureFingerprint` — stable string such as
+  `<pairId>:<failureType>:<rootCause-slug>` so repeated same-class failures can
+  be counted across source items.
+- `consecutiveFailureCount` and `failureThreshold` (default threshold: `3`).
+- `safeToContinue` — true only when advancing cannot create duplicates, lose a
+  public post, or hide an action Ethan must take.
+
+If `safeToContinue: true` and `consecutiveFailureCount < failureThreshold`, mark
+the destination `soft-failed`, append `source.fanout.destination.soft_failed`,
+record/update the queue-level `failureStreaks` entry, and allow the finite
+backfill scheduler to advance to the next source item. Keep the source item out
+of `complete`; it remains deferred repair work.
+
+If the same `failureFingerprint` reaches the threshold (default 3 consecutive
+failures), promote the current destination/source item to `blocked`, append
+`source.fanout.failure_streak.blocked`, and stop selecting later source items
+until the root cause is fixed or Ethan explicitly changes the threshold/skips.
+
+Reset the streak for a pair/fingerprint after a successful `posted`,
+`caught-up`, `already-posted`, or explicit non-failure skip for that pair.
+
+Never soft-fail these unsafe cases: public post may exist but cannot be proven,
+live-text mismatch/malformed post, source URL leak, login/config/account switch
+needed, uncertain duplicate where policy says block, or any case requiring
+Ethan's public/destructive/editorial decision. Those remain immediate
+`blocked`/`needs-state-repair` cases.
 
 ## Step 1 — Resolve source scope and destination pairs
 
@@ -157,8 +207,8 @@ On resume:
 
 1. Load the manifest for that source item.
 2. Keep terminal destination records unchanged.
-3. Attempt only destinations whose status is `planned`, `failed`, `unattempted`,
-   or incomplete `blocked`.
+3. Attempt only destinations whose status is `planned`, `failed`,
+   `soft-failed`, `unattempted`, or incomplete `blocked`.
 4. Before publishing anything, scan the source fanout directory and any active
    backfill queue file for earlier source items from the same source-level
    backfill. If an earlier item is `partial` or `in-progress`, or has a
@@ -166,10 +216,13 @@ On resume:
    `unattempted`, `needs-repost`, `deleted-malformed`, or `deleted-runaway`,
    stop and resume/repair that earlier item first. Do not use a later scheduled
    slot to skip over a partial source item.
-5. Do NOT select a different source item until this manifest is `complete`,
-   explicitly skipped, or cancelled with proof. A `blocked`, `partial`, or
-   `in-progress` manifest stops the finite queue until it is repaired or Ethan
-   explicitly decides to skip it.
+5. A prior `soft-failed` item is allowed to be passed only when every deferred
+   destination has `safeToContinue: true` and its same-fingerprint streak is
+   below threshold. Otherwise resume/repair it first.
+6. Do NOT select a different source item until this manifest is `complete`,
+   explicitly skipped, cancelled with proof, or `soft-failed` under the streak
+   threshold. A `blocked`, `partial`, or `in-progress` manifest stops the finite
+   queue until it is repaired or Ethan explicitly decides to skip it.
 
 ## Step 3 — Pre-compute destination outcomes together
 
@@ -251,8 +304,11 @@ For each `planned` destination:
    `skipped-by-policy` with the exact reason.
 7. On user/platform/config/login/account problems, set `blocked` with
    `category`, `reason`, and `nextAction`.
-8. On unexpected failure without a clear next action, set `failed` and include
-   the error. This keeps the fanout `partial` until a future run resumes.
+8. On unexpected failure without a clear next action, classify it with the
+   fail-soft streak policy above. If it is safe to defer and the same
+   fingerprint is still below threshold, set `soft-failed` and continue the
+   finite queue. If unsafe or at threshold, set `failed`/`blocked` with the
+   failure metadata and stop as required.
 
 Refresh global/destination dedupe between destination attempts when another
 agent/run may have posted the same source item meanwhile.
@@ -272,25 +328,30 @@ After all enabled destinations have been evaluated for this source item:
 2. If every destination is terminal and none is blocked, set `status: "complete"`.
 3. If every destination is terminal but one or more are explicitly blocked, set
    `status: "blocked"` and keep those `nextAction` fields visible.
-4. If any enabled destination is non-terminal or missing from the manifest, set
-   `status: "partial"`.
-5. For `partial` or `blocked`, add `resume` data:
+4. If every non-terminal destination is `soft-failed` with `safeToContinue: true`
+   and below its streak threshold, set `status: "soft-failed"` and include
+   deferred repair data.
+5. If any other enabled destination is non-terminal or missing from the
+   manifest, set `status: "partial"`.
+6. For `partial`, `soft-failed`, or `blocked`, add `resume` data:
    - `sourceItemId`
    - `canonicalSourceUrl`
    - `pendingPairIds`
    - `blockedPairIds`
    - a one-sentence `nextAction`
-6. Append one of `source.fanout.complete`, `source.fanout.blocked`, or
-   `source.fanout.partial` to every in-scope pair's `audit.jsonl`.
+7. Append one of `source.fanout.complete`, `source.fanout.blocked`,
+   `source.fanout.soft_failed`, or `source.fanout.partial` to every in-scope
+   pair's `audit.jsonl`.
 
 A scheduled backfill slot may select the next source item ONLY after every
-earlier source item in the same queue/fanout set is `complete`, explicitly
-skipped, or cancelled with proof. `blocked`, `partial`, or `in-progress` fanouts
-must be resolved first instead of being skipped by a later scheduled slot. A
-deleted or malformed destination (`posted-malformed`, `deleted-malformed`,
-`deleted-runaway`, `deleted-source-url-leak`, `needs-repost`,
-`needsRemediation: true`) is not terminal and must be repaired/skipped with
-explicit proof before the scheduler advances.
+earlier source item in the same queue/fanout set is `complete`, `soft-failed`
+under the configured streak threshold, explicitly skipped, or cancelled with
+proof. `blocked`, `partial`, or `in-progress` fanouts must be resolved first
+instead of being skipped by a later scheduled slot. A deleted or malformed
+destination (`posted-malformed`, `deleted-malformed`, `deleted-runaway`,
+`deleted-source-url-leak`, `needs-repost`, `needsRemediation: true`) is not
+soft-failable and must be repaired/skipped with explicit proof before the
+scheduler advances.
 
 ## Step 6 — Aggregate notification / report shape
 

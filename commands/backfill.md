@@ -33,7 +33,9 @@ Dispatches to `skills/repost-backfill/SKILL.md`.
 For `source:<platform>` / source-level scheduled slots, it also loads
 `skills/repost-source-fanout/SKILL.md`: choose one source item, enumerate all
 enabled destination pairs for that source, and mark the fanout `complete`,
-`blocked`, or `partial` only after every enabled destination has an outcome.
+`soft-failed`, `blocked`, or `partial` only after every enabled destination has
+an outcome. `soft-failed` may advance the queue only below the same-failure
+streak threshold; it is not a completed source item.
 
 For `<pair-id>`, it applies custom user skip rules + `considered.jsonl` before
 dedupe and again inside the publish loop for that single destination pair.

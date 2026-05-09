@@ -14,6 +14,14 @@ const TERMINAL_STATUSES = new Set([
 ]);
 
 const QUEUE_ADVANCE_STATUSES = new Set(['complete', 'skipped-rule', 'skipped-by-policy', 'cancelled']);
+const UNSAFE_SOFT_FAILURE_TYPES = new Set([
+  'public-side-effect-uncertain',
+  'live-text-mismatch',
+  'source-url-leak',
+  'needs-login',
+  'needs-config',
+  'needs-account-switch',
+]);
 
 const LIVE_SUCCESS_STATUSES = new Set(['posted', 'caught-up', 'skipped-duplicate']);
 
@@ -83,8 +91,28 @@ function isExplicitQueueBlock(item) {
   return item?.status === 'blocked' && Boolean(item.category) && Boolean(item.reason) && Boolean(item.nextAction);
 }
 
+function isSoftFailureBelowThreshold(item) {
+  if (item?.status !== 'soft-failed') return false;
+
+  const failures = item.failures ?? item.destinations?.filter((destination) => destination.status === 'soft-failed') ?? [];
+  if (failures.length === 0) return false;
+
+  return failures.every((failure) => {
+    if (UNSAFE_SOFT_FAILURE_TYPES.has(failure.failureType)) return false;
+    return (
+      failure.safeToContinue === true &&
+      Boolean(failure.failureType) &&
+      Boolean(failure.rootCause) &&
+      Boolean(failure.failureFingerprint) &&
+      Number.isFinite(failure.consecutiveFailureCount) &&
+      Number.isFinite(failure.failureThreshold) &&
+      failure.consecutiveFailureCount < failure.failureThreshold
+    );
+  });
+}
+
 function canAdvancePastQueueItem(item) {
-  return QUEUE_ADVANCE_STATUSES.has(item?.status) || isExplicitQueueBlock(item);
+  return QUEUE_ADVANCE_STATUSES.has(item?.status) || isExplicitQueueBlock(item) || isSoftFailureBelowThreshold(item);
 }
 
 function queuePrefixBlocker(items, currentQueueIndex) {
@@ -410,6 +438,49 @@ test('explicit blocks are closed as blocked, but incomplete blocks stay partial'
   assert.equal(summarizeFanout(incompleteBlock).status, 'partial');
 });
 
+test('finite scheduled queues may pass safe soft failures until the streak threshold', () => {
+  const softFailedItem = {
+    queueIndex: 6,
+    sourceNum: 17,
+    status: 'soft-failed',
+    failures: [
+      {
+        pairId: 'linkedin-to-bluesky',
+        status: 'soft-failed',
+        failureType: 'browser-timeout',
+        rootCause: 'Bluesky compose button did not become enabled before timeout',
+        failureFingerprint: 'linkedin-to-bluesky:browser-timeout:compose-button-disabled',
+        consecutiveFailureCount: 2,
+        failureThreshold: 3,
+        safeToContinue: true,
+      },
+    ],
+  };
+
+  assert.equal(canAdvancePastQueueItem(softFailedItem), true);
+  assert.equal(
+    canAdvancePastQueueItem({
+      ...softFailedItem,
+      failures: [{ ...softFailedItem.failures[0], consecutiveFailureCount: 3 }],
+    }),
+    false,
+  );
+  assert.equal(
+    canAdvancePastQueueItem({
+      ...softFailedItem,
+      failures: [{ ...softFailedItem.failures[0], failureType: 'public-side-effect-uncertain' }],
+    }),
+    false,
+  );
+  assert.equal(
+    canAdvancePastQueueItem({
+      ...softFailedItem,
+      failures: [{ ...softFailedItem.failures[0], safeToContinue: false }],
+    }),
+    false,
+  );
+});
+
 test('finite scheduled queues must refuse later items while earlier work is unresolved', () => {
   const queueItems = [
     { queueIndex: 4, sourceNum: 10, status: 'complete' },
@@ -548,6 +619,24 @@ test('docs require derived-source suppression before listen-for-future publishes
   }
   assert.match(globalDedupeSkill, /backfill-queue-text-match/i);
   assert.match(runSkill, /crashed\/compacted after creating the public post/i);
+});
+
+test('docs require fail-soft failure streak logging before hard-blocking backfill', () => {
+  const sourceFanoutSkill = readFileSync(join(root, 'skills/repost-source-fanout/SKILL.md'), 'utf8');
+  const backfillSkill = readFileSync(join(root, 'skills/repost-backfill/SKILL.md'), 'utf8');
+  const stateDocs = readFileSync(join(root, 'docs/state-files.md'), 'utf8');
+  const sourceFanoutDocs = readFileSync(join(root, 'docs/source-fanout.md'), 'utf8');
+
+  for (const text of [sourceFanoutSkill, backfillSkill, stateDocs, sourceFanoutDocs]) {
+    assert.match(text, /soft-failed/);
+    assert.match(text, /failureFingerprint/);
+    assert.match(text, /failureThreshold/);
+  }
+
+  assert.match(sourceFanoutSkill, /Fail-soft streak policy/);
+  assert.match(sourceFanoutSkill, /default threshold: `3`/);
+  assert.match(sourceFanoutSkill, /source\.fanout\.failure_streak\.blocked/);
+  assert.match(sourceFanoutSkill, /Never soft-fail these unsafe cases/);
 });
 
 test('docs require transactional state before and after browser publish', () => {
