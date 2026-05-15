@@ -734,7 +734,7 @@ test('docs require live destination text proof before success state', () => {
   assert.match(stateDocs, /global\.publish\.malformed/i);
 });
 
-test('docs require exact text fidelity and forbid compaction/rewording', () => {
+test('docs require exact-first text fidelity and overlength-only compaction', () => {
   const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
   const stateDocs = readFileSync(join(root, 'docs/state-files.md'), 'utf8');
   const xDocs = readFileSync(join(root, 'docs/destinations/x.md'), 'utf8');
@@ -743,13 +743,15 @@ test('docs require exact text fidelity and forbid compaction/rewording', () => {
   const facebookDocs = readFileSync(join(root, 'docs/destinations/facebook.md'), 'utf8');
 
   assert.match(runSkill, /Destination-wide Ethan rule/i);
-  assert.match(runSkill, /never reword public post text/i);
-  assert.match(stateDocs, /exact-source-body-only/i);
-  assert.match(stateDocs, /forbidSemanticRewrites/i);
+  assert.match(runSkill, /exact wording comes first/i);
+  assert.match(runSkill, /live feedback[\s\S]*overlength\/cut off/i);
+  assert.match(runSkill, /compact\/reword just enough to fit/i);
+  assert.match(stateDocs, /exact-source-body-unless-live-ui-overlength/i);
+  assert.match(stateDocs, /semanticRewriteAllowedOnlyWhen/i);
   for (const docs of [xDocs, blueskyDocs, threadsDocs, facebookDocs]) {
-    assert.match(docs, /never reword public post text/i);
-    assert.match(docs, /skip\/block/i);
-    assert.match(docs, /do not compact, summarize, paraphrase, truncate/i);
+    assert.match(docs, /preserve exact public post text by default/i);
+    assert.match(docs, /compact\/reword only enough to fit/i);
+    assert.match(docs, /cannot fit without losing meaning/i);
   }
 });
 

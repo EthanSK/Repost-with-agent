@@ -143,7 +143,7 @@ openclaw cron add \
   --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
   --agent main \
   --session isolated \
-  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, preserve source wording exactly by default, compact/reword only if the live destination UI rejects or cuts off the exact cleaned draft for length, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
   --thinking medium \
   --timeout-seconds 21600 \
   --cron "0 * * * *" \

@@ -1,6 +1,6 @@
 {
   "name": "repost-with-agent",
-  "version": "4.5.7",
+  "version": "4.5.8",
   "description": "Skill-only agent/OpenClaw-compatible plugin for agent-driven, browser-based reposting across websites the current harness can safely operate through a logged-in browser. Ships documented examples for LinkedIn, X, Bluesky, Threads, and Facebook, plus a source-item fanout contract so scheduled backfill slots handle one source item across all enabled destinations. No CLI, no MCP server, no Playwright, no platform SDKs \u2014 just skills + commands + JSON state, custom rules, dedupe, fanout manifests, and aggregate source-item confirmations.",
   "license": "MIT",
   "repository": {

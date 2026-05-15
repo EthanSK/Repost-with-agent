@@ -43,17 +43,20 @@ the full lifecycle + good/bad-entry guidance.
 > also fire a publish confirmation. Silent publishes are a bug. (Ethan voice
 > 5977 + 5978, 2026-05-01.)
 
-> **Never reword Ethan's posts — non-negotiable.** Public destination post text
-> must preserve the original source post wording exactly. Do not summarize,
+> **Never reword Ethan's posts unless the live destination UI rejects the exact
+> cleaned draft for length — non-negotiable.** Public destination post text must
+> preserve the original source post wording exactly by default. Do not summarize,
 > compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
 > phrasing because it seems awkward, harsh, redundant, off-brand, or inefficient.
-> The wording may be intentional and nuanced. Allowed public-text changes are
-> limited to removing source-platform UI artifacts outside the real post body
-> (for example reaction counts or `...more`) and replacing forbidden
+> The wording may be intentional and nuanced. Allowed pre-length public-text
+> changes are limited to removing source-platform UI artifacts outside the real
+> post body (for example reaction counts or `...more`) and replacing forbidden
 > source-platform wrapper links (`lnkd.in`, LinkedIn activity URLs, source
-> permalinks) with their verified non-source target. If exact text will not fit
-> a destination, block/skip that destination and tell Ethan; do not publish a
-> rewritten version. (Ethan voice, 2026-05-15.)
+> permalinks) with their verified non-source target. If the live destination UI
+> explicitly reports overlength/cutoff, compact/reword only enough to fit while
+> preserving Ethan's intent, tone, links, key claims, and nuance. If it still
+> cannot fit without losing meaning, block/skip that destination and tell Ethan.
+> (Ethan voice, 2026-05-15.)
 
 
 **Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
@@ -80,11 +83,12 @@ the full lifecycle + good/bad-entry guidance.
 2. **New pairs default to `mode: "preview-only"` and `enabled: false`.** Don't
    flip without explicit, current-conversation user authorization.
 3. **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item and fans it out to every enabled destination pair for that source. It writes/updates a fanout manifest and is `partial` unless every enabled destination is posted, already-posted/caught-up, skipped by rule/policy, or explicitly blocked with reason. Do not treat a single destination success as source completion unless the user explicitly requested a destination-specific pair job.
-4. **Exact text fidelity is mandatory.** No content rewording, compaction,
-   paraphrase, grammar cleanup, tone adjustment, or editorial improvement is
-   ever allowed in a public destination post. If the exact cleaned source text
-   cannot fit a destination, skip/block and notify Ethan rather than changing
-   the words.
+4. **Exact-first text fidelity is mandatory.** No content rewording,
+   compaction, paraphrase, grammar cleanup, tone adjustment, or editorial
+   improvement is allowed unless the live destination UI explicitly reports
+   overlength/cutoff. In that one case, compact only enough to fit while
+   preserving Ethan's intent, tone, links, key claims, and nuance; otherwise use
+   the exact cleaned source text.
 5. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.

@@ -112,8 +112,8 @@ example:
   the original source item instead of reposting;
 - retry a destination whose earlier failure was transient, using the current
   pair learnings and destination docs;
-- skip/block overlength drafts according to exact text-fidelity policy instead
-  of changing Ethan's words.
+- compact/reword overlength drafts only after live destination UI length/cutoff
+  feedback, preserving Ethan's intent, tone, links, key claims, and nuance.
 
 Ask Ethan only when the remediation is externally destructive and ambiguous,
 requires new credentials/account switching/configuration, needs a product or
@@ -271,8 +271,8 @@ For each `planned` destination:
    `source.fanout.destination.attempting` to that pair's `audit.jsonl`. If either
    write fails, stop; do not open the composer or publish.
 2. Run `repost-run` steps 6–9 for this selected source item and destination
-   pair: URL expansion, exact text-fidelity/length policy, compose, proof append,
-   and global ledger append.
+   pair: URL expansion, exact-first/overlength-only text policy, compose, proof
+   append, and global ledger append.
    - The mandatory source URL leak guard from `repost-run` is required here too:
      if the final public draft contains the source canonical URL or source
      permalink marker, block that destination with `source-url-leak-guard` rather

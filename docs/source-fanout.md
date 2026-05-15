@@ -52,7 +52,7 @@ Terminal outcomes:
 - `skipped-rule` — a user custom rule / considered entry intentionally skipped
   the item.
 - `skipped-by-policy` — an explicit configured policy skipped it, e.g. an
-  overlength skip policy.
+  overlength item that could not be compacted without losing meaning.
 - `blocked` — terminal only when it includes `category`, `reason`, and
   `nextAction`. A destination where the platform created a public post but the
   live text did not match the intended draft is `blocked` with
@@ -104,10 +104,10 @@ destructive/editorial decisions.
 
 The continuation should actively try to fix the blocker itself before asking the
 operator. Safe self-remediation includes clean-reposting deleted/malformed proof
-from local source text without changing the words, correcting wrong
-ledger/manifest rows from live proof, retrying transient destination failures,
-and applying exact text-fidelity overlength skips/blocks. Ask for help only when
-the next action is ambiguous, requires credentials/config, needs a
+from local source text, correcting wrong ledger/manifest rows from live proof,
+retrying transient destination failures, and applying exact-first overlength-only
+compaction when live UI feedback proves the exact draft is too long. Ask for
+help only when the next action is ambiguous, requires credentials/config, needs a
 safety/editorial judgment, or would perform an uncertain destructive public
 action. In that case, the `blocked` record must say what was already tried and
 what exact decision/action is needed.

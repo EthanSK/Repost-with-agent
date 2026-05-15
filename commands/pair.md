@@ -31,9 +31,9 @@ JSON state lives at `~/.repost-with-agent/pairs.json`, per-pair files under
 `~/.repost-with-agent/source-fanouts/`. The agent reads/writes them via the
 native Read/Edit/Write tools.
 
-## Preserve exact post wording — non-negotiable
+## Exact first, overlength-only rewrite — non-negotiable
 
-> Public destination post text must preserve the original source post wording exactly. New and edited pairs default to `policy.overlengthStrategy: "skip"`, `policy.textFidelity: "exact-source-body-only"`, and `policy.forbidSemanticRewrites: true`. Do not compact, truncate, paraphrase, summarize, fix grammar, or otherwise reword a public post to fit a destination.
+> Public destination post text must preserve the original source wording exactly by default. New and edited pairs default to `policy.overlengthStrategy: "compact"`, `policy.textFidelity: "exact-source-body-unless-live-ui-overlength"`, `policy.forbidSemanticRewrites: true`, and `policy.semanticRewriteAllowedOnlyWhen: "live-ui-overlength"`. Do not compact, truncate, paraphrase, summarize, fix grammar, or otherwise reword unless the live destination UI rejects/cuts off the exact cleaned draft for length.
 
 The `repost-pair-setup` skill must write those defaults unless Ethan explicitly changes policy later.
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v4.5.8 — 2026-05-15 — Overlength-only compaction clarification
+
+- Restores Ethan/OpenClaw `overlengthStrategy: "compact"` while preserving exact source wording as the default.
+- Allows compacting/rewording only after the live destination UI explicitly rejects or cuts off the exact cleaned draft for length.
+- Requires overlength compaction to preserve intent, tone, links, key claims, and nuance; if it cannot fit without losing meaning, skip/block and notify Ethan.
+- Updates active instructions, templates, destination docs, cron prompt examples, and fanout contract tests for exact-first / overlength-only text fidelity.
+
 ## v4.5.7 — 2026-05-15 — Exact post wording hardening
 
 - Makes exact source-post text fidelity non-negotiable across repo instructions,

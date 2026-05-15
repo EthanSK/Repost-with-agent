@@ -39,9 +39,9 @@ current-harness primary message delivery) to:
 
 Scheduled preview/dry ticks are allowed for enabled `listen-for-future` pairs, but the scheduler prompt must explicitly say not to publish.
 
-## Preserve exact post wording — non-negotiable
+## Exact first, overlength-only rewrite — non-negotiable
 
-> Public destination post text must preserve the original source post wording exactly. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. If the exact cleaned source text will not fit, skip/block and tell Ethan instead of posting altered wording.
+> Public destination post text must preserve the original source wording exactly by default. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. Only if the live destination UI explicitly rejects/cuts off the exact cleaned draft for length may the agent compact/reword enough to fit while preserving intent, tone, links, key claims, and nuance. If it cannot fit without losing meaning, skip/block and tell Ethan.
 
 `skills/repost-run/SKILL.md` step 7 enforces this. Don't bypass.
 

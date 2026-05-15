@@ -1,10 +1,10 @@
-# CLAUDE.md — Repost-with-agent (v4.5.7)
+# CLAUDE.md — Repost-with-agent (v4.5.8)
 
 Guidance for any Claude Code / Claude Agent / OpenClaw session operating on
 this repo. Read this BEFORE you touch state, run a publish, or hand off to a
 scheduled tick.
 
-## v4.5.7 architecture in one paragraph
+## v4.5.8 architecture in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -32,19 +32,22 @@ existing harness... we don't code anything in.")
 > through any non-skill path you MUST also fire a Telegram confirmation.
 > Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
 
-## The non-negotiable rule — preserve exact post wording
+## The non-negotiable rule — exact first, overlength-only rewrite
 
-> **Never reword Ethan's posts — non-negotiable.** Public destination post text
-> must preserve the original source post wording exactly. Do not summarize,
+> **Never reword Ethan's posts unless the live destination UI rejects the exact
+> cleaned draft for length — non-negotiable.** Public destination post text must
+> preserve the original source post wording exactly by default. Do not summarize,
 > compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
 > phrasing because it seems awkward, harsh, redundant, off-brand, or inefficient.
-> The wording may be intentional and nuanced. Allowed public-text changes are
-> limited to removing source-platform UI artifacts outside the real post body
-> (for example reaction counts or `...more`) and replacing forbidden
+> The wording may be intentional and nuanced. Allowed pre-length public-text
+> changes are limited to removing source-platform UI artifacts outside the real
+> post body (for example reaction counts or `...more`) and replacing forbidden
 > source-platform wrapper links (`lnkd.in`, LinkedIn activity URLs, source
-> permalinks) with their verified non-source target. If exact text will not fit
-> a destination, block/skip that destination and tell Ethan; do not publish a
-> rewritten version. (Ethan voice, 2026-05-15.)
+> permalinks) with their verified non-source target. If the live destination UI
+> explicitly reports overlength/cutoff, compact/reword only enough to fit while
+> preserving Ethan's intent, tone, links, key claims, and nuance. If it still
+> cannot fit without losing meaning, block/skip that destination and tell Ethan.
+> (Ethan voice, 2026-05-15.)
 
 Defense in depth — the exact-wording rule is restated in:
 
@@ -195,10 +198,12 @@ ticks.
 - New pairs default to `mode: "preview-only"` and `enabled: false`. Intentional.
 - Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but source-item fanout backfill jobs, per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
 - **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item, enumerates every enabled destination pair for that source, and records each destination as posted/already-posted/skipped/blocked/partial in a fanout manifest. Do not treat one destination success as source-item completion unless the user explicitly requested a destination-specific pair job.
-- **Exact text fidelity is mandatory.** No content rewording, compaction,
-  paraphrase, grammar cleanup, tone adjustment, or editorial improvement is ever
-  allowed in a public destination post. If the exact cleaned source text cannot
-  fit a destination, skip/block and notify Ethan rather than changing the words.
+- **Exact-first text fidelity is mandatory.** No content rewording, compaction,
+  paraphrase, grammar cleanup, tone adjustment, or editorial improvement is
+  allowed unless the live destination UI explicitly reports overlength/cutoff.
+  In that one case, compact only enough to fit while preserving Ethan's intent,
+  tone, links, key claims, and nuance; otherwise use the exact cleaned source
+  text.
 - Live publishes always need either `mode: "live-approved"` (for scheduled
   ticks) or explicit per-post user authorization (`mode: "approval-required"`).
   `preview-only` always refuses.

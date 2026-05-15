@@ -79,9 +79,10 @@ The directories are created lazily on first run for a pair.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip",
-        "textFidelity": "exact-source-body-only",
+        "overlengthStrategy": "compact",
+        "textFidelity": "exact-source-body-unless-live-ui-overlength",
         "forbidSemanticRewrites": true,
+        "semanticRewriteAllowedOnlyWhen": "live-ui-overlength",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -105,16 +106,20 @@ Field invariants:
 - `mode: "live-approved"` is the only mode that allows unattended scheduled live publishes; scheduled dry/preview jobs may inspect pairs without publishing.
 - Optional top-level `schedulerJobs` records human/agent-readable scheduler intent (all-enabled sweep, source-item fanout backfill jobs, per-pair jobs, subsets, preview-only jobs). The host scheduler remains the operational source of truth.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
-- `policy.overlengthStrategy: "skip"` is the Ethan/OpenClaw default and the
-  only safe default. If the exact cleaned source text does not fit the
-  destination, skip/block and notify Ethan; do not compact, truncate, summarize,
-  paraphrase, fix grammar, or otherwise reword the public post text.
-- `policy.textFidelity: "exact-source-body-only"` and
-  `policy.forbidSemanticRewrites: true` are the default guardrails. They mean
-  the public destination draft must preserve Ethan's wording exactly, except
-  for removing source-platform UI artifacts outside the real post body and
-  replacing forbidden source-platform wrapper links with verified non-source
-  targets.
+- `policy.overlengthStrategy: "compact"` is the Ethan/OpenClaw default, but it
+  only applies after the live destination UI explicitly reports overlength or
+  cutoff for the exact cleaned draft. Before that feedback, do not compact,
+  truncate, summarize, paraphrase, fix grammar, or otherwise reword the public
+  post text.
+- `policy.textFidelity: "exact-source-body-unless-live-ui-overlength"`,
+  `policy.forbidSemanticRewrites: true`, and
+  `policy.semanticRewriteAllowedOnlyWhen: "live-ui-overlength"` are the default
+  guardrails. They mean the public destination draft must preserve Ethan's
+  wording exactly, except for removing source-platform UI artifacts outside the
+  real post body and replacing forbidden source-platform wrapper links with
+  verified non-source targets. The only rewrite exception is compacting a
+  live-UI-proven overlength draft while preserving intent, tone, links, key
+  claims, and nuance.
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.

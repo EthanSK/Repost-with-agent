@@ -50,7 +50,7 @@ For **live publish jobs**:
 - [ ] At least one pair in scope has `runMode === "listen-for-future"` for listen jobs, or `runMode === "backfill"` / explicit one-shot authorization for source backfill jobs.
 - [ ] User is logged into source + destination platforms needed by scoped live-approved pairs in the current harness browser profile.
 - [ ] Preview/publish validation has succeeded for each publish-capable destination family being scheduled (`audit.jsonl` shows `pair.preview.success` or `pair.publish.success`).
-- [ ] The scheduled prompt/config explicitly says destination text must preserve the source wording exactly; if the exact cleaned text does not fit, skip/block and notify Ethan instead of compacting, truncating, paraphrasing, or fixing grammar.
+- [ ] The scheduled prompt/config explicitly says destination text must preserve the source wording exactly by default; if the live UI rejects/cuts off the exact cleaned text for length, compact only enough to fit while preserving intent, tone, links, key claims, and nuance.
 - [ ] `notification.delivery` is configured for the current user-facing channel and the `repost-notify` test landed for publish-capable pairs.
 
 For **source backfill fanout jobs**:
@@ -58,7 +58,7 @@ For **source backfill fanout jobs**:
 - [ ] At least one enabled pair has the requested `source.platform`.
 - [ ] The scheduler prompt says one source item fans out to all enabled destinations.
 - [ ] The prompt says to write/resume the fanout manifest, send one aggregate user-facing message per source item with every platform outcome/reason, and not select another source item while any enabled destination is partial.
-- [ ] The prompt says never to reword public destination text; overlength exact drafts are skipped/blocked, not compacted or truncated.
+- [ ] The prompt says never to pre-emptively reword public destination text; overlength exact drafts may be compacted/reworded only after live UI length feedback.
 - [ ] Publish-capable destinations still satisfy the live/preview policy gates above.
 
 For **dry/preview jobs**:
@@ -111,7 +111,7 @@ openclaw cron add \
   --description "Repost-with-agent LinkedIn source-item fanout backfill slot" \
   --agent main \
   --session isolated \
-  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, preserve the source post wording exactly in every public destination post, skip/block any destination where the exact cleaned text will not fit instead of compacting/truncating/rewording, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
+  --message "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, preserve the source post wording exactly by default in every public destination post, compact/reword only if the live destination UI rejects or cuts off the exact cleaned draft for length, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial." \
   --thinking medium \
   --timeout-seconds 21600 \
   --cron "0 * * * *" \

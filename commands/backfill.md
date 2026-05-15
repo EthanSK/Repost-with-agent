@@ -52,11 +52,11 @@ voice 6021.)
 - Backfill respects `policy.minDelayBetweenPostsMinutes` as a floor on
   `--interval`.
 
-## Preserve exact post wording — non-negotiable
+## Exact first, overlength-only rewrite — non-negotiable
 
-> Public destination post text must preserve the original source post wording exactly. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. If the exact cleaned source text will not fit, skip/block and tell Ethan instead of posting altered wording.
+> Public destination post text must preserve the original source wording exactly by default. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. Only if the live destination UI explicitly rejects/cuts off the exact cleaned draft for length may the agent compact/reword enough to fit while preserving intent, tone, links, key claims, and nuance. If it cannot fit without losing meaning, skip/block and tell Ethan.
 
-For source fanout and destination-specific backfills, exact text fidelity wins over any older compaction/truncation behavior.
+For source fanout and destination-specific backfills, exact text fidelity wins unless the destination UI proves the exact draft is overlength/cut off.
 
 ## Confirm every successful source item — non-negotiable
 

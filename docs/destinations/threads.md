@@ -74,13 +74,14 @@ post volume for chatty accounts; 30 typically covers a couple of weeks.
 Bump `pair.policy.semanticDedupeWindowSize` higher (50–100) for very
 active Threads accounts or leave at 30 for moderate-cadence ones.
 
-## Exact text / length handling
+## Exact-first text / length handling
 
-For Ethan/OpenClaw runs, never reword public post text. Put the exact
-leak-guarded draft into the live composer. If the UI accepts the exact draft,
-publish it exactly. If the UI reports overlength or cutoff feedback, skip/block
-and tell Ethan; do not compact, summarize, paraphrase, truncate, fix grammar, or
-otherwise change the wording.
+For Ethan/OpenClaw runs, preserve exact public post text by default. Put the
+exact leak-guarded draft into the live composer first. If the UI accepts the
+exact draft, publish it exactly. If the UI reports overlength or cutoff feedback,
+compact/reword only enough to fit while preserving Ethan's intent, tone, links,
+key claims, and nuance. If it cannot fit without losing meaning, skip/block and
+tell Ethan.
 
 ## Known quirks
 

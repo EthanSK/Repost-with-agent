@@ -62,9 +62,10 @@ substitute curl/Playwright/etc.
    all/subset sweeps or stop for a single-pair request.
 4. Note `mode`, `runMode`, `source`, `destination`, `customRules` (top-level
    and pair-level), `policy.maxItemsPerRun` (default 1),
-   `policy.overlengthStrategy` (default `"skip"` for Ethan/OpenClaw),
-   `policy.forbidSemanticRewrites` (default true),
-   `policy.textFidelity` (default `"exact-source-body-only"`),
+   `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
+   `policy.forbidSemanticRewrites` (default true outside the overlength exception),
+   `policy.textFidelity` (default `"exact-source-body-unless-live-ui-overlength"`),
+   `policy.semanticRewriteAllowedOnlyWhen` (default `"live-ui-overlength"`),
    `policy.blockOnUncertainDuplicate` (default true), and
    `policy.globalDedupeEnabled` (default true).
 5. Note optional destination identity fields. These are **UI matching hints**,
@@ -376,22 +377,32 @@ Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 = 300, Threads = 500, LinkedIn = 3 000, Facebook = 63 206). See
 `docs/destinations/<platform>.md`.
 
-**Destination-wide Ethan rule:** never reword public post text. The draft is the
-cleaned source text exactly as Ethan wrote it, after only the allowed source UI
-cleanup and source-link replacement from Step 6. Do not summarize, compact,
+**Destination-wide Ethan rule:** exact wording comes first. The draft starts as
+the cleaned source text exactly as Ethan wrote it, after only the allowed source
+UI cleanup and source-link replacement from Step 6. Do not summarize, compact,
 paraphrase, improve, sanitize, normalize tone, fix grammar, or remove awkward or
-redundant wording. The phrasing may be intentional and nuanced.
+redundant wording before trying the exact draft. The phrasing may be intentional
+and nuanced.
 
 For every destination, first put the exact leak-guarded draft into the live
 composer and inspect the live UI. If the destination UI accepts the exact draft,
 publish that exact draft.
 
 If the destination UI gives explicit live feedback that the exact draft is
-overlength/cut off, append `pair.publish.skipped_overlength` with the original
-length, destination UI feedback, and a short reason, then stop this destination
-and tell Ethan. Do not use any `compact`, `truncate`, paraphrase, or "sounds
-close enough" fallback, even when a pair config says otherwise. Current policy
-is exact-source-body-only.
+overlength/cut off, `policy.overlengthStrategy === "compact"` permits the only
+rewrite exception: compact/reword just enough to fit while preserving Ethan's
+intent, tone, links, key claims, and nuance. Do not add a source-platform
+backlink. Reinsert the compacted draft, rerun the source URL leak guard, rerun a
+quick duplicate/semantic check if the meaning materially changed, and confirm
+the UI no longer shows overlength/cutoff before posting. Append
+`pair.publish.compacted` with original length, compacted length, destination UI
+feedback, and a short rationale. If it still cannot fit without losing the
+point, append `pair.publish.skipped_overlength` and tell Ethan.
+
+If `policy.overlengthStrategy === "skip"`, append
+`pair.publish.skipped_overlength` and stop this destination. `truncate` is not a
+default Ethan/OpenClaw path; use it only if Ethan explicitly asks for mechanical
+truncation.
 
 ## Step 8 — Publish
 
@@ -420,8 +431,9 @@ would otherwise leave a public post with no resumable state.
      and stop. Do not publish from an obviously wrong profile/page.
 3. Wait for the textarea / contenteditable.
 4. Click into it.
-5. Type the draft EXACTLY. Don't paraphrase, don't add hashtags, don't shorten,
-   and don't "clean up" grammar or tone.
+5. Type the Step 7 draft EXACTLY. If the exact source draft fit, that means no
+   paraphrase, hashtags, shortening, grammar cleanup, or tone cleanup. If Step 7
+   produced an overlength compacted draft, type that compacted draft exactly.
 6. Click the Post / Share / Tweet button.
 7. Wait for the success indicator (URL changes, modal dismisses, toast appears).
 8. Capture the resulting `posted_url` (e.g. `https://x.com/<handle>/status/<id>`).

@@ -80,13 +80,14 @@ posts/day), bump `pair.policy.semanticDedupeWindowSize` to 50+ so the
 agent compares against a wider recent slice. For low-volume / Substack-
 style accounts, 30 is more than enough.
 
-## Exact text / length handling
+## Exact-first text / length handling
 
-For Ethan/OpenClaw runs, never reword public post text. Put the exact
-leak-guarded draft into the live composer. If the UI accepts the exact draft,
-publish it exactly. If the UI reports overlength or cutoff feedback, skip/block
-and tell Ethan; do not compact, summarize, paraphrase, truncate, fix grammar, or
-otherwise change the wording.
+For Ethan/OpenClaw runs, preserve exact public post text by default. Put the
+exact leak-guarded draft into the live composer first. If the UI accepts the
+exact draft, publish it exactly. If the UI reports overlength or cutoff feedback,
+compact/reword only enough to fit while preserving Ethan's intent, tone, links,
+key claims, and nuance. If it cannot fit without losing meaning, skip/block and
+tell Ethan.
 
 ## Known quirks
 

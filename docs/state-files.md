@@ -115,9 +115,10 @@ the skill workflows.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip",
-        "textFidelity": "exact-source-body-only",
+        "overlengthStrategy": "compact",
+        "textFidelity": "exact-source-body-unless-live-ui-overlength",
         "forbidSemanticRewrites": true,
+        "semanticRewriteAllowedOnlyWhen": "live-ui-overlength",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -153,8 +154,9 @@ the skill workflows.
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — historical walk (newest-first). Source-level scheduled backfill jobs use a source-item fanout manifest; destination-specific pair backfills use `pairs/<id>/backfill-state.json`.
 - `policy.overlengthStrategy`:
-  - `skip` — when the live destination composer UI explicitly indicates overlength/cutoff, skip instead of publishing. This is the Ethan/OpenClaw default and the only safe default.
-- `policy.textFidelity: "exact-source-body-only"` and `policy.forbidSemanticRewrites: true` mean public destination text must preserve the original source wording exactly. The agent may only remove source-platform UI artifacts outside the real post body and replace forbidden source-platform wrapper links with verified non-source targets. It must not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or otherwise reword Ethan's post. If exact text will not fit, skip/block and notify Ethan.
+  - `compact` — Ethan/OpenClaw default. First try the exact cleaned source text in the live destination composer. Only when the live UI explicitly indicates overlength/cutoff may the agent compact/reword enough to fit while preserving intent, tone, links, key claims, and nuance.
+  - `skip` — when the live destination composer UI explicitly indicates overlength/cutoff, skip instead of publishing.
+- `policy.textFidelity: "exact-source-body-unless-live-ui-overlength"`, `policy.forbidSemanticRewrites: true`, and `policy.semanticRewriteAllowedOnlyWhen: "live-ui-overlength"` mean public destination text must preserve the original source wording exactly unless the live destination UI rejects/cuts off that exact cleaned draft for length. The agent may always remove source-platform UI artifacts outside the real post body and replace forbidden source-platform wrapper links with verified non-source targets. It must not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or otherwise reword Ethan's post for style or preference.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
 - `policy.globalDedupeEnabled` — when `true` (default), every publish-capable
   path reads `global-posted.jsonl`, resolves a cross-pair `contentKey`, and
@@ -439,9 +441,9 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.start`                    | About to drive the destination compose flow. |
 | `pair.publish.url_expanded`             | One shortened URL was expanded. Includes `from`, `to`. |
 | `pair.publish.url_expand_failed`        | One URL expansion failed. Includes `url`, `error`. |
-| `pair.publish.compacted`                | Deprecated/for historical rows only. Current policy forbids compacting or rewording public post text. |
-| `pair.publish.truncated`                | Deprecated/for historical rows only. Current policy forbids truncating public post text. |
-| `pair.publish.skipped_overlength`       | Exact draft exceeded destination length/cutoff limits, so the destination was skipped/blocked instead of reworded. |
+| `pair.publish.compacted`                | Live destination UI rejected/cut off the exact cleaned draft for length, so the agent compacted/reworded enough to fit while preserving intent, tone, links, key claims, and nuance. |
+| `pair.publish.truncated`                | Deprecated/for historical rows only. Mechanical truncation is not a current Ethan/OpenClaw default. |
+| `pair.publish.skipped_overlength`       | Exact draft exceeded destination length/cutoff limits and could not be compacted without losing meaning, or policy was `skip`, so the destination was skipped/blocked. |
 | `pair.publish.success`                  | Destination confirmed the post and the live-post text proof gate matched the intended draft. Includes `sourceItemId`, `destinationUrl`. |
 | `pair.publish.live_text_mismatch`       | Platform created a public post, but the live destination text did not match the intended draft after allowed normalization. Append `posted-malformed` quarantine proof, block the destination with `category: "live-text-mismatch"`, and do not emit success. |
 | `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. Categories include `needs-login`, `needs-config`, `needs-account-switch`, `rate-limit`, `platform-error`, and `unknown`. |

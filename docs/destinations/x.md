@@ -57,11 +57,12 @@ destination).
 - Free / classic accounts: 280 chars.
 - Premium / Verified: 25 000 chars.
 
-For Ethan/OpenClaw runs, never reword public post text. Put the exact
-leak-guarded draft into the X composer. If the UI accepts the exact draft,
-publish it exactly. If the UI reports overlength or cutoff feedback, skip/block
-and tell Ethan; do not compact, summarize, paraphrase, truncate, fix grammar, or
-otherwise change the wording.
+For Ethan/OpenClaw runs, preserve exact public post text by default. Put the
+exact leak-guarded draft into the X composer first. If the UI accepts the exact
+draft, publish it exactly. If the UI reports overlength or cutoff feedback,
+compact/reword only enough to fit while preserving Ethan's intent, tone, links,
+key claims, and nuance. If it cannot fit without losing meaning, skip/block and
+tell Ethan.
 
 ## Source scraping
 
@@ -115,9 +116,9 @@ already produced — no extra browser cost.
   shows up in the destination scrape as `t.co/abc123`. Strip URLs from both
   candidate and scraped text before comparing.
 - **Threading.** Long drafts are not threaded automatically in v4. If the exact
-  draft is overlength, skip/block and tell Ethan. Re-introduce threading as a
-  separate explicit skill only if Ethan asks for it; never shorten or reword the
-  post to fit.
+  draft is overlength, use the Step 7 overlength-only compaction rule. Re-introduce
+  threading as a separate explicit skill only if Ethan asks for it; never split a
+  post into a thread implicitly.
 - **Quoted reposts.** Show up in the profile feed but are dedupe-irrelevant.
   Skip them in source scrape (they're not original content); treat them like
   normal posts in destination dedupe.

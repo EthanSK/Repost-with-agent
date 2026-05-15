@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.5.7)
+# Repost-with-agent (v4.5.8)
 
 **GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
 
@@ -90,17 +90,19 @@ verbatim — read learnings.md FIRST, fall back to
 cached selector misses. (See
 [`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
 
-## Exact text fidelity
+## Exact-first text fidelity
 
-Repost-with-agent must never reword Ethan's source posts. Public destination
-post text preserves the original source wording exactly. The agent may only
-remove source-platform UI artifacts outside the actual post body, such as
-reaction counts or `...more`, and may replace forbidden source-platform wrapper
-links such as `lnkd.in` with verified non-source targets. It must not summarize,
-compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
-phrasing because it seems awkward or inefficient. If exact text will not fit a
-destination, the destination is skipped/blocked and Ethan is told; the agent does
-not publish a rewritten version.
+Repost-with-agent must preserve Ethan's source wording exactly by default. The
+agent may only remove source-platform UI artifacts outside the actual post body,
+such as reaction counts or `...more`, and may replace forbidden source-platform
+wrapper links such as `lnkd.in` with verified non-source targets before checking
+length. It must not summarize, compact, paraphrase, improve, sanitize, normalize
+tone, fix grammar, or remove phrasing because it seems awkward or inefficient.
+The only rewrite exception is overlength: if the live destination UI explicitly
+rejects or cuts off the exact cleaned draft for length, the agent may
+compact/reword only enough to fit while preserving Ethan's intent, tone, links,
+key claims, and nuance. If it cannot fit without losing meaning, the destination
+is skipped/blocked and Ethan is told.
 
 ## Global + two-layer dedupe
 
@@ -360,7 +362,7 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
       "scope": "source-fanout",
       "sourcePlatform": "linkedin",
       "pairIds": [],
-      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial.",
+      "message": "Use Repost-with-agent. Run one LinkedIn source-item fanout backfill slot: choose the next eligible LinkedIn source item, preserve source wording exactly by default, compact/reword only if the live destination UI rejects or cuts off the exact cleaned draft for length, enumerate all enabled LinkedIn destination pairs, post/skip/block every destination together, write the fanout manifest, send one aggregate user-facing message for the source item with all platform outcomes/reasons, and do not select another source item if any destination is partial.",
       "publishMode": "live-approved-only",
       "schedule": {
         "kind": "cron",
@@ -399,9 +401,10 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip",
-        "textFidelity": "exact-source-body-only",
+        "overlengthStrategy": "compact",
+        "textFidelity": "exact-source-body-unless-live-ui-overlength",
         "forbidSemanticRewrites": true,
+        "semanticRewriteAllowedOnlyWhen": "live-ui-overlength",
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30

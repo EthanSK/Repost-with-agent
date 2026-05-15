@@ -50,8 +50,9 @@ automation, and configured current-harness user-message delivery.
    Before asking Ethan about such a blocker, first try to resolve it yourself
    when the safe next action is within the existing tool/account permissions:
    repair/repost malformed or deleted proof from local source text, correct bad
-   ledgers/manifests, retry transient failures, or apply exact text-fidelity
-   overlength skips/blocks.
+   ledgers/manifests, retry transient failures, or apply exact-first
+   overlength-only compaction when the live UI proves the exact draft is too
+   long.
    Ask only for ambiguous public deletion/repost decisions, missing credentials
    or configuration, safety/editorial calls, or cases where evidence is
    insufficient. Record exactly what was tried and the remaining `nextAction`.
