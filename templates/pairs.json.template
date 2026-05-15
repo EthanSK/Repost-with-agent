@@ -80,7 +80,9 @@
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "compact",
+        "overlengthStrategy": "skip",
+        "textFidelity": "exact-source-body-only",
+        "forbidSemanticRewrites": true,
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30

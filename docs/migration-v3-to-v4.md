@@ -114,7 +114,9 @@ Use this transformation for the one-time migration:
 -        "preferOfficialApi": true,
 -        "blockOnUncertainDuplicate": true
 +        "blockOnUncertainDuplicate": true,
-+        "overlengthStrategy": "compact"
++        "overlengthStrategy": "skip",
++        "textFidelity": "exact-source-body-only",
++        "forbidSemanticRewrites": true
        },
 -      "dedupe": {
 -        "strategy": "source-id-url-content-hash"

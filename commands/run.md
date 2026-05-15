@@ -26,8 +26,8 @@ current-harness primary message delivery) to:
 4. Apply custom user skip rules + `considered.jsonl` before dedupe.
 5. Run dedupe (local: `posted.jsonl`; global: `global-posted.jsonl`; remote: scrape destination profile) plus Layer 2 semantic dedupe.
 6. Pick the newest non-duplicate, non-rule-skipped item.
-7. Expand shortened URLs in the draft body (`lnkd.in`, `t.co`, `bit.ly`, ...).
-8. Drive the destination compose flow via current-harness browser automation.
+7. Expand shortened URLs in the draft body (`lnkd.in`, `t.co`, `bit.ly`, ...) without changing Ethan's wording.
+8. Drive the destination compose flow via current-harness browser automation with the exact cleaned source text.
 9. Append to `~/.repost-with-agent/pairs/<id>/posted.jsonl` and `global-posted.jsonl`.
 10. confirm Ethan via the current harness's primary message delivery tool.
 
@@ -38,6 +38,12 @@ current-harness primary message delivery) to:
 - `live-approved`: end-to-end without prompting. Required for unattended scheduled live ticks.
 
 Scheduled preview/dry ticks are allowed for enabled `listen-for-future` pairs, but the scheduler prompt must explicitly say not to publish.
+
+## Preserve exact post wording — non-negotiable
+
+> Public destination post text must preserve the original source post wording exactly. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. If the exact cleaned source text will not fit, skip/block and tell Ethan instead of posting altered wording.
+
+`skills/repost-run/SKILL.md` step 7 enforces this. Don't bypass.
 
 ## Confirm every successful source item — non-negotiable
 

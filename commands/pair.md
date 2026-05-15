@@ -31,6 +31,12 @@ JSON state lives at `~/.repost-with-agent/pairs.json`, per-pair files under
 `~/.repost-with-agent/source-fanouts/`. The agent reads/writes them via the
 native Read/Edit/Write tools.
 
+## Preserve exact post wording — non-negotiable
+
+> Public destination post text must preserve the original source post wording exactly. New and edited pairs default to `policy.overlengthStrategy: "skip"`, `policy.textFidelity: "exact-source-body-only"`, and `policy.forbidSemanticRewrites: true`. Do not compact, truncate, paraphrase, summarize, fix grammar, or otherwise reword a public post to fit a destination.
+
+The `repost-pair-setup` skill must write those defaults unless Ethan explicitly changes policy later.
+
 ## Confirm every successful source item — non-negotiable
 
 > Every successful source item from this plugin MUST trigger a user-facing

@@ -115,7 +115,9 @@ the skill workflows.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | compact | truncate",
+        "overlengthStrategy": "skip",
+        "textFidelity": "exact-source-body-only",
+        "forbidSemanticRewrites": true,
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -151,10 +153,8 @@ the skill workflows.
   - `listen-for-future` — tail new posts on a schedule. Default.
   - `backfill` — historical walk (newest-first). Source-level scheduled backfill jobs use a source-item fanout manifest; destination-specific pair backfills use `pairs/<id>/backfill-state.json`.
 - `policy.overlengthStrategy`:
-  - `compact` — when the live destination composer UI explicitly indicates the exact draft is overlength/cut off, rewrite shorter while preserving the original voice, intent, links, and essence as much as possible. Ethan/OpenClaw default. Do not compact solely from local/static character-count assumptions; first try the exact leak-guarded draft in the live UI.
-  - `skip` — when the live destination composer UI explicitly indicates overlength/cutoff, skip instead of publishing.
-  - `truncate` — when the live destination composer UI explicitly indicates overlength/cutoff, mechanically shrink to fit without adding a
-    source-platform permalink suffix. Use only when explicitly requested.
+  - `skip` — when the live destination composer UI explicitly indicates overlength/cutoff, skip instead of publishing. This is the Ethan/OpenClaw default and the only safe default.
+- `policy.textFidelity: "exact-source-body-only"` and `policy.forbidSemanticRewrites: true` mean public destination text must preserve the original source wording exactly. The agent may only remove source-platform UI artifacts outside the real post body and replace forbidden source-platform wrapper links with verified non-source targets. It must not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or otherwise reword Ethan's post. If exact text will not fit, skip/block and notify Ethan.
 - `policy.blockOnUncertainDuplicate` — when `true` (default), uncertain dedupe results are treated as "do not publish".
 - `policy.globalDedupeEnabled` — when `true` (default), every publish-capable
   path reads `global-posted.jsonl`, resolves a cross-pair `contentKey`, and
@@ -439,9 +439,9 @@ Append-only NDJSON. Each line is one audit event. Schema:
 | `pair.publish.start`                    | About to drive the destination compose flow. |
 | `pair.publish.url_expanded`             | One shortened URL was expanded. Includes `from`, `to`. |
 | `pair.publish.url_expand_failed`        | One URL expansion failed. Includes `url`, `error`. |
-| `pair.publish.compacted`                | Draft exceeded char cap; compact strategy rewrote it to fit while preserving voice/essence. Includes original length, compacted length, cap, and note. |
-| `pair.publish.truncated`                | Draft exceeded char cap; truncate strategy applied. |
-| `pair.publish.skipped_overlength`       | Draft exceeded char cap; skip strategy applied. |
+| `pair.publish.compacted`                | Deprecated/for historical rows only. Current policy forbids compacting or rewording public post text. |
+| `pair.publish.truncated`                | Deprecated/for historical rows only. Current policy forbids truncating public post text. |
+| `pair.publish.skipped_overlength`       | Exact draft exceeded destination length/cutoff limits, so the destination was skipped/blocked instead of reworded. |
 | `pair.publish.success`                  | Destination confirmed the post and the live-post text proof gate matched the intended draft. Includes `sourceItemId`, `destinationUrl`. |
 | `pair.publish.live_text_mismatch`       | Platform created a public post, but the live destination text did not match the intended draft after allowed normalization. Append `posted-malformed` quarantine proof, block the destination with `category: "live-text-mismatch"`, and do not emit success. |
 | `pair.publish.failed`                   | Compose flow failed. Includes `category`, `error`. Categories include `needs-login`, `needs-config`, `needs-account-switch`, `rate-limit`, `platform-error`, and `unknown`. |

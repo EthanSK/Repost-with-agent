@@ -1,10 +1,10 @@
-# AGENTS.md — Repost-with-agent (v4.5.0)
+# AGENTS.md — Repost-with-agent (v4.5.7)
 
 Guidance for any AI agent (Codex, Claude Agent, Claude Code, OpenClaw, Gemini,
 Cursor, etc.) operating on this repo. This file mirrors `CLAUDE.md` so a
 single read is enough regardless of which agent harness you're driving from.
 
-## v4.5.0 in one paragraph
+## v4.5.7 in one paragraph
 
 Repost-with-agent v4 is a **skill-only plugin**. There is no CLI, no MCP
 server, no platform SDK. **You** (the running agent) do all the work using
@@ -28,6 +28,20 @@ assumption that the existing examples fully apply.
 > confirming the source URL and the destination URL. If you trigger a publish
 > through any non-skill path you MUST also fire a Telegram confirmation.
 > Silent publishes are a bug. (Ethan voice 5977 + 5978, 2026-05-01.)
+
+## The non-negotiable rule — preserve exact post wording
+
+> **Never reword Ethan's posts — non-negotiable.** Public destination post text
+> must preserve the original source post wording exactly. Do not summarize,
+> compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
+> phrasing because it seems awkward, harsh, redundant, off-brand, or inefficient.
+> The wording may be intentional and nuanced. Allowed public-text changes are
+> limited to removing source-platform UI artifacts outside the real post body
+> (for example reaction counts or `...more`) and replacing forbidden
+> source-platform wrapper links (`lnkd.in`, LinkedIn activity URLs, source
+> permalinks) with their verified non-source target. If exact text will not fit
+> a destination, block/skip that destination and tell Ethan; do not publish a
+> rewritten version. (Ethan voice, 2026-05-15.)
 
 ## Required harness toolkit
 
@@ -110,6 +124,10 @@ Append-only files: NEVER rewrite existing lines. Use `>>` in Bash.
 - New pairs default to `mode: "preview-only"` + `enabled: false` — intentional.
 - Scheduling is flexible by design: the starter path is one daily all-enabled-pairs sweep, but source-item fanout backfill jobs, per-pair cron jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
 - **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item, enumerates every enabled destination pair for that source, and records each destination as posted/already-posted/skipped/blocked/partial in a fanout manifest. Do not treat one destination success as source-item completion unless the user explicitly requested a destination-specific pair job.
+- **Exact text fidelity is mandatory.** No content rewording, compaction,
+  paraphrase, grammar cleanup, tone adjustment, or editorial improvement is ever
+  allowed in a public destination post. If the exact cleaned source text cannot
+  fit a destination, skip/block and notify Ethan rather than changing the words.
 - Live publishes need `mode: "live-approved"` (scheduled ticks) or explicit per-post
   authorization (`mode: "approval-required"`).
 - **Custom rules run before dedupe.** Apply top-level/pair `customRules` and

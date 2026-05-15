@@ -39,9 +39,11 @@ streak threshold; it is not a completed source item.
 
 For `<pair-id>`, it applies custom user skip rules + `considered.jsonl` before
 dedupe and again inside the publish loop for that single destination pair.
-Newest-first ordering is intentional — if interrupted, the destination ends up
-with a contiguous recent history rather than a gap-bounded historical block.
-(Ethan voice 6021.)
+Destination drafts must preserve the source post wording exactly, except for
+allowed source UI cleanup and verified non-source link replacement. Newest-first
+ordering is intentional — if interrupted, the destination ends up with a
+contiguous recent history rather than a gap-bounded historical block. (Ethan
+voice 6021.)
 
 ## Mode rules
 
@@ -49,6 +51,12 @@ with a contiguous recent history rather than a gap-bounded historical block.
   bump the pair to `approval-required` or `live-approved` first.
 - Backfill respects `policy.minDelayBetweenPostsMinutes` as a floor on
   `--interval`.
+
+## Preserve exact post wording — non-negotiable
+
+> Public destination post text must preserve the original source post wording exactly. Do not summarize, compact, paraphrase, improve, sanitize, normalize tone, fix grammar, truncate, or remove phrasing because it seems awkward or inefficient. If the exact cleaned source text will not fit, skip/block and tell Ethan instead of posting altered wording.
+
+For source fanout and destination-specific backfills, exact text fidelity wins over any older compaction/truncation behavior.
 
 ## Confirm every successful source item — non-negotiable
 

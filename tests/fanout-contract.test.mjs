@@ -618,7 +618,7 @@ test('docs require derived-source suppression before listen-for-future publishes
     assert.match(text, /derived-source/i);
   }
   assert.match(globalDedupeSkill, /backfill-queue-text-match/i);
-  assert.match(runSkill, /crashed\/compacted after creating the public post/i);
+  assert.match(runSkill, /crashed or stopped after creating the public post/i);
 });
 
 test('docs require fail-soft failure streak logging before hard-blocking backfill', () => {
@@ -734,7 +734,7 @@ test('docs require live destination text proof before success state', () => {
   assert.match(stateDocs, /global\.publish\.malformed/i);
 });
 
-test('docs require compaction to be destination-wide and UI-feedback gated', () => {
+test('docs require exact text fidelity and forbid compaction/rewording', () => {
   const runSkill = readFileSync(join(root, 'skills/repost-run/SKILL.md'), 'utf8');
   const stateDocs = readFileSync(join(root, 'docs/state-files.md'), 'utf8');
   const xDocs = readFileSync(join(root, 'docs/destinations/x.md'), 'utf8');
@@ -743,10 +743,13 @@ test('docs require compaction to be destination-wide and UI-feedback gated', () 
   const facebookDocs = readFileSync(join(root, 'docs/destinations/facebook.md'), 'utf8');
 
   assert.match(runSkill, /Destination-wide Ethan rule/i);
-  assert.doesNotMatch(runSkill, /X-specific Ethan rule/i);
-  for (const docs of [stateDocs, xDocs, blueskyDocs, threadsDocs, facebookDocs]) {
-    assert.match(docs, /live UI|live destination composer UI|destination UI/i);
-    assert.match(docs, /only compact|do \*\*not\*\* pre-compact|Do not compact solely/i);
+  assert.match(runSkill, /never reword public post text/i);
+  assert.match(stateDocs, /exact-source-body-only/i);
+  assert.match(stateDocs, /forbidSemanticRewrites/i);
+  for (const docs of [xDocs, blueskyDocs, threadsDocs, facebookDocs]) {
+    assert.match(docs, /never reword public post text/i);
+    assert.match(docs, /skip\/block/i);
+    assert.match(docs, /do not compact, summarize, paraphrase, truncate/i);
   }
 });
 

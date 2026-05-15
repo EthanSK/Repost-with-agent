@@ -62,7 +62,9 @@ substitute curl/Playwright/etc.
    all/subset sweeps or stop for a single-pair request.
 4. Note `mode`, `runMode`, `source`, `destination`, `customRules` (top-level
    and pair-level), `policy.maxItemsPerRun` (default 1),
-   `policy.overlengthStrategy` (default `"compact"` for Ethan/OpenClaw),
+   `policy.overlengthStrategy` (default `"skip"` for Ethan/OpenClaw),
+   `policy.forbidSemanticRewrites` (default true),
+   `policy.textFidelity` (default `"exact-source-body-only"`),
    `policy.blockOnUncertainDuplicate` (default true), and
    `policy.globalDedupeEnabled` (default true).
 5. Note optional destination identity fields. These are **UI matching hints**,
@@ -244,7 +246,7 @@ already-routed reposts.
      source-fanout manifest, or an active backfill queue source body, treat it as
      `derived-source-shadow` and do not cascade it as a fresh source. This guard
      is required even when the global ledger is missing because a previous run
-     crashed/compacted after creating the public post but before writing state.
+     crashed or stopped after creating the public post but before writing state.
      Repair/catch up the upstream fanout state instead of publishing more
      downstream copies.
 3. **Destination dedupe.** Use your current-harness browser automation to navigate to
@@ -374,24 +376,22 @@ Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 = 300, Threads = 500, LinkedIn = 3 000, Facebook = 63 206). See
 `docs/destinations/<platform>.md`.
 
-**Destination-wide Ethan rule:** do not pre-compact merely because a local
-character count or static cap assumption says the draft might be too long. Many
-platforms/accounts expose longer-post modes, and Ethan wants the source text
-preserved whenever the live UI accepts it. For every destination, first put the
-exact leak-guarded draft into the live composer and inspect the live UI. Only
-compact if the UI itself clearly reports overlength/cutoff — for example an
-over-limit counter, disabled Post/Share button with overlength feedback, or
-visible truncation/cutoff warning. If the destination UI accepts the exact draft,
+**Destination-wide Ethan rule:** never reword public post text. The draft is the
+cleaned source text exactly as Ethan wrote it, after only the allowed source UI
+cleanup and source-link replacement from Step 6. Do not summarize, compact,
+paraphrase, improve, sanitize, normalize tone, fix grammar, or remove awkward or
+redundant wording. The phrasing may be intentional and nuanced.
+
+For every destination, first put the exact leak-guarded draft into the live
+composer and inspect the live UI. If the destination UI accepts the exact draft,
 publish that exact draft.
 
 If the destination UI gives explicit live feedback that the exact draft is
-overlength/cut off:
-
-- `policy.overlengthStrategy === "compact"` (Ethan/OpenClaw default): rewrite the draft to fit while making it sound as close to the original as possible and preserving the essence, intent, tone, URLs, and key claims. Do not add a source-platform backlink. Reinsert the compacted draft and confirm the UI no longer shows overlength/cutoff feedback before posting. After compacting, re-run a quick duplicate check against the compacted text. Append `pair.publish.compacted` audit with original length, compacted length, destination UI feedback, and a 1-sentence note. If it still cannot fit without losing the point, append `pair.publish.skipped_overlength` and stop.
-- `policy.overlengthStrategy === "skip"`: append a `pair.publish.skipped_overlength` audit event and stop. Tell the user.
-- `policy.overlengthStrategy === "truncate"`: mechanically shrink to fit the destination
-  cap without adding a source-platform backlink. Append `pair.publish.truncated`
-  audit. Prefer `compact` over `truncate` unless Ethan explicitly asks for mechanical truncation.
+overlength/cut off, append `pair.publish.skipped_overlength` with the original
+length, destination UI feedback, and a short reason, then stop this destination
+and tell Ethan. Do not use any `compact`, `truncate`, paraphrase, or "sounds
+close enough" fallback, even when a pair config says otherwise. Current policy
+is exact-source-body-only.
 
 ## Step 8 — Publish
 
@@ -420,7 +420,8 @@ would otherwise leave a public post with no resumable state.
      and stop. Do not publish from an obviously wrong profile/page.
 3. Wait for the textarea / contenteditable.
 4. Click into it.
-5. Type the draft EXACTLY. Don't paraphrase, don't add hashtags.
+5. Type the draft EXACTLY. Don't paraphrase, don't add hashtags, don't shorten,
+   and don't "clean up" grammar or tone.
 6. Click the Post / Share / Tweet button.
 7. Wait for the success indicator (URL changes, modal dismisses, toast appears).
 8. Capture the resulting `posted_url` (e.g. `https://x.com/<handle>/status/<id>`).

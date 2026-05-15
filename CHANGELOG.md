@@ -1,5 +1,17 @@
 # Changelog
 
+## v4.5.7 — 2026-05-15 — Exact post wording hardening
+
+- Makes exact source-post text fidelity non-negotiable across repo instructions,
+  runtime skills, destination docs, pair setup, templates, and state docs.
+- Forbids public post compaction, summarization, paraphrase, tone cleanup,
+  grammar fixes, truncation, or editorial improvement. Only source UI artifact
+  removal and verified non-source link replacement are allowed.
+- Changes Ethan/OpenClaw overlength behavior to skip/block and notify Ethan
+  instead of publishing altered wording.
+- Updates fanout contract tests to enforce exact text fidelity instead of the
+  older UI-gated compaction rule.
+
 ## v4.5.6 — 2026-05-09 — Fail-soft backfill failure streaks
 
 - Adds `soft-failed` source fanout semantics so one safe transient destination failure does not freeze the whole historical backfill.

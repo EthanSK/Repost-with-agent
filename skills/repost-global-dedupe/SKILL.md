@@ -82,7 +82,7 @@ X→Bluesky pair from both posting the same LinkedIn-origin content to Bluesky.
 ### Crash-recovery derived-source guard
 
 Do not rely only on the global ledger when the current source account is also a
-configured destination account for another pair. A crashed or compacted run can
+configured destination account for another pair. A crashed or interrupted run can
 create a public destination post before it writes `global-posted.jsonl`; the next
 daily sweep may then scrape that public post as a fresh source and cascade it to
 other platforms.

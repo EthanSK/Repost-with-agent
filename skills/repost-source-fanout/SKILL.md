@@ -106,14 +106,14 @@ example:
   clearly created, when the evidence is unambiguous;
 - correct bad ledger/audit/manifest rows when live proof shows the local state
   is wrong;
-- catch up a source fanout when a failed/compacted run created one destination
-  post and a later listen-for-future sweep cascaded that derived post to other
-  destinations; record those existing posts as `caught-up` for the original
-  source item instead of reposting;
+- catch up a source fanout when a failed or interrupted run created one
+  destination post and a later listen-for-future sweep cascaded that derived
+  post to other destinations; record those existing posts as `caught-up` for
+  the original source item instead of reposting;
 - retry a destination whose earlier failure was transient, using the current
   pair learnings and destination docs;
-- compact overlength drafts according to policy instead of skipping when
-  compaction is allowed.
+- skip/block overlength drafts according to exact text-fidelity policy instead
+  of changing Ethan's words.
 
 Ask Ethan only when the remediation is externally destructive and ambiguous,
 requires new credentials/account switching/configuration, needs a product or
@@ -260,8 +260,8 @@ A public browser publish must never be the first durable record of work. Before
 touching a destination composer, write durable local intent; immediately after
 live proof, write durable success/catch-up before attempting any other
 destination. This is the crash-recovery boundary that prevents a public post
-from existing with no resumable state if OpenClaw compacts, crashes, times out,
-or produces an incomplete terminal tool-use turn.
+from existing with no resumable state if OpenClaw crashes, times out, or
+produces an incomplete terminal tool-use turn.
 
 For each `planned` destination:
 
@@ -271,8 +271,8 @@ For each `planned` destination:
    `source.fanout.destination.attempting` to that pair's `audit.jsonl`. If either
    write fails, stop; do not open the composer or publish.
 2. Run `repost-run` steps 6–9 for this selected source item and destination
-   pair: URL expansion, length/compact policy, compose, proof append, and global
-   ledger append.
+   pair: URL expansion, exact text-fidelity/length policy, compose, proof append,
+   and global ledger append.
    - The mandatory source URL leak guard from `repost-run` is required here too:
      if the final public draft contains the source canonical URL or source
      permalink marker, block that destination with `source-url-leak-guard` rather

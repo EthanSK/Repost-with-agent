@@ -43,6 +43,18 @@ the full lifecycle + good/bad-entry guidance.
 > also fire a publish confirmation. Silent publishes are a bug. (Ethan voice
 > 5977 + 5978, 2026-05-01.)
 
+> **Never reword Ethan's posts — non-negotiable.** Public destination post text
+> must preserve the original source post wording exactly. Do not summarize,
+> compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
+> phrasing because it seems awkward, harsh, redundant, off-brand, or inefficient.
+> The wording may be intentional and nuanced. Allowed public-text changes are
+> limited to removing source-platform UI artifacts outside the real post body
+> (for example reaction counts or `...more`) and replacing forbidden
+> source-platform wrapper links (`lnkd.in`, LinkedIn activity URLs, source
+> permalinks) with their verified non-source target. If exact text will not fit
+> a destination, block/skip that destination and tell Ethan; do not publish a
+> rewritten version. (Ethan voice, 2026-05-15.)
+
 
 **Notification routing rule:** user-visible Repost notifications are not inherently Telegram-specific. Store the route in `~/.repost-with-agent/pairs.json` under `notification.delivery` (for example `channel`, `accountId`, `target`, optional `threadId`) using the current harness/chat metadata during setup. Scheduled runs must read that route and pass it explicitly to the harness message tool; never rely on a default account/bot, and never paste raw JSON/tool output into user-facing messages.
 
@@ -68,15 +80,20 @@ the full lifecycle + good/bad-entry guidance.
 2. **New pairs default to `mode: "preview-only"` and `enabled: false`.** Don't
    flip without explicit, current-conversation user authorization.
 3. **Source-level backfill slots are source-item fanouts.** For a source such as LinkedIn, a scheduled/backfill slot selects one source item and fans it out to every enabled destination pair for that source. It writes/updates a fanout manifest and is `partial` unless every enabled destination is posted, already-posted/caught-up, skipped by rule/policy, or explicitly blocked with reason. Do not treat a single destination success as source completion unless the user explicitly requested a destination-specific pair job.
-4. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
+4. **Exact text fidelity is mandatory.** No content rewording, compaction,
+   paraphrase, grammar cleanup, tone adjustment, or editorial improvement is
+   ever allowed in a public destination post. If the exact cleaned source text
+   cannot fit a destination, skip/block and notify Ethan rather than changing
+   the words.
+5. **Live publishes need either `mode: "live-approved"` (for scheduled live ticks)
    or explicit per-post authorization.** `preview-only` always refuses to
    publish.
    Scheduling itself is flexible: the starter path is one daily all-enabled sweep, but source-item fanout backfill jobs, per-pair jobs, subset jobs, preview/dry jobs, manual-only pairs, and custom current-harness cadences are valid user-owned configurations.
-5. **Custom user rules run before dedupe.** After source scrape, apply
+6. **Custom user rules run before dedupe.** After source scrape, apply
    top-level/pair `customRules` and `considered.jsonl` using
    `skills/repost-custom-rules/SKILL.md`. Skip matching not-post-worthy
    candidates without touching `posted.jsonl` or `global-posted.jsonl`.
-6. **Dedupe is global before it is per-pair.** Every publish-capable path must
+7. **Dedupe is global before it is per-pair.** Every publish-capable path must
    read `~/.repost-with-agent/global-posted.jsonl` via
    `skills/repost-global-dedupe/SKILL.md` before composing. Resolve a
    cross-pair `contentKey`, inherit lineage when the current source is a post
@@ -84,7 +101,7 @@ the full lifecycle + good/bad-entry guidance.
    `contentKey` already reached this destination from any pair. Pairs must look
    globally; per-pair files are not enough. Default enabled via
    `policy.globalDedupeEnabled: true`.
-7. **Dedupe runs in two layers, both must clear.**
+8. **Dedupe runs in two layers, both must clear.**
    - **Layer 1** (`skills/repost-dedup/SKILL.md`) — local exact match
      against `posted.jsonl`, global cross-pair ledger match, plus remote
      fuzzy-string match against the destination feed. Cheap, catches verbatim
@@ -98,22 +115,22 @@ the full lifecycle + good/bad-entry guidance.
      opt out per-pair via `policy.semanticDedupeEnabled: false`.
    - Uncertain matches are skipped unless
      `policy.blockOnUncertainDuplicate` is `false`.
-8. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
+9. **No stealth, no CAPTCHA bypass, no 2FA bypass.** Browser automation only
    operates on user-controlled, transparent login sessions.
-9. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
+10. **OpenClaw browser only for OpenClaw runs.** Use the OpenClaw browser/profile
    (`profile: openclaw`, CDP port `18800`) for all Repost-with-agent OpenClaw
    work. Do not touch Ethan's personal browser/profile unless he explicitly says
    to for that run.
-10. **You CANNOT log in for the user.** If a session is expired, append
+11. **You CANNOT log in for the user.** If a session is expired, append
    `pair.publish.failed` audit with `category: "needs-login"` and stop.
-11. **Append, don't rewrite.** `posted.jsonl`, `audit.jsonl`,
+12. **Append, don't rewrite.** `posted.jsonl`, `audit.jsonl`,
    `global-posted.jsonl`, and `considered.jsonl` are append-only. Use `>>` in Bash.
-12. **Destination posts are native posts, not source receipts.** Expand any URLs
+13. **Destination posts are native posts, not source receipts.** Expand any URLs
    in the source body to their final non-source-platform URL where possible
    (for example `lnkd.in` → the underlying article/video), but do **not** append
    the source platform permalink to the public destination draft. Keep source
    canonical URLs in `posted.jsonl`, audit, and publish confirmation only.
-13. **Use the current harness browser, not Playwright or another agent by default.**
+14. **Use the current harness browser, not Playwright or another agent by default.**
    The plugin has zero Playwright / API-SDK dependencies. The browser automation
    your current harness provides is the only browser path unless Ethan explicitly
    asks for a different harness.

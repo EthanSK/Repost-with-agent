@@ -79,7 +79,9 @@ The directories are created lazily on first run for a pair.
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "skip | compact | truncate",
+        "overlengthStrategy": "skip",
+        "textFidelity": "exact-source-body-only",
+        "forbidSemanticRewrites": true,
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
@@ -103,7 +105,16 @@ Field invariants:
 - `mode: "live-approved"` is the only mode that allows unattended scheduled live publishes; scheduled dry/preview jobs may inspect pairs without publishing.
 - Optional top-level `schedulerJobs` records human/agent-readable scheduler intent (all-enabled sweep, source-item fanout backfill jobs, per-pair jobs, subsets, preview-only jobs). The host scheduler remains the operational source of truth.
 - `mode: "approval-required"` requires the agent to ask the user per-post.
-- `policy.overlengthStrategy: "compact"` is the Ethan/OpenClaw default for tight destinations: if a draft is over the cap, rewrite it shorter while preserving the original voice, intent, links, and meaning as much as possible. Use `"skip"` only when Ethan wants overlength drafts dropped; use `"truncate"` only if he explicitly asks for mechanical shortening.
+- `policy.overlengthStrategy: "skip"` is the Ethan/OpenClaw default and the
+  only safe default. If the exact cleaned source text does not fit the
+  destination, skip/block and notify Ethan; do not compact, truncate, summarize,
+  paraphrase, fix grammar, or otherwise reword the public post text.
+- `policy.textFidelity: "exact-source-body-only"` and
+  `policy.forbidSemanticRewrites: true` are the default guardrails. They mean
+  the public destination draft must preserve Ethan's wording exactly, except
+  for removing source-platform UI artifacts outside the real post body and
+  replacing forbidden source-platform wrapper links with verified non-source
+  targets.
 - `policy.globalDedupeEnabled` defaults to true; every pair reads the global cross-pair ledger before publishing so alternate routes do not double-post the same content to the same destination.
 - `policy.semanticDedupeEnabled` defaults to true; Layer 2 semantic dedupe runs after Layer 1 string/fuzzy dedupe.
 - `policy.semanticDedupeWindowSize` defaults to 30 recent destination posts.

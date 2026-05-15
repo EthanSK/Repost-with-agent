@@ -1,4 +1,4 @@
-# Repost-with-agent (v4.5.3)
+# Repost-with-agent (v4.5.7)
 
 **GitHub Pages:** <https://ethansk.github.io/Repost-with-agent/>
 
@@ -89,6 +89,18 @@ verbatim — read learnings.md FIRST, fall back to
 `docs/destinations/<platform>.md` only when learnings.md is silent or a
 cached selector misses. (See
 [`skills/repost-learnings/SKILL.md`](skills/repost-learnings/SKILL.md).)
+
+## Exact text fidelity
+
+Repost-with-agent must never reword Ethan's source posts. Public destination
+post text preserves the original source wording exactly. The agent may only
+remove source-platform UI artifacts outside the actual post body, such as
+reaction counts or `...more`, and may replace forbidden source-platform wrapper
+links such as `lnkd.in` with verified non-source targets. It must not summarize,
+compact, paraphrase, improve, sanitize, normalize tone, fix grammar, or remove
+phrasing because it seems awkward or inefficient. If exact text will not fit a
+destination, the destination is skipped/blocked and Ethan is told; the agent does
+not publish a rewritten version.
 
 ## Global + two-layer dedupe
 
@@ -387,7 +399,9 @@ Full schemas: [`docs/state-files.md`](docs/state-files.md).
         "maxItemsPerRun": 1,
         "minDelayBetweenPostsMinutes": 60,
         "blockOnUncertainDuplicate": true,
-        "overlengthStrategy": "compact",
+        "overlengthStrategy": "skip",
+        "textFidelity": "exact-source-body-only",
+        "forbidSemanticRewrites": true,
         "globalDedupeEnabled": true,
         "semanticDedupeEnabled": true,
         "semanticDedupeWindowSize": 30
