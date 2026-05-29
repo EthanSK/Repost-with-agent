@@ -150,6 +150,24 @@ Track newly-discovered quirks in your reasoning (don't append mid-run; batch
 the writes at the **Final step** below to avoid corrupting the file on a
 crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 
+## Harness tool-error hygiene
+
+OpenClaw cron treats any failed tool call as a failed run, even if the agent
+continues and ends with `NO_REPLY`. Keep expected-empty probes from looking like
+real failures:
+
+- When checking whether optional state already exists, do not leave `rg`,
+  `grep`, `find`, or `sed` in a state where "no match" / "missing optional file"
+  exits non-zero. Use `test -f` before reading optional files, append `|| true`
+  to no-match-tolerant searches, or use a small parser/Node check that exits 0
+  and prints `found: false`.
+- Treat a non-zero tool result as reserved for actual blockers: missing required
+  config, browser login/account mismatch, write failure, destination platform
+  failure, or a publish-safety problem.
+- The destination docs are repo docs, not plugin-sibling docs. From this skill's
+  real path, resolve them as `../../docs/destinations/<platform>.md`. Do not look
+  for `/Users/ethansk/.openclaw/plugin-skills/docs/destinations/...`.
+
 ## Step 2 — Decide what we're allowed to do
 
 - If `mode === "preview-only"`: do steps 3–5 (scrape + show draft) but STOP
@@ -172,6 +190,9 @@ session where the user explicitly approves the specific post.
 
 Use your current-harness browser automation. Per-platform DOM hints live in
 `docs/destinations/<platform>.md` — read the matching one before you start.
+From `skills/repost-run/SKILL.md`, that path resolves to
+`../../docs/destinations/<platform>.md`; if the loader exposed the skill through
+a symlink, resolve the symlink to this repo first.
 
 For platform `linkedin`:
 
@@ -375,7 +396,7 @@ post unless the LinkedIn URL itself is the intended content.
 
 Look up the destination char cap (X = 280 default, X Premium = 25 000, Bluesky
 = 300, Threads = 500, LinkedIn = 3 000, Facebook = 63 206). See
-`docs/destinations/<platform>.md`.
+`../../docs/destinations/<platform>.md` from this skill directory.
 
 **Destination-wide Ethan rule:** exact wording comes first. The draft starts as
 the cleaned source text exactly as Ethan wrote it, after only the allowed source
@@ -415,7 +436,8 @@ when the run is part of a source fanout/backfill. If no manifest/audit
 would otherwise leave a public post with no resumable state.
 
 1. Reuse an existing destination tab if one is already open; otherwise navigate
-   to the destination's compose URL (see `docs/destinations/<platform>.md`).
+   to the destination's compose URL (see `../../docs/destinations/<platform>.md`
+   from this skill directory).
 2. Verify the active posting identity by **visible UI name** BEFORE typing:
    - Match `destination.accountDisplayName` first; use `destination.accountHint`
      only as a loose human hint. The pair is not meant to maintain a separate
@@ -660,5 +682,6 @@ which category:
 - `skills/repost-notify/SKILL.md` — Telegram payload spec.
 - `skills/repost-learnings/SKILL.md` — pair-level institutional-memory file.
 - `skills/repost-backfill/SKILL.md` — multi-post historical walks.
-- `docs/destinations/<platform>.md` — per-platform DOM hints.
+- `../../docs/destinations/<platform>.md` — per-platform DOM hints from this
+  skill directory.
 - `docs/state-files.md` — formal state-file schemas.
