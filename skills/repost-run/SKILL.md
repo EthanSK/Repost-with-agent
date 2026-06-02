@@ -204,6 +204,20 @@ For platform `linkedin`:
    - `canonicalUrl` — the full `https://www.linkedin.com/feed/update/<urn>/` URL.
    - `text` — the visible post body, in reading order.
    - `publishedAt` — the relative timestamp resolved to ISO-8601.
+   - `sourceKind` — `"original"` for Ethan-authored posts, or `"repost"` /
+     `"reshare"` when the card is a LinkedIn repost of somebody else's post.
+   - `repostEvidence` — the exact UI/DOM signal when it is a repost, such as a
+     visible `"Reposted by <user>"` header or a `feed-shared-update-v2__reshare`
+     block.
+4. **Hard skip LinkedIn reposts/reshares.** `/recent-activity/all/` mixes
+   original posts with reposts. Ethan only wants original authored LinkedIn
+   posts syndicated, so do not publish a LinkedIn candidate with
+   `sourceKind: "repost"` / `"reshare"` even if its text is otherwise new.
+   Treat it as a custom-rule skip when `skip-linkedin-reposts` exists in
+   `pairs.json`; otherwise append the same skipped-rule audit/considered shape
+   manually. Do not append repost skips to `posted.jsonl` or
+   `global-posted.jsonl` because they are preference skips, not destination
+   proof.
 
 For platform `x` / `bluesky` / `threads` / `facebook`: see the matching
 `docs/destinations/<platform>.md`.

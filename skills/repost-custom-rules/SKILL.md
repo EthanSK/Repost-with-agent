@@ -86,6 +86,10 @@ Match fields:
 - `textIncludesAll`: all listed substrings must appear in normalized text.
 - `textIncludesAny`: at least one listed substring must appear in normalized text.
 - `textRegex`: regex string the candidate text must match.
+- `sourceKindsAny`: at least one candidate source kind must match. Expected
+  values include `original`, `repost`, `reshare`, `quote`, and `unknown`.
+  Use this for platform-native repost/reshare blocks that should not be treated
+  as the user's original wording.
 - `semanticSimilarToAny`: agent judgment. Match if the candidate has the same
   communicative content/topic as any listed example; lean conservative when the
   user explicitly wanted that content blocked.
@@ -114,6 +118,9 @@ source platform exposes them:
   "canonicalUrl": "<source URL>",
   "text": "<visible post body>",
   "publishedAt": "<ISO-8601>",
+  "sourceKind": "original",
+  "isRepost": false,
+  "repostEvidence": "<optional exact UI/DOM reason, e.g. Reposted by Ethan Sarif-Kattan>",
   "mediaTypes": ["video"],
   "mediaEvidence": "visible video player / Live badge / aria-label text"
 }
@@ -159,6 +166,7 @@ pretending it is text-only.
   "destinationPlatform": "<optional destination platform>",
   "destinationAccountHint": "<optional configured destination account hint>",
   "candidateExcerpt": "<first 200 chars>",
+  "sourceKind": "original | repost | reshare | quote | unknown",
   "mediaTypes": ["video"],
   "status": "skipped-rule",
   "reason": "<human reason from rule>",
@@ -192,6 +200,21 @@ This item had already been posted to Bluesky, Threads, and Facebook before the
 rule existed. Do not rewrite or remove those append-only publish/global ledger
 records. Treat the seeded considered entry only as “from now on, this kind of
 candidate is not post-worthy.”
+
+## Current Ethan rule seeded 2026-06-02
+
+Ethan wants LinkedIn reposts/reshares skipped entirely. The LinkedIn activity
+feed mixes original posts with reposts of other people's posts, and reposts
+must not be treated as Ethan-authored source text.
+
+- Rule id: `skip-linkedin-reposts`
+- Scope: `sourcePlatform: "linkedin"`
+- Match: candidates with `sourceKind` of `repost` or `reshare`
+- Evidence examples: visible `"Reposted by <user>"` header or an embedded
+  `feed-shared-update-v2__reshare` block
+
+This is a preference skip, not proof of a destination post. Append to
+`considered.jsonl` and per-pair audit only.
 
 ## See also
 

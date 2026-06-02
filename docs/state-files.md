@@ -62,6 +62,25 @@ the skill workflows.
       },
       "reason": "Block X video/livestream promos about vibe-coding an AI slop machine.",
       "examples": []
+    },
+    {
+      "id": "skip-linkedin-reposts",
+      "enabled": true,
+      "action": "skip",
+      "scope": {
+        "sourcePlatform": "linkedin"
+      },
+      "match": {
+        "sourceKindsAny": ["repost", "reshare"]
+      },
+      "reason": "Only repost Ethan's original LinkedIn posts; skip LinkedIn reposts/reshares of other people's posts.",
+      "examples": [
+        {
+          "sourcePlatform": "linkedin",
+          "sourceKind": "repost",
+          "note": "LinkedIn /recent-activity/all shows reposts with a Reposted by header or feed-shared-update-v2__reshare block."
+        }
+      ]
     }
   ],
   "schedulerJobs": [
@@ -263,6 +282,7 @@ Schema:
   "destinationPlatform": "<optional destination platform>",
   "destinationAccountHint": "<optional destination account hint>",
   "candidateExcerpt": "<first 200 chars of candidate text>",
+  "sourceKind": "original | repost | reshare | quote | unknown",
   "mediaTypes": ["video"],
   "status": "skipped-rule",
   "reason": "<human reason from the rule>",
