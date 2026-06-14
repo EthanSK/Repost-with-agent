@@ -363,6 +363,13 @@ Do **not** send one message per platform for a source fanout. Per-platform pings
 make it hard to see whether the source item completed. One source item gets one
 aggregate message after all enabled destinations have been evaluated. Silent
 publishes are still a bug: the single aggregate message is the confirmation.
+Once every destination has terminal proof and the aggregate notification has
+been sent/audited, do not run extra browser target-discovery diagnostics just to
+inspect the final UI. In OpenClaw cron, an orphaned or missing tool result from
+that kind of post-success probe can mark an otherwise successful fanout as
+failed. If a final diagnostic is truly needed to resolve a blocker, use the
+native browser tool where possible and wait for every tool result before ending
+the turn.
 
 If every destination is a duplicate/no-op and the scheduled prompt asks for
 quiet no-op behavior, output exactly `NO_REPLY`. Otherwise use this shape:

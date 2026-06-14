@@ -154,16 +154,29 @@ crash). Full rules + entry shape: `skills/repost-learnings/SKILL.md`.
 
 OpenClaw cron treats any failed tool call as a failed run, even if the agent
 continues and ends with `NO_REPLY`. Keep expected-empty probes from looking like
-real failures:
+real failures, and never leave background diagnostics running after the useful
+work is done:
 
 - When checking whether optional state already exists, do not leave `rg`,
   `grep`, `find`, or `sed` in a state where "no match" / "missing optional file"
   exits non-zero. Use `test -f` before reading optional files, append `|| true`
   to no-match-tolerant searches, or use a small parser/Node check that exits 0
   and prints `found: false`.
+- In OpenClaw scheduled runs, prefer the native `browser` tool over ad hoc
+  shell/Node/CDP target probes. If a shell/CDP probe is genuinely needed for
+  observation, wrap it with a short `timeout`, use simple quoted heredocs, catch
+  expected "target not found" cases, and exit 0 unless the result is a real
+  publish-safety blocker. A missing or orphaned tool result is recorded as a
+  cron failure even when the publish itself succeeded.
 - Treat a non-zero tool result as reserved for actual blockers: missing required
   config, browser login/account mismatch, write failure, destination platform
   failure, or a publish-safety problem.
+- Before sending the final scheduled-run response, make sure every native tool
+  call you started has returned. Do not end the turn while Bash/CDP diagnostics,
+  browser probes, or ledger checks are still pending. After live text proof,
+  ledger writes, global ledger writes, and aggregate notification success are
+  recorded, avoid extra exploratory probes unless they are needed to resolve an
+  actual blocker.
 - The destination docs are repo docs, not plugin-sibling docs. From this skill's
   real path, resolve them as `../../docs/destinations/<platform>.md`. Do not look
   for `/Users/ethansk/.openclaw/plugin-skills/docs/destinations/...`.
